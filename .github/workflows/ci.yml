@@ -86,6 +86,9 @@ jobs:
 
       - name: End to end smoke test (mock backend, nothing can move)
         shell: bash
+        working-directory: ros2_ws
         env:
-          WS: ${{ github.workspace }}/ros2_ws
-        run: bash "${{ github.workspace }}/ros2_ws/src/soma-arms/scripts/smoke_test.sh"
+          ROS_LOCALHOST_ONLY: '1'
+        run: |
+          export WS="$PWD"
+          bash src/soma-arms/scripts/smoke_test.sh

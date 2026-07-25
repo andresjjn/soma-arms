@@ -60,15 +60,32 @@ ros2 run robot_state_publisher robot_state_publisher \
 RSP=$!
 ros2 run soma_driver arm_controller &
 DRV=$!
-sleep 5
+sleep 6
 
+# Reads the Z of world -> left_arm_tool0. Returns empty instead of failing,
+# so a missing transform produces a readable message rather than a bare
+# exit code from set -e.
 read_z() {
-  timeout 15 ros2 run tf2_ros tf2_echo world left_arm_tool0 2>/dev/null \
-    | grep -m1 'Translation' | sed 's/.*, \([0-9.]*\)\].*/\1/'
+  local line
+  line=$(timeout 20 ros2 run tf2_ros tf2_echo world left_arm_tool0 2>/dev/null \
+         | grep -m1 'Translation' || true)
+  echo "$line" | sed -n 's/.*, \(-\?[0-9.]*\)\].*/\1/p'
+}
+
+require_z() {
+  if [ -z "$1" ]; then
+    echo "FAILED: no transform world -> left_arm_tool0."
+    echo "--- topics ---"; ros2 topic list || true
+    echo "--- one /joint_states sample ---"
+    timeout 10 ros2 topic echo /joint_states --once || true
+    kill $RSP $DRV 2>/dev/null || true
+    exit 1
+  fi
 }
 
 echo '--- initial pose (torso at the bottom soft limit) ---'
 Z0=$(read_z)
+require_z "$Z0"
 echo "  tool0 z initial = ${Z0} (expected ~0.662)"
 
 echo '--- command: torso to 0.14 m, clamped to 0.135, L16 ramp is 6.5 s ---'
@@ -77,6 +94,7 @@ ros2 topic pub --once /soma/command sensor_msgs/msg/JointState \
 sleep 9
 
 Z1=$(read_z)
+require_z "$Z1"
 echo "  tool0 z final = ${Z1} (expected ~0.792)"
 
 kill $RSP $DRV 2>/dev/null || true
