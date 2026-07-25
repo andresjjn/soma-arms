@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<!--
+  Full SOMA on the bench: electronics bay, L16 torso lift, two 6DOF arms
+  and the OAK-D head, standing on the world frame.
+
+  This is the reference model of the repository. Everything the driver can
+  command appears here, and nothing else does: SOMA carries no chassis, no
+  wheels and no navigation sensors. Mounting it on a mobile platform is the
+  integrator's job, done by calling the soma_torso macro with their own
+  parent link.
+
+  Usage:
+    ros2 launch soma_description display.launch.py
+-->
+<robot name="soma" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:include filename="$(find soma_description)/urdf/materials.xacro"/>
+  <xacro:include filename="$(find soma_description)/urdf/soma_arm.xacro"/>
+  <xacro:include filename="$(find soma_description)/urdf/soma_torso.xacro"/>
+
+  <link name="world"/>
+
+  <xacro:soma_torso parent="world">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </xacro:soma_torso>
+
+</robot>

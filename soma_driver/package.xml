@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>soma_driver</name>
+  <version>0.1.0</version>
+  <description>
+    PCA9685 driver for the SOMA dual 6DOF arms and the L16 torso lift.
+    Boots on a mock backend (safe simulation); the real I2C backend requires
+    both a launch parameter and an explicit arm service call.
+  </description>
+  <maintainer email="andresjt93@gmail.com">Andres Jejen</maintainer>
+  <license>MIT</license>
+  <url type="repository">https://github.com/andresjjn/soma-arms</url>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<!--
+  SOMA on the bench WITH the ros2_control layer, for simulation.
+  Same tree as soma_bench.urdf.xacro plus command and state interfaces.
+  For plain RViz visualisation use soma_bench.urdf.xacro instead.
+-->
+<robot name="soma" xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:include filename="$(find soma_description)/urdf/soma_bench.urdf.xacro"/>
+  <xacro:include filename="$(find soma_description)/urdf/soma_control.xacro"/>
+  <xacro:soma_ros2_control/>
+</robot>

@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # The safety rules and the channel map are pure Python, so they run in
+  # seconds on any machine, with no ROS installed. This job is the one that
+  # must never go red.
+  unit-tests:
+    name: Unit tests (no ROS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install pytest
+        run: python -m pip install --upgrade pip pytest
+
+      - name: Run the driver test suite
+        run: python -m pytest soma_driver/test -q
+
+  ros-humble:
+    name: ROS 2 Humble build, xacro and end to end
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    container:
+      image: ros:humble-ros-base-jammy
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: ros2_ws/src/soma-arms
+
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ros-humble-xacro \
+            ros-humble-robot-state-publisher \
+            ros-humble-joint-state-publisher \
+            ros-humble-tf2-ros \
+            liburdfdom-tools \
+            python3-pytest \
+            python3-yaml
+
+      - name: Build the workspace
+        shell: bash
+        working-directory: ros2_ws
+        run: |
+          source /opt/ros/humble/setup.bash
+          colcon build --symlink-install
+
+      - name: Run tests through colcon (includes the ROS node tests)
+        shell: bash
+        working-directory: ros2_ws
+        run: |
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          colcon test --packages-select soma_driver --event-handlers console_direct+
+          colcon test-result --verbose
+
+      - name: Process and validate every xacro model
+        shell: bash
+        working-directory: ros2_ws
+        run: |
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          share="$(ros2 pkg prefix soma_description)/share/soma_description/urdf"
+          for m in single_arm soma_bench soma_bench_sim; do
+            xacro "${share}/${m}.urdf.xacro" > "/tmp/${m}.urdf"
+            check_urdf "/tmp/${m}.urdf" > /dev/null
+            echo "${m}: $(grep -c '<joint' "/tmp/${m}.urdf") joint tags, check_urdf OK"
+          done
+
+      - name: Check the URDF and the driver still agree
+        shell: bash
+        working-directory: ros2_ws/src/soma-arms
+        run: python3 scripts/check_model_driver_sync.py /tmp/soma_bench.urdf
+
+      - name: End to end smoke test (mock backend, nothing can move)
+        shell: bash
+        env:
+          WS: ${{ github.workspace }}/ros2_ws
+        run: bash "${{ github.workspace }}/ros2_ws/src/soma-arms/scripts/smoke_test.sh"

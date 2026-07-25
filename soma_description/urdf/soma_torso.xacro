@@ -1,0 +1,161 @@
+<?xml version="1.0"?>
+<!--
+  SOMA torso: the structure that carries the two arms.
+
+    electronics bay (fixed)  ->  PCA9685, Raspberry Pi 5, power rail
+      + column with the linear rails
+      + torso_lift_joint PRISMATIC, driven by an Actuonix L16-140-63-6-R
+      -> torso plate  ->  two 6DOF arms at +/- 45 deg, plus the OAK-D camera
+
+  The macro takes a parent link and an origin, so SOMA can stand on a bench
+  (soma_bench.urdf.xacro) or bolt onto a mobile platform later. Nothing in
+  this repo knows or cares what that platform is.
+
+  Design constraints carried over from the hardware sessions:
+    - Lifted mass stays at or below 4 kg. The L16 lead screw is self
+      locking and holds 46 N with the power cut, which is what makes the
+      auto release in the driver safe.
+    - Actual lift speed is 20 mm/s, max force 100 N (63:1 gearbox).
+
+  Torso dimensions are [calibrate]: they come from the first bench build
+  and get corrected with calipers in v0.1.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- ============ electronics bay [calibrate] ============ -->
+  <xacro:property name="bay_lx"      value="0.170"/>
+  <xacro:property name="bay_ly"      value="0.110"/>
+  <xacro:property name="bay_lz"      value="0.070"/>
+  <xacro:property name="col_h"       value="0.200"/>  <!-- column plus 8 mm rails -->
+
+  <!-- ============ L16-140 lift ============ -->
+  <!-- Physical stroke is 0 to 140 mm. We reserve a 5 mm margin at each end
+       and expose ONLY the reachable band as the URDF limit, so a planner
+       can never aim at a mechanical stop. Holding a command against a stop
+       wedged this actuator once (2026-07-22) and it had to be freed by
+       hand. These numbers must match SERVO_MAP in soma_driver. -->
+  <xacro:property name="lift_stroke" value="0.140"/>
+  <xacro:property name="lift_margin" value="0.005"/>
+  <xacro:property name="lift_min"    value="${lift_margin}"/>
+  <xacro:property name="lift_max"    value="${lift_stroke - lift_margin}"/>
+
+  <!-- ============ torso plate and arm placement [calibrate] ============ -->
+  <xacro:property name="plate_lx"    value="0.180"/>
+  <xacro:property name="plate_ly"    value="0.150"/>
+  <xacro:property name="plate_lz"    value="0.008"/>
+  <xacro:property name="arm_x"       value="0.035"/>  <!-- shoulders on the plate -->
+  <xacro:property name="arm_y"       value="0.058"/>
+  <xacro:property name="arm_yaw"     value="${pi/4}"/> <!-- +/- 45 deg -->
+
+  <xacro:macro name="torso_box_inertia" params="m x y z">
+    <inertial>
+      <mass value="${m}"/>
+      <inertia ixx="${m*(y*y+z*z)/12.0}" iyy="${m*(x*x+z*z)/12.0}"
+               izz="${m*(x*x+y*y)/12.0}" ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </xacro:macro>
+
+  <xacro:macro name="soma_torso" params="parent *origin">
+
+    <!-- anchor to whatever we are standing on -->
+    <joint name="soma_mount_joint" type="fixed">
+      <parent link="${parent}"/>
+      <child link="soma_base_link"/>
+      <xacro:insert_block name="origin"/>
+    </joint>
+
+    <link name="soma_base_link">
+      <!-- bay: Raspberry Pi 5, PCA9685, 6 V rail -->
+      <visual>
+        <origin xyz="0 0 ${bay_lz/2}"/>
+        <geometry><box size="${bay_lx} ${bay_ly} ${bay_lz}"/></geometry>
+        <material name="soma_teal"/>
+      </visual>
+      <!-- L16 column and rails, rising from the bay -->
+      <visual>
+        <origin xyz="${-bay_lx/2 + 0.015} 0 ${bay_lz + col_h/2}"/>
+        <geometry><box size="0.025 0.060 ${col_h}"/></geometry>
+        <material name="l16_purple"/>
+      </visual>
+      <collision>
+        <origin xyz="0 0 ${bay_lz/2}"/>
+        <geometry><box size="${bay_lx} ${bay_ly} ${bay_lz}"/></geometry>
+      </collision>
+      <collision>
+        <origin xyz="${-bay_lx/2 + 0.015} 0 ${bay_lz + col_h/2}"/>
+        <geometry><box size="0.025 0.060 ${col_h}"/></geometry>
+      </collision>
+      <xacro:torso_box_inertia m="2.0" x="${bay_lx}" y="${bay_ly}" z="${bay_lz}"/>
+    </link>
+
+    <!-- the star joint: torso_lift (Actuonix L16-140-63-6-R) -->
+    <joint name="torso_lift_joint" type="prismatic">
+      <parent link="soma_base_link"/>
+      <child link="torso_plate_link"/>
+      <origin xyz="0 0 ${bay_lz + 0.075}"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="${lift_min}" upper="${lift_max}" effort="100.0" velocity="0.020"/>
+    </joint>
+
+    <link name="torso_plate_link">
+      <visual>
+        <origin xyz="0 0 ${plate_lz/2}"/>
+        <geometry><box size="${plate_lx} ${plate_ly} ${plate_lz}"/></geometry>
+        <material name="aluminum"/>
+      </visual>
+      <collision>
+        <origin xyz="0 0 ${plate_lz/2}"/>
+        <geometry><box size="${plate_lx} ${plate_ly} ${plate_lz}"/></geometry>
+      </collision>
+      <xacro:torso_box_inertia m="0.45" x="${plate_lx}" y="${plate_ly}" z="0.02"/>
+    </link>
+
+    <!-- OAK-D Lite, the head. Rides up with the torso and looks forward.
+         This is the camera that runs BlazePose on its own VPU for the
+         vision teleop milestone (v0.5). -->
+    <joint name="oak_joint" type="fixed">
+      <parent link="torso_plate_link"/>
+      <child link="oak_link"/>
+      <origin xyz="${plate_lx/2 - 0.010} 0 ${plate_lz + 0.055}"/>
+    </joint>
+    <link name="oak_link">
+      <visual>
+        <geometry><box size="0.0175 0.091 0.028"/></geometry>
+        <material name="matte_black"/>
+      </visual>
+      <collision>
+        <geometry><box size="0.0175 0.091 0.028"/></geometry>
+      </collision>
+      <inertial>
+        <mass value="0.061"/>
+        <inertia ixx="1e-5" iyy="1e-5" izz="1e-5" ixy="0" ixz="0" iyz="0"/>
+      </inertial>
+    </link>
+
+    <joint name="neck_joint" type="fixed">
+      <parent link="torso_plate_link"/>
+      <child link="neck_link"/>
+      <origin xyz="${plate_lx/2 - 0.010} 0 ${plate_lz + 0.020}"/>
+    </joint>
+    <link name="neck_link">
+      <visual>
+        <geometry><cylinder radius="0.008" length="0.040"/></geometry>
+        <material name="dark_gray"/>
+      </visual>
+      <inertial>
+        <mass value="0.02"/>
+        <inertia ixx="1e-6" iyy="1e-6" izz="1e-6" ixy="0" ixz="0" iyz="0"/>
+      </inertial>
+    </link>
+
+    <!-- the two arms, splayed at +/- 45 deg -->
+    <xacro:soma_arm prefix="left_arm_" parent="torso_plate_link">
+      <origin xyz="${arm_x} ${arm_y} ${plate_lz}" rpy="0 0 ${arm_yaw}"/>
+    </xacro:soma_arm>
+
+    <xacro:soma_arm prefix="right_arm_" parent="torso_plate_link">
+      <origin xyz="${arm_x} ${-arm_y} ${plate_lz}" rpy="0 0 ${-arm_yaw}"/>
+    </xacro:soma_arm>
+
+  </xacro:macro>
+</robot>

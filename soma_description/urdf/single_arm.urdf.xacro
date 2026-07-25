@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<!--
+  One 6DOF arm bolted to the bench, for studying and calibrating a single
+  arm in isolation. This is the model to use with calipers in hand.
+
+  Usage:
+    ros2 launch soma_description display.launch.py model:=single_arm.urdf.xacro
+-->
+<robot name="soma_single_arm" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:include filename="$(find soma_description)/urdf/materials.xacro"/>
+  <xacro:include filename="$(find soma_description)/urdf/soma_arm.xacro"/>
+
+  <link name="world"/>
+
+  <xacro:soma_arm prefix="arm_" parent="world">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </xacro:soma_arm>
+
+</robot>

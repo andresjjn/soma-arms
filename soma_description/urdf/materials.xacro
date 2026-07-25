@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <!-- SOMA palette. Kept in one place so every model looks the same. -->
+  <material name="aluminum">
+    <color rgba="0.78 0.78 0.80 1.0"/>
+  </material>
+  <material name="servo_red">
+    <color rgba="0.75 0.12 0.12 1.0"/>
+  </material>
+  <material name="matte_black">
+    <color rgba="0.15 0.15 0.15 1.0"/>
+  </material>
+  <material name="dark_gray">
+    <color rgba="0.35 0.35 0.38 1.0"/>
+  </material>
+  <material name="soma_teal">
+    <color rgba="0.11 0.62 0.46 1.0"/>
+  </material>
+  <material name="l16_purple">
+    <color rgba="0.50 0.47 0.87 1.0"/>
+  </material>
+</robot>

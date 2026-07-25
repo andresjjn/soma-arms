@@ -1,0 +1,57 @@
+<?xml version="1.0"?>
+<!--
+  ros2_control layer for SOMA in Gazebo classic.
+  Position interface per joint, which is how an RC servo actually behaves:
+  you ask for a position and it gets there on its own. The right hand
+  fingers are MIMIC joints (physical gear pair).
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:macro name="joint_pos" params="name initial:=0.0">
+    <joint name="${name}">
+      <command_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">${initial}</param>
+      </state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:macro name="joint_mimic" params="name master">
+    <joint name="${name}">
+      <param name="mimic">${master}</param>
+      <param name="multiplier">-1</param>
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:macro name="arm_control_joints" params="prefix">
+    <xacro:joint_pos name="${prefix}yaw_joint"/>
+    <xacro:joint_pos name="${prefix}shoulder_joint"/>
+    <xacro:joint_pos name="${prefix}elbow_joint"/>
+    <xacro:joint_pos name="${prefix}wrist_pitch_joint"/>
+    <xacro:joint_pos name="${prefix}wrist_roll_joint"/>
+    <xacro:joint_pos name="${prefix}finger_l_joint"/>
+    <xacro:joint_mimic name="${prefix}finger_r_joint" master="${prefix}finger_l_joint"/>
+  </xacro:macro>
+
+  <xacro:macro name="soma_ros2_control">
+    <ros2_control name="soma_system" type="system">
+      <hardware>
+        <plugin>gazebo_ros2_control/GazeboSystem</plugin>
+      </hardware>
+      <!-- the lift starts mid stroke: never initialise on a stop -->
+      <xacro:joint_pos name="torso_lift_joint" initial="0.07"/>
+      <xacro:arm_control_joints prefix="left_arm_"/>
+      <xacro:arm_control_joints prefix="right_arm_"/>
+    </ros2_control>
+
+    <gazebo>
+      <plugin filename="libgazebo_ros2_control.so" name="gazebo_ros2_control">
+        <parameters>$(find soma_description)/config/controllers.yaml</parameters>
+      </plugin>
+    </gazebo>
+  </xacro:macro>
+</robot>

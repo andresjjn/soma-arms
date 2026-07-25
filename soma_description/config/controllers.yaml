@@ -1,0 +1,61 @@
+controller_manager:
+  ros__parameters:
+    update_rate: 100  # Hz
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    torso_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+    left_arm_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+    right_arm_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+    left_gripper_controller:
+      type: position_controllers/GripperActionController
+
+    right_gripper_controller:
+      type: position_controllers/GripperActionController
+
+torso_controller:
+  ros__parameters:
+    joints: [torso_lift_joint]
+    interface_name: position
+    command_interfaces: [position]
+    state_interfaces: [position, velocity]
+    # the real L16 moves at 0.02 m/s: the trajectory has to respect that
+    constraints:
+      torso_lift_joint: {trajectory: 0.02, goal: 0.005}
+
+left_arm_controller:
+  ros__parameters:
+    joints:
+      - left_arm_yaw_joint
+      - left_arm_shoulder_joint
+      - left_arm_elbow_joint
+      - left_arm_wrist_pitch_joint
+      - left_arm_wrist_roll_joint
+    command_interfaces: [position]
+    state_interfaces: [position, velocity]
+
+right_arm_controller:
+  ros__parameters:
+    joints:
+      - right_arm_yaw_joint
+      - right_arm_shoulder_joint
+      - right_arm_elbow_joint
+      - right_arm_wrist_pitch_joint
+      - right_arm_wrist_roll_joint
+    command_interfaces: [position]
+    state_interfaces: [position, velocity]
+
+left_gripper_controller:
+  ros__parameters:
+    joint: left_arm_finger_l_joint
+
+right_gripper_controller:
+  ros__parameters:
+    joint: right_arm_finger_l_joint
