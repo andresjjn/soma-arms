@@ -82,17 +82,14 @@ ssh <your-pi>          # the ROS user
 i2cdetect -y 1         # must show 0x40
 ```
 
-Two bring-up scripts were written during the first session and currently live
-on the Pi under the ROS user's home directory:
+Two bring-up scripts live in `scripts/pi/` in this repository. Copy them to
+the Pi (`scp scripts/pi/*.py <your-pi>:`) and run them there with bare metal
+`smbus2`:
 
 | Script | What it does | Can it move a motor |
 |---|---|---|
-| `pca9685_check.py` | sets 50 Hz, echoes the registers of all 13 channels, leaves every output in FULL_OFF | no, and it is meant to run with the servo rail OFF |
-| `servo_discovery.py` | identifies channels one at a time with 60 ms bursts | **yes**, needs the rail live and prior confirmation |
-
-**Pending**: both scripts should be brought into `scripts/` in this repository
-so the bring-up procedure is versioned with the code it validates. They are
-not here yet.
+| `scripts/pi/pca9685_check.py` | sets 50 Hz, echoes the registers of all 13 channels, leaves every output in FULL_OFF | no, and it is meant to run with the servo rail OFF |
+| `scripts/pi/servo_discovery.py` | identifies channels one at a time with 60 ms bursts | **yes**, needs the rail live and prior confirmation |
 
 ---
 
