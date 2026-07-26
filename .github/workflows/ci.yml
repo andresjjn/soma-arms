@@ -22,7 +22,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install pytest
-        run: python -m pip install --upgrade pip pytest
+        run: python -m pip install --upgrade pip pytest pyyaml
 
       - name: Run the driver test suite
         run: python -m pytest soma_driver/test -q

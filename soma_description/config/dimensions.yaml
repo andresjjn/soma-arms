@@ -1,0 +1,62 @@
+# SOMA physical dimensions: the single source of truth, with provenance.
+#
+# Every entry records value (meters), status, source and date. The xacro
+# files keep their own literals for now; test_dimensions_sync.py fails the
+# build if a literal here and the one in the xacro ever disagree, so this
+# file and the model cannot drift apart.
+#
+# status values:
+#   estimated  taken from manual photos / frame-family standards. Needs a
+#              caliper. Replacing every "estimated" with "measured" is THE
+#              deliverable of v0.1.
+#   measured   confirmed on the physical hardware (caliper or datasheet of
+#              the exact purchased unit).
+#   design     the part does not exist yet (torso column, task in Onshape);
+#              value is the design intent, to be confirmed after the build.
+#
+# When you measure: update value AND status AND date here, update the same
+# literal in the xacro named under `file`, and let CI prove they agree.
+
+arm:
+  file: soma_description/urdf/soma_arm.xacro
+  dimensions:
+    base_lx:        {value: 0.095, status: estimated, source: manual photos, date: 2026-07-25, measure: base box, outer width X}
+    base_ly:        {value: 0.095, status: estimated, source: manual photos, date: 2026-07-25, measure: base box, outer width Y}
+    base_lz:        {value: 0.062, status: estimated, source: manual photos, date: 2026-07-25, measure: base box, floor to slew bearing face}
+    turntable_r:    {value: 0.042, status: estimated, source: manual photos, date: 2026-07-25, measure: turntable disc diameter / 2}
+    turntable_h:    {value: 0.012, status: estimated, source: manual photos, date: 2026-07-25, measure: turntable disc thickness}
+    shoulder_off_z: {value: 0.045, status: estimated, source: manual photos, date: 2026-07-25, measure: disc top face to shoulder servo AXIS (screw center)}
+    upper_len:      {value: 0.120, status: estimated, source: manual photos, date: 2026-07-25, measure: shoulder axis to elbow axis, center to center}
+    fore_len:       {value: 0.090, status: estimated, source: manual photos, date: 2026-07-25, measure: elbow axis to wrist pitch axis, center to center}
+    wrist_len:      {value: 0.055, status: estimated, source: manual photos, date: 2026-07-25, measure: wrist pitch axis to roll flange face}
+    gripper_base_h: {value: 0.045, status: estimated, source: manual photos, date: 2026-07-25, measure: roll flange face to finger gear axis}
+    finger_len:     {value: 0.075, status: estimated, source: manual photos, date: 2026-07-25, measure: finger gear axis to fingertip}
+    finger_sep:     {value: 0.024, status: estimated, source: manual photos, date: 2026-07-25, measure: distance between the two finger gear axes}
+    plate_w:        {value: 0.030, status: estimated, source: manual photos, date: 2026-07-25, measure: link plate width}
+    plate_t:        {value: 0.060, status: estimated, source: manual photos, date: 2026-07-25, measure: outer depth of the plate pair}
+    servo_lx:       {value: 0.041, status: measured, source: MG996R datasheet, date: 2026-07-25, measure: servo body length}
+    servo_ly:       {value: 0.020, status: measured, source: MG996R datasheet, date: 2026-07-25, measure: servo body width}
+    servo_lz:       {value: 0.038, status: measured, source: MG996R datasheet, date: 2026-07-25, measure: servo body height, case only}
+    effort_nm:      {value: 1.0,   status: estimated, source: MG996R datasheet ~10 kg.cm, date: 2026-07-25, measure: stall torque in N.m (F4 calibration with power)}
+    vel_rads:       {value: 3.0,   status: estimated, source: MG996R datasheet 0.17 s/60deg, date: 2026-07-25, measure: no-load speed in rad/s (F4 calibration with power)}
+
+torso:
+  file: soma_description/urdf/soma_torso.xacro
+  dimensions:
+    bay_lx:      {value: 0.170, status: design, source: torso module sketch, date: 2026-07-25, measure: electronics bay length (fits the rover deck 194x110)}
+    bay_ly:      {value: 0.110, status: design, source: torso module sketch, date: 2026-07-25, measure: electronics bay width}
+    bay_lz:      {value: 0.070, status: design, source: torso module sketch, date: 2026-07-25, measure: electronics bay height}
+    col_h:       {value: 0.200, status: design, source: torso module sketch, date: 2026-07-25, measure: column height including the 8 mm rails}
+    lift_stroke: {value: 0.140, status: measured, source: Actuonix L16-140 datasheet, date: 2026-07-22, measure: L16 stroke (verified with power)}
+    lift_margin: {value: 0.005, status: measured, source: wedging incident 2026-07-22, date: 2026-07-22, measure: soft limit margin, keep in sync with servo_map}
+    plate_lx:    {value: 0.180, status: design, source: torso module sketch, date: 2026-07-25, measure: shoulder plate length}
+    plate_ly:    {value: 0.150, status: design, source: torso module sketch, date: 2026-07-25, measure: shoulder plate width}
+    plate_lz:    {value: 0.008, status: design, source: torso module sketch, date: 2026-07-25, measure: shoulder plate thickness}
+    arm_x:       {value: 0.035, status: design, source: torso module sketch, date: 2026-07-25, measure: arm mount offset X on the plate}
+    arm_y:       {value: 0.058, status: design, source: torso module sketch, date: 2026-07-25, measure: arm mount offset Y on the plate}
+
+# Masses (kg). The xacro inertia macros take these as literals too; they are
+# checked by name where the xacro uses a named property, and listed here as
+# provenance either way. Weigh each subassembly once disassembly allows.
+masses:
+  notes: whole arm with six servos, estimated about 0.9 kg; verify against the D3 rule (lifted mass under 4 kg total)
