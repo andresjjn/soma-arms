@@ -85,6 +85,36 @@ maximum rate: 2.5 rad/s for arm servos, well below what an MG996R could do,
 and 0.020 m/s for the lift, which is what the L16 actually does. There is no
 code path that jumps a servo straight to a new position.
 
+### 5. Energise V+ only with the arms compact and resting
+
+MG996R clones **twitch when the rail comes up**. An arm extended in mid air at
+that moment can slam itself, its gripper, or whatever is under it.
+
+Before the 6 V rail is switched on: both arms folded into a compact pose,
+resting on the bench, nothing fragile underneath. Every time, including the
+times it feels unnecessary.
+
+This one lives outside the software. No parameter, no service call and no test
+can enforce it, which is exactly why it is written down here.
+
+### 6. The harness is part of the safety system
+
+In the first real session, every unexplained fault was a connector:
+
+- a dupont jumper broken **inside its insulation** dropped the I2C bus four
+  times, the last time unrecoverably,
+- loose servo connectors produced "ghost" servos twitching at power-up.
+
+`retry_i2c()` is a net under isolated glitches. It is **not** a fix for a bad
+connection, and it did not save that session: the last drop failed after 20
+retries. New cables did.
+
+Required for anything beyond a supervised bench test: **JST with a positive
+lock for I2C**, silicone retainers on servo connectors, and **16 AWG or
+thicker** for V+. Details in [wiring.md](wiring.md).
+
+A control loop cannot be safer than the wire it runs on.
+
 ## What the safety model does not cover
 
 Being honest about this matters more than the list above.
@@ -104,9 +134,11 @@ Being honest about this matters more than the list above.
 
 | Date | What happened | What changed |
 |---|---|---|
-| 2026-07-22 | L16 wedged against its stop by a held retract command | soft limits 5 to 135 mm, auto release after 0.5 s settled |
-| 2026-07-22 | I2C dropped four times, `OSError 121` | `retry_i2c`, three attempts 5 ms apart |
-| 2026-07-22 | Channel 0 suspected during the fault, never cleared | L16 moved to channel 3, channel 0 out of service |
+| 2026-07-22 | L16 wedged against its internal stop by an 8 s held retract command, already fully retracted. Freed by hand with an extend command plus gentle traction | soft limits 5 to 135 mm, clamping on arrival, auto release after 0.5 s settled |
+| 2026-07-22 | I2C dropped four times with `OSError 121`, the last unrecoverable after 20 retries. Cause: a dupont jumper broken inside its insulation | `retry_i2c` (3 attempts, 5 ms) as a net, and new short cables as the actual fix. JST with lock specified for the permanent harness |
+| 2026-07-22 | "Ghost" servos twitching at power-up | traced to loose connectors. Silicone retainers specified, and the compact resting pose rule |
+| 2026-07-22 | Channel 0 suspected during the L16 fault, never cleared | L16 moved to channel 3, channel 0 left out of service |
 
-New incidents belong in this table, with the code change that came out of
-them. An incident with no code change is an incident that will happen again.
+New incidents belong in this table, with the change that came out of them. An
+incident with no change is an incident that will happen again. Note that two
+of the four rows above were fixed with cable, not with code.

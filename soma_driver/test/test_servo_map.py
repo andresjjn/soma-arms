@@ -182,6 +182,58 @@ class TestI2CRetry:
             retry_i2c(tx, tries=3, wait_s=0.0)
 
 
+#: The complete channel table, transcribed field by field from the hardware
+#: handoff. Every row was verified on the bench with the 6 V rail live on
+#: 2026-07-22. This is the contract: a single wrong field here is a servo
+#: driven to the wrong place.
+#:
+#: joint -> (channel, min_us, max_us, lower, upper, max_rate)
+EXACT_SERVO_MAP = {
+    'right_arm_finger_l_joint':    (15, 1500.0, 2500.0, 0.0, 1.0, 2.5),
+    'right_arm_wrist_roll_joint':  (14, 500.0, 2500.0, -HALF_PI, HALF_PI, 2.5),
+    'right_arm_wrist_pitch_joint': (13, 500.0, 2500.0, -HALF_PI, HALF_PI, 2.5),
+    'right_arm_elbow_joint':       (12, 500.0, 2500.0, -HALF_PI, HALF_PI, 2.5),
+    'right_arm_shoulder_joint':    (11, 500.0, 2500.0, -HALF_PI, HALF_PI, 2.5),
+    'right_arm_yaw_joint':         (10, 500.0, 2500.0, -HALF_PI, HALF_PI, 2.5),
+    'left_arm_finger_l_joint':     (9, 1500.0, 2500.0, 0.0, 1.0, 2.5),
+    'left_arm_wrist_roll_joint':   (8, 500.0, 2500.0, -HALF_PI, HALF_PI, 2.5),
+    'left_arm_wrist_pitch_joint':  (7, 500.0, 2500.0, -HALF_PI, HALF_PI, 2.5),
+    'left_arm_elbow_joint':        (6, 500.0, 2500.0, -HALF_PI, HALF_PI, 2.5),
+    'left_arm_shoulder_joint':     (5, 500.0, 2500.0, -HALF_PI, HALF_PI, 2.5),
+    'left_arm_yaw_joint':          (4, 500.0, 2500.0, -HALF_PI, HALF_PI, 2.5),
+    # The L16 is the odd one: inverted unit, so min_us > max_us, and the
+    # anchors are the pulses at 5 mm and 135 mm rather than at 0 and 140.
+    'torso_lift_joint':            (3, 1964.3, 1035.7, 0.005, 0.135, 0.020),
+}
+
+
+class TestExactServoMapTable:
+    """Field by field check against the transcribed hardware table."""
+
+    @pytest.mark.parametrize('joint', sorted(EXACT_SERVO_MAP))
+    def test_row_matches(self, joint):
+        channel, min_us, max_us, lower, upper, max_rate = EXACT_SERVO_MAP[joint]
+        spec = SERVO_MAP[joint]
+        assert spec.channel == channel, f'{joint}: channel'
+        assert spec.min_us == pytest.approx(min_us), f'{joint}: min_us'
+        assert spec.max_us == pytest.approx(max_us), f'{joint}: max_us'
+        assert spec.lower == pytest.approx(lower), f'{joint}: lower'
+        assert spec.upper == pytest.approx(upper), f'{joint}: upper'
+        assert spec.max_rate == pytest.approx(max_rate), f'{joint}: max_rate'
+
+    def test_no_joint_was_added_or_dropped(self):
+        assert set(SERVO_MAP) == set(EXACT_SERVO_MAP)
+
+    def test_the_torso_row_is_inverted_on_purpose(self):
+        """Guard against someone "fixing" min_us > max_us."""
+        spec = SERVO_MAP['torso_lift_joint']
+        assert spec.min_us > spec.max_us
+        # and every arm servo is the normal way round
+        for joint in SERVO_MAP:
+            if joint != 'torso_lift_joint':
+                assert SERVO_MAP[joint].min_us < SERVO_MAP[joint].max_us, joint
+
+
 class TestSoftLimitClamp:
     """Added during the SOMA migration: the reported pose must never claim
     a position the driver is not allowed to command."""

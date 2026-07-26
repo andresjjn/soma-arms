@@ -31,11 +31,15 @@ Thirteen actuators on one I2C bus. Full part numbers, datasheets, the kit
 parts list and every measured value: **[docs/hardware.md](docs/hardware.md)**
 and **[docs/wiring.md](docs/wiring.md)**.
 
+Honest numbers, because they shape everything else: the frame is advertised
+for 25 kg.cm servos and the MG996R delivers about 10, so **useful payload is
+around 330 g at 30 cm of reach**. SOMA is built to work in compact poses.
+
 ---
 
 ## Safety first
 
-SOMA can hurt itself and you. Three things are worth knowing before anything
+SOMA can hurt itself and you. Four things are worth knowing before anything
 else, and the full model is in **[docs/safety.md](docs/safety.md)**:
 
 1. **The driver boots on a mock backend and disarmed.** Going live needs both
@@ -44,7 +48,9 @@ else, and the full model is in **[docs/safety.md](docs/safety.md)**:
 2. **The lift is limited to 5 to 135 mm of its 140 mm stroke.** Holding a
    command against a stop wedged the lead screw once and it had to be freed by
    hand. It will not happen twice.
-3. **The real emergency stop is the switch on the 6 V rail.** Keep it in
+3. **Energise the 6 V rail only with the arms folded and resting.** These
+   servos twitch at power-up.
+4. **The real emergency stop is the switch on the 6 V rail.** Keep it in
    reach.
 
 ---
@@ -100,16 +106,20 @@ python -m pytest soma_driver/test -q
 
 Every version is a git tag, a video in this README, and a short. The project
 has an end: at v1.0 it closes and the arms move on to their next life as the
-manipulator of a mobile platform.
+manipulator of a mobile platform. Anything still missing at v1.0 becomes an
+issue, not a reason to keep the project open.
 
 | Version | Milestone | What has to be true | Status |
 |---|---|---|---|
-| **v0.1** | Calibrated URDF | Every `[calibrate]` length measured with calipers and corrected, model correct in RViz, CI green | in progress |
-| **v0.2** | Real driver | Sliders move metal. Mock to hardware, arming procedure exercised end to end | |
-| **v0.3** | MoveIt2 | Both arms plan and execute collision aware motions, gripper as an end effector | |
-| **v0.4** | Basic teleop | A human drives the arms directly, without planning | |
-| **v0.5** | Vision teleop | OAK-D Lite running BlazePose **on the camera VPU**, human pose mapped to the arms | |
-| **v1.0** | The operator | Two hours of continuous pick and place cycles, with a public cycle counter | |
+| **v0.1** | Calibrated URDF | Every `[calibrate]` length measured with calipers and corrected, model right in RViz, CI green on tests and xacro | in progress |
+| **v0.2** | Real driver | Sliders move metal. Mock to hardware, arming procedure exercised end to end. The code already exists, the hardware run does not | |
+| **v0.3** | MoveIt2 | Planned trajectories on both arms, `candle` and `compact` poses, gripper as an end effector | |
+| **v0.4** | Basic teleop | A human drives the arms directly from keyboard or web, no planning in the loop | |
+| **v0.5** | Vision teleop | OAK-D Lite running BlazePose **on the camera VPU**, the arms imitate a human. The Pi only receives landmarks | |
+| **v1.0** | The operator | Two hours of continuous pick and place cycles on the bench, with a public cycle counter. Then the project closes | |
+
+Packages arrive with their milestone: `soma_moveit_config` at v0.3,
+`soma_teleop` at v0.4, `soma_operator` at v1.0.
 
 Videos land here as each tag ships.
 
@@ -120,10 +130,18 @@ Videos land here as each tag ships.
 ```
 soma_description/   URDF/xacro, SRDF, RViz config, MoveIt kinematics
 soma_driver/        PCA9685 driver (mock and real) plus the safety test suite
-docs/               hardware.md, wiring.md, safety.md
+docs/               see below
 scripts/            smoke_test.sh, check_model_driver_sync.py
 docker/             headless ROS 2 Humble image for building and validating
 ```
+
+| Document | What it covers |
+|---|---|
+| [docs/hardware.md](docs/hardware.md) | every part, its datasheet numbers, and the measured values that override them |
+| [docs/wiring.md](docs/wiring.md) | the verified channel map, power chain, connectors, bring-up order |
+| [docs/safety.md](docs/safety.md) | the rules, how each is enforced in code, and the incident log |
+| [docs/bench.md](docs/bench.md) | validated commands, RViz in a browser, the calibration procedures |
+| [docs/migration.md](docs/migration.md) | what carried over from the bench driver and what was deliberately changed |
 
 ## Development
 

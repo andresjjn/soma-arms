@@ -20,7 +20,8 @@ Two kinds of numbers appear below and they are never mixed:
 | 13 | Tower Pro MG996R servo | 12 in the arms, 1 spare |
 | 1 | Actuonix L16-140-63-6-R linear actuator | torso lift |
 | 1 | PCA9685 16 channel PWM driver | one I2C bus drives all 13 actuators |
-| 2 | UBEC 6 V, 8 to 10 A | 6 V servo rail, one per arm |
+| 1 | UBEC 6 V, 8 to 10 A | the 6 V servo rail. A **second one is planned**, one per arm, and is not fitted yet |
+| 1 | LiPo 2S, with switch and fuse | current bench supply. It feeds the UBEC, never the servos |
 | 1 | Raspberry Pi 5 | runs ROS 2 Humble in Docker |
 | 1 | Luxonis OAK-D Lite | head camera, on-camera pose estimation for v0.5 |
 
@@ -93,12 +94,19 @@ finger is mechanically forced to mirror it. In the URDF the right finger is a
 | Servo body | 40 x 20 class, 25 kg servo | 40.7 x 19.7 x 42.9 mm | yes |
 | Spline | 25T | 25T | yes, our 25T horns bolt straight on |
 
-**Torque caveat**: the frame is dimensioned for 25 kg.cm servos and the MG996R
-delivers roughly 10 kg.cm. Base (A) and shoulder (B) are therefore the joints
-to watch under load. This is why the SRDF ships a `compact` named pose:
-a folded arm has a much shorter moment arm than an extended one. Upgrading is
-non destructive, since only those two servos would need to be swapped for a
-stronger 25 to 40 kg.cm unit in the same 40x20 / 25T format.
+**Torque caveat, and it is the defining constraint of this robot**: the frame
+is advertised for 25 kg.cm servos, and the MG996R delivers roughly 10 kg.cm.
+The manual's "25KG" label describes what the frame can take, not what is
+bolted into it. Honest number: **at about 30 cm of reach the useful payload is
+around 330 g.**
+
+Base (A) and shoulder (B) are the joints that feel it first. The derived rule
+is **always work in compact poses**, because a folded arm has a far shorter
+moment arm than an extended one. That is why the SRDF ships a `compact` named
+pose next to `candle`, and why pick and place trajectories should stay folded.
+
+Upgrading is non destructive: only those two servos would need to be swapped
+for a stronger 25 to 40 kg.cm unit in the same 40x20 body with a 25T spline.
 
 ### Link lengths
 
@@ -196,7 +204,8 @@ Usable travel is therefore **130 mm**, and a full sweep takes 6.5 s at
 |---|---|
 | Channels | 16, 12 bit PWM each |
 | Interface | I2C, address `0x40` |
-| Frequency | 50 Hz (20 ms period), the servo standard |
+| Frequency | 50 Hz (20 ms period), the servo standard. Prescale 121 gives exactly 50.0 Hz, verified on the chip |
+| Duty conversion | `duty12 = us / 20000 * 4095`, so 1500 us is 307 counts |
 | Library | `adafruit-circuitpython-pca9685`, imported lazily |
 
 Channel allocation and the power wiring live in [wiring.md](wiring.md).
@@ -210,23 +219,38 @@ Two rules that are not optional:
   was confirmed channel by channel with power on. Do not infer it from a
   photo.
 
-### MEASURED: transient I2C failures
+### MEASURED: I2C failures, and what actually caused them
 
-Also on 2026-07-22: the bus dropped four times during the session with
-`OSError 121` (Remote I/O error). Root cause is the inrush current of a servo
-bouncing the ground rail and corrupting a **single** transaction, without
-resetting the chip. Retrying a few milliseconds later works.
+On 2026-07-22 the bus dropped four times in one session with `OSError 121`
+(Remote I/O error). The last drop did not recover at all, even after 20
+retries.
 
-`retry_i2c()` wraps every real transaction with three attempts, 5 ms apart. A
-single glitch must never take the node down mid motion.
+The failures correlated with **handling and vibration**, not with motion or
+current draw. Root cause: a **dupont jumper broken inside its insulation**, or
+a cold solder joint on the clone board's header. The fix was physical, four
+new short cables, and the bus stayed stable for the rest of the session.
+
+Two conclusions, and it matters that they are kept separate:
+
+- **`retry_i2c()` is a safety net, not a fix.** Three attempts 5 ms apart stop
+  an isolated glitch from taking the node down mid motion. It did not, and
+  could not, save the session: a broken wire is not a transient.
+- **The real fix is the harness.** See the connector rules in
+  [wiring.md](wiring.md). Loose connectors also produced "ghost" servos
+  twitching at power-up.
+
+Diagnostic that works: watch `i2cdetect` in a loop and tap the cables. If
+`0x40` blinks, the problem is mechanical.
 
 ---
 
 ## 6. Compute and camera
 
-**Raspberry Pi 5.** Runs ROS 2 Humble in Docker. I2C to the PCA9685 comes off
-the 40 pin header; `i2cdetect` showing `0x40` is the first check of any bench
-session.
+**Raspberry Pi 5.** Runs ROS 2 Humble in Docker. I2C to the PCA9685 goes over
+**bus 1**, on header pins 1 (3V3), 3 (SDA), 5 (SCL) and 6 (GND).
+`i2cdetect -y 1` showing `0x40` is the first check of any bench session.
+`smbus2` is available natively on the Pi, outside Docker, which is what the
+bare metal bring-up scripts use.
 
 **Luxonis OAK-D Lite.** 91 x 28 x 17.5 mm, 61 g, mounted as the head on the
 torso plate so it rises with the arms. It carries its own VPU, which is the
@@ -237,13 +261,30 @@ not on the Pi, so the Pi keeps its cycles for control.
 
 ## 7. Power
 
-- **6 V rail** from **two UBECs, 8 to 10 A, one per arm.** Splitting them is
-  deliberate: a stall on one arm must not brown out the other.
+Current bench chain, exactly as validated on 2026-07-22:
+
+```
+LiPo 2S  ->  switch + fuse  ->  UBEC 6 V  ->  PCA9685 V+ terminal  ->  servos
+```
+
+**NEVER connect the LiPo directly to the servos.** A full 2S pack sits at
+8.4 V and the MG996R is rated to 7.2 V. The UBEC is not a convenience, it is
+the only thing between the pack and twelve dead servos.
+
+- **One UBEC today.** A **second one is planned, one per arm**, so a stall on
+  one arm cannot brown out the other. Until it is fitted, both arms and the
+  L16 share a single rail and that is a known weak point.
 - The **L16** (about 650 mA) hangs off whichever UBEC is less loaded.
-- Twelve MG996R servos are the wild card for the power budget. In a compact
-  pose or de-energised they draw almost nothing; stalled they draw a lot. The
-  uncertainty is large until measured under real load, which is one of the
-  things the v1.0 two hour run will finally answer.
+- The Pi has its own supply. It shares **ground** with the servo rail and
+  nothing else.
+- Twelve MG996R servos are the wild card in the power budget. In a compact
+  pose, or de-energised, they draw almost nothing; stalled they draw a lot.
+  The uncertainty stays large until measured under real load, which is one of
+  the things the v1.0 two hour run will finally answer.
+
+**Power-on twitch.** MG996R clones kick when V+ comes up. Always energise the
+rail with the arms in a **compact pose, resting on something**. This is a
+safety rule, not a preference: see [safety.md](safety.md).
 
 ---
 
@@ -253,13 +294,26 @@ The dated facts above come from real sessions. The short version:
 
 **2026-07-22, first power-on of the full chain.**
 
-- I2C from the Pi to the PCA9685 verified (`i2cdetect` shows `0x40`), and the
-  whole chain validated **with no power to the servos first**: 50 Hz exactly,
-  register echo confirmed.
-- Channel map confirmed channel by channel, with power. See `wiring.md`.
-- L16 inverted convention measured, contradicting the nominal datasheet
-  convention.
-- The bus glitched four times with `OSError 121`. Cause found, retry added.
-- The L16 stopped responding after its first successful cycle. Root cause
-  found later that evening: it was **wedged against its stop** by a held
-  command. Freed by hand. Soft limits and auto release both date from here.
+- I2C from the Pi to the PCA9685 verified (`i2cdetect -y 1` shows `0x40`), and
+  the whole chain validated **with no power to the servos first**: exactly
+  50 Hz, register echo on all 13 channels, every output left in FULL_OFF
+  before the battery was connected.
+- Channel by channel discovery with **60 ms bursts**, the smallest motion that
+  is still visible on an uncalibrated servo. All 12 arm channels matched the
+  expected map: right 15 down to 10, left 9 down to 4. See
+  [wiring.md](wiring.md).
+- **L16 inverted convention measured**, contradicting the datasheet. Found the
+  hard way: an 8 second "retract" command extended it fully.
+- The bus dropped four times with `OSError 121`, the last one unrecoverable.
+  Cause was mechanical, fixed with new cables. Retry logic added as a net.
+- The L16 then stopped responding after its first successful cycle. Root cause
+  found that evening: it was **wedged against its internal stop** by that same
+  held command. Symptoms: retract gave silence, extend gave a twitch with no
+  travel. Neither a fresh battery nor a channel change helped.
+- **Freed by hand**: an extend command plus gentle manual traction on the rod.
+  After that it took absolute positions again, ending exactly at 70 mm.
+- Soft limits, auto release and the move to channel 3 all date from here.
+
+Session close: 13 channels mapped and verified with power, both arms and the
+spine responding, and four hardware lessons the digital twin could never have
+taught us.

@@ -11,22 +11,26 @@ simulation exercise: MG996R servos and an Actuonix L16 linear actuator on a
 PCA9685, driven from a Raspberry Pi 5 running ROS 2 Humble in Docker.
 
 The repository is **standalone**. It knows nothing about any mobile platform,
-and it must stay that way. Integration with a rover happens in the integrating
-project, by calling the `soma_torso` xacro macro with its own parent link.
+and it must stay that way. Integration happens in the integrating project, by
+calling the `soma_torso` xacro macro with its own parent link.
+
+**The project has an end.** At v1.0 it closes and the arms move on. Anything
+still missing at that point becomes an issue, not a reason to keep the project
+open. Do not propose scope that pushes v1.0 further away.
 
 ---
 
 ## INVIOLABLE RULES
 
-These four override everything else, including a plausible reading of a task
-that seems to require breaking them. If a rule blocks the work, stop and ask.
+These override everything else, including a plausible reading of a task that
+seems to require breaking them. If a rule blocks the work, stop and ask.
 
 ### 1. NEVER move a motor without explicit prior confirmation from Andres
 
 Not "it follows from the task". Not "it is only a small move". Not "the last
 message implied it". Explicit, prior, for that specific motion. This includes
 arming the driver, running anything with `allow_real:=true`, and any command
-that could reach a real servo.
+that could reach a real servo, including over SSH on the Pi.
 
 ### 2. The node boots MOCK and DISARMED. Arming is an explicit service
 
@@ -34,30 +38,54 @@ Never add a configuration, a default or a shortcut that starts the driver on
 the real backend. `ArmController` constructs `MockPca9685` first, always.
 Arming requires both the `allow_real` parameter and a `/soma/arm` service
 call. Do not collapse those two gates into one.
+`RealPca9685(armed=False)` raising `PermissionError` is load bearing.
 
 ### 3. Never hold a command against a physical stop
 
-The L16 wedges: it already happened on 2026-07-22 and had to be freed by hand.
-Soft limits (5 to 135 mm), clamping on arrival and auto release after settling
-are all load bearing. Do not widen the limits to "use the full stroke". Do not
-remove the release. Do not add arm servos to `RELEASE_WHEN_SETTLED`, they are
-not self locking and the arm will fall.
+The L16 wedges: it happened on 2026-07-22 after an 8 second held command, and
+it had to be freed by hand. Soft limits (5 to 135 mm), clamping on arrival and
+auto release after settling are all load bearing. Do not widen the limits to
+"use the full stroke". Do not remove the release. Do not add arm servos to
+`RELEASE_WHEN_SETTLED`, they are not self locking and the arm will fall.
 
-### 4. Language
+When probing real end stops, move in small steps and never sustain a command.
 
-- **Talk to Andres in Spanish, always.** Every conversational reply, every
-  explanation, every question.
-- **Everything committed to this repository is in English**: code, comments,
-  docstrings, test names, docs, commit messages, issues, README.
+### 4. Energise V+ only with the arms compact and resting
+
+MG996R clones twitch when the rail comes up. Both arms folded, resting on the
+bench, nothing fragile underneath, every time.
+
+No parameter or test can enforce this one. That is why it is written here.
+
+### 5. The harness is part of the safety system
+
+Every unexplained fault in the first real session was a connector: a dupont
+jumper broken inside its insulation dropped the I2C bus four times, and loose
+servo connectors produced servos twitching at power-up. `retry_i2c` is a net
+under isolated glitches, never a substitute for good wiring. Never present it
+as one.
+
+Permanent harness: JST with a positive lock for I2C, silicone retainers on
+servo connectors, 16 AWG or thicker for V+.
+
+### 6. Language and public content
+
+- **Talk to Andres in Spanish, always.** Every reply, explanation and question.
+- **Everything committed here is in English**: code, comments, docstrings,
+  test names, docs, commit messages, issues, README.
 - **No em dash characters in public content.** Use commas, colons,
-  parentheses or a plain hyphen instead.
+  parentheses or a plain hyphen.
+- **Honest numbers, always.** Measured beats manufacturer claims, and when
+  they disagree, say so and say which one the code follows.
+- **Never mention clients, employers or work code.** NDA applies.
+- **No job search strategy in a public repository.**
 
 ---
 
 ## Repository layout
 
 ```
-soma_description/     URDF/xacro, SRDF, RViz, MoveIt config
+soma_description/     URDF/xacro, SRDF, RViz, MoveIt kinematics
   urdf/soma_arm.xacro       the 6DOF arm, one reusable macro
   urdf/soma_torso.xacro     bay + L16 lift + plate + 2 arms + camera
   urdf/soma_bench.urdf.xacro     the reference model
@@ -68,9 +96,12 @@ soma_driver/          PCA9685 driver
   soma_driver/pca9685_backend.py   mock and real backends
   soma_driver/arm_controller_node.py  the ROS node
   test/                            the safety test suite
-docs/                 hardware.md, wiring.md, safety.md
+docs/                 hardware, wiring, safety, bench, migration
 scripts/              smoke_test.sh, check_model_driver_sync.py
 ```
+
+Packages that arrive with their milestone, and not before:
+`soma_moveit_config` (v0.3), `soma_teleop` (v0.4), `soma_operator` (v1.0).
 
 ## Facts that are measured, not assumed
 
@@ -83,25 +114,31 @@ them in. Full context in `docs/hardware.md`.
 | Channel 0 | out of service, suspected during a fault and never cleared |
 | L16 convention | **INVERTED**: 2000 us retracted, 1000 us extended. `min_us > max_us` is correct |
 | L16 soft limits | 5 to 135 mm, never 0 to 140 |
-| I2C | transient `OSError 121` is expected, `retry_i2c` handles it |
+| Servos | MG996R at about 10 kg.cm, **not** the "25KG" the manual advertises |
+| Payload | about 330 g at 30 cm of reach. Work in compact poses |
+| Power | LiPo 2S to switch and fuse to UBEC 6 V to V+. **Never the LiPo directly**, 8.4 V exceeds the 7.2 V servo rating |
+| I2C | bus 1 at `0x40`, prescale 121 for exactly 50.0 Hz |
 | Gripper | geared pair, the right finger is mimic and owns no channel |
 
 `servo_map.py` and the URDF hold the same physical facts. If you change one,
-change the other, and `scripts/check_model_driver_sync.py` (run by CI) will
-tell you if you forgot.
+change the other. `scripts/check_model_driver_sync.py`, run by CI, will tell
+you if you forgot.
 
-## Working here
+## The tests are the specification
 
-Run the fast tests before and after any change to the driver:
+24 tests came over from the bench driver and they encode every hardware
+contract. If a change breaks one, the change is wrong until proven otherwise.
+Never edit a test to make a change pass without saying so explicitly and
+explaining why the hardware fact changed.
+
+Run the fast suite before and after any driver change, no ROS or hardware
+needed:
 
 ```bash
 python -m pytest soma_driver/test -q
 ```
 
-They need no ROS and no hardware. The ROS node tests skip automatically when
-`rclpy` is missing, and run in CI.
-
-Full validation, inside a ROS 2 Humble environment:
+Full validation inside a ROS 2 Humble environment:
 
 ```bash
 bash scripts/smoke_test.sh
@@ -115,6 +152,23 @@ rule that will be refactored away by someone in a hurry.
 
 ## Roadmap discipline
 
-Each version is a git tag plus a video in the README. Do not skip ahead: v0.2
-does not start until v0.1 is tagged with its calibrated URDF. The roadmap is
-in the README, and v1.0 closes the project.
+Each version is a git tag, a video in the README and a short. Do not skip
+ahead: v0.2 does not start until v0.1 is tagged with its calibrated URDF, and
+calibration needs calipers on real parts, which is not something an agent can
+do. The roadmap lives in the README.
+
+## Waver ecosystem
+
+SOMA is independent code, but not independent history. The arms were brought
+up as part of a rover project, and the record of every hardware decision lives
+there. This section is context only: nothing in this repository depends on
+those files, and nothing from them should be copied in wholesale.
+
+| File | What it holds |
+|---|---|
+| `Waver/HANDOFF_SOMA.md` | the handoff that defined this project: roadmap, inviolable rules, the exact `SERVO_MAP` table, node interfaces, the 24 tests, validated commands |
+| `Waver/cad/MEDIDAS.md` | the master log of hardware decisions and bench sessions. **Read this first for any question about history** |
+| `Waver/Manual de ensamble ^ DOF arm.pdf` | the arm kit manual. Page 1 is the parts list, page 28 is where the A to F joint labels come from |
+
+When SOMA reaches v1.0, the platform project drops its own copies of these
+packages and consumes SOMA as a dependency instead.
