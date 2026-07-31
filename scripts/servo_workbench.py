@@ -18,9 +18,11 @@ Safety model (the project rules, encoded):
     channel snaps the servo from its unknown physical pose, once — keep the
     arm resting when you arm.
   - Big ALL OFF button: every channel to FULL_OFF, disarmed.
-  - The L16 torso is DELIBERATELY not here. It wedges if driven against a
-    stop (2026-07-22); calibrate it with the dedicated slow procedure in
-    docs/bench.md, never with a slider.
+  - The L16 torso (ch 3) is included WITH ITS OWN PHYSICS: band clamped to
+    1000-2000 us, ramp matched to its real 20 mm/s, and auto release 2 s
+    after settling, so a command can never be held against a stop (it
+    wedged once on 2026-07-22; see docs/bench.md for the slow stop-probing
+    procedure: approach stops with the +/-10 nudges, never park on them).
 
 Bring-up order (docs/wiring.md): wire with the servo rail OFF, run this
 tool and check the bus scan, fold the arms into a compact resting pose,
@@ -47,13 +49,26 @@ RAMP_US_PER_S = 400.0     # smooth server-side ramp toward the slider target
 TICK_S = 0.02             # 50 Hz ramp loop
 CAL_FILE = 'servo_calibration.json'
 
-# Measured wiring 2026-07-22 (docs/wiring.md). Torso L16 (ch 3) excluded.
+# Measured wiring 2026-07-22 (docs/wiring.md).
+L16_CH = 3
 SERVOS = [
     (15, 'right gripper'), (14, 'right wrist roll'), (13, 'right wrist pitch'),
     (12, 'right elbow'), (11, 'right shoulder'), (10, 'right yaw'),
     (9, 'left gripper'), (8, 'left wrist roll'), (7, 'left wrist pitch'),
     (6, 'left elbow'), (5, 'left shoulder'), (4, 'left yaw'),
+    (3, 'torso L16 (INVERTED: 2000us = retracted)'),
 ]
+
+# The L16 gets its own physics (it wedged once, 2026-07-22, docs/bench.md):
+#   - band clamped to its real 1.0-2.0 ms interface, never the servo band
+#   - ramp matched to its 20 mm/s (140 mm over 1000 us -> ~140 us/s), so
+#     the signal can never run ahead of the rod and lean on a stop
+#   - AUTO-RELEASE: 2 s after the signal settles, the channel is cut. The
+#     lead screw is self locking (46 N unpowered), nothing sags, and a
+#     command can never be held against a mechanical stop.
+CH_LIMITS = {L16_CH: (1000.0, 2000.0)}
+CH_RAMP = {L16_CH: 140.0}
+CH_RELEASE_S = {L16_CH: 2.0}
 
 
 class Board:
@@ -81,16 +96,29 @@ class Board:
         The browser can spam or reorder requests all it wants; the wire only
         ever sees this ramp. Same philosophy as rate_limit() in the driver.
         """
-        step = RAMP_US_PER_S * TICK_S
+        settled = {}
         while True:
             time.sleep(TICK_S)
             with self.lock:
                 if not self.armed:
                     continue
-                for ch, target in self.target_us.items():
+                for ch in list(self.target_us):
+                    target = self.target_us[ch]
                     cur = self.last_us.get(ch)
-                    if cur is None or cur == target:
+                    if cur is None:
                         continue
+                    if cur == target:
+                        # settled: self locking channels get their signal cut
+                        settled[ch] = settled.get(ch, 0.0) + TICK_S
+                        if settled[ch] >= CH_RELEASE_S.get(ch, float('inf')):
+                            self.bus.write_i2c_block_data(
+                                ADDR, LED0 + 4 * ch, [0, 0, 0, 0x10])
+                            self.last_us.pop(ch, None)
+                            self.target_us.pop(ch, None)
+                            settled.pop(ch, None)
+                        continue
+                    settled[ch] = 0.0
+                    step = CH_RAMP.get(ch, RAMP_US_PER_S) * TICK_S
                     if abs(target - cur) <= step:
                         new = target
                     else:
@@ -109,7 +137,8 @@ class Board:
                 return 'refused: DISARMED'
             if ch != self.active:
                 return 'refused: not the active servo'
-            us = max(MIN_US, min(MAX_US, float(us)))
+            lo, hi = CH_LIMITS.get(ch, (MIN_US, MAX_US))
+            us = max(lo, min(hi, float(us)))
             if ch not in self.last_us:
                 # First pulse on this channel: the servo snaps to it from
                 # wherever it physically is. One unavoidable jump; from here
@@ -202,7 +231,8 @@ function build(){
  for(const s of S.servos){
   const d=document.createElement('div');d.id='sv'+s.ch;d.className='servo';
   d.innerHTML=`<div class="nm"><b>ch${s.ch}</b> ${s.name} <span class="badge" id="cal${s.ch}"></span></div>
-  <input type="range" id="sl${s.ch}" min="500" max="2500" step="5" value="1500">
+  <input type="range" id="sl${s.ch}" min="${s.min}" max="${s.max}" step="5"
+   value="${(s.min+s.max)/2}">
   <div class="us" id="us${s.ch}">off</div>
   <div class="row2">
    <button onclick="api({action:'select',ch:${s.ch}})">select</button>
@@ -267,8 +297,10 @@ def make_handler(board, cal):
         def _state(self):
             servos = []
             for ch, name in SERVOS:
+                lo, hi = CH_LIMITS.get(ch, (MIN_US, MAX_US))
                 servos.append({'ch': ch, 'name': name,
                                'us': round(board.last_us.get(ch, 0)) or None,
+                               'min': lo, 'max': hi,
                                'cal': cal.data.get(str(ch))})
             return {'armed': board.armed, 'active': board.active, 'servos': servos}
 
