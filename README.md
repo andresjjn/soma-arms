@@ -124,6 +124,12 @@ Vision teleop by human mimicry (BlazePose on the OAK-D VPU) moves to the
 post-1.0 backlog: it is not a prerequisite for the operator and the
 language-directed path ships sooner.
 
+A **learning track** runs in parallel on the same model: the arm is
+identified against MuJoCo (`L1`), then policies are trained on a MacBook
+through MJX and deployed to the Jetson (`L2` reach, `L3` grasp, `L4`
+bimanual handoff). Every physical quantity is measured and randomizable
+precisely so those policies can transfer. See **[docs/plan.md](docs/plan.md)**.
+
 Videos land here as each tag ships.
 
 ---
@@ -140,6 +146,7 @@ docker/             headless ROS 2 Humble image for building and validating
 
 | Document | What it covers |
 |---|---|
+| **[docs/plan.md](docs/plan.md)** | **the master plan: hardware roles, the model pipeline, the simulation stack, the actuator model, the RL tasks, and the acceptance criteria of every phase** |
 | [docs/hardware.md](docs/hardware.md) | every part, its datasheet numbers, and the measured values that override them |
 | [docs/wiring.md](docs/wiring.md) | the verified channel map, power chain, connectors, bring-up order |
 | [docs/safety.md](docs/safety.md) | the rules, how each is enforced in code, and the incident log |
