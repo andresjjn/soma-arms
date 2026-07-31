@@ -111,15 +111,18 @@ issue, not a reason to keep the project open.
 
 | Version | Milestone | What has to be true | Status |
 |---|---|---|---|
-| **v0.1** | Calibrated URDF | Every `[calibrate]` length measured with calipers and corrected, model right in RViz, CI green on tests and xacro | in progress |
-| **v0.2** | Real driver | Sliders move metal. Mock to hardware, arming procedure exercised end to end. The code already exists, the hardware run does not | bench first: all 13 actuators verified live from a Jetson Orin Nano through `scripts/servo_workbench.py` (2026-07-30) |
-| **v0.3** | MoveIt2 | Planned trajectories on both arms, `candle` and `compact` poses, gripper as an end effector | |
-| **v0.4** | Basic teleop | A human drives the arms directly from keyboard or web, no planning in the loop | |
-| **v0.5** | Vision teleop | OAK-D Lite running BlazePose **on the camera VPU**, the arms imitate a human. The Pi only receives landmarks | |
-| **v1.0** | The operator | Two hours of continuous pick and place cycles on the bench, with a public cycle counter. Then the project closes | |
+| **v0.1** | Calibrated URDF | Every `[calibrate]` length measured with calipers and corrected, servo zeros and ranges captured, model right in RViz, CI green | in progress |
+| **v0.2** | Real driver | Sliders move metal through the ROS driver: mock to hardware, arming procedure exercised end to end | bench first: all 13 actuators verified live from a Jetson Orin Nano through `scripts/servo_workbench.py` (2026-07-30) |
+| **v0.3** | Eye-hand | Both arms bolted to the bench rig with the OAK-D fixed above. Pixel + depth deprojects to 3D in each arm's frame, IK reaches it. Acceptance: **click a point in the image and the arm touches it** | |
+| **v0.4** | Language-directed manipulation | Gemini Robotics-ER 2 points, plans and verifies; SOMA executes through its safety gates (the reasoner proposes, the armed driver disposes; the cloud can never arm the robot). Bimanual pick and place directed in natural language | |
+| **v1.0** | The operator | Two hours of continuous pick and place cycles on the bench, with a public cycle counter **verified by the ER model's progress classification**. Then the project closes | |
 
 Packages arrive with their milestone: `soma_moveit_config` at v0.3,
-`soma_teleop` at v0.4, `soma_operator` at v1.0.
+`soma_agent` (the ER 2 orchestration layer) at v0.4, `soma_operator` at v1.0.
+
+Vision teleop by human mimicry (BlazePose on the OAK-D VPU) moves to the
+post-1.0 backlog: it is not a prerequisite for the operator and the
+language-directed path ships sooner.
 
 Videos land here as each tag ships.
 

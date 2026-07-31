@@ -101,7 +101,18 @@ scripts/              smoke_test.sh, check_model_driver_sync.py
 ```
 
 Packages that arrive with their milestone, and not before:
-`soma_moveit_config` (v0.3), `soma_teleop` (v0.4), `soma_operator` (v1.0).
+`soma_moveit_config` (v0.3), `soma_agent` (v0.4, the Gemini Robotics-ER 2
+orchestration layer), `soma_operator` (v1.0). Mimicry teleop is post-1.0
+backlog.
+
+### The cloud reasoner never touches the trigger
+
+From v0.4 on, an external model (Gemini Robotics-ER 2) points, plans and
+verifies. It does so exclusively by calling SOMA primitives that sit BEHIND
+the two arming gates. No API response, function call or agent step may arm
+the driver, widen a limit, or bypass the ramp. The reasoner proposes, the
+armed driver disposes. If a design makes the cloud a safety dependency, the
+design is wrong.
 
 ## Facts that are measured, not assumed
 
