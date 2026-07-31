@@ -12,9 +12,11 @@ Safety model (the project rules, encoded):
   - ONE servo active at a time. Selecting another does not release the
     previous one (arm servos need holding torque), but only the active one
     accepts commands.
-  - Pulses are clamped to 500-2500 us, and each write moves at most
-    MAX_STEP_US from the last commanded pulse: no snap moves, even if the
-    browser asks for one.
+  - Pulses are clamped to 500-2500 us. The browser only sets TARGETS; a
+    50 Hz server-side ramp walks the wire toward them at 400 us/s, so no
+    slider gesture can snap a servo. Exception: the very first pulse on a
+    channel snaps the servo from its unknown physical pose, once — keep the
+    arm resting when you arm.
   - Big ALL OFF button: every channel to FULL_OFF, disarmed.
   - The L16 torso is DELIBERATELY not here. It wedges if driven against a
     stop (2026-07-22); calibrate it with the dedicated slow procedure in
@@ -41,7 +43,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 ADDR = 0x40
 MODE1, PRESCALE, LED0, ALL_OFF_H = 0x00, 0xFE, 0x06, 0xFD
 MIN_US, MAX_US, CENTER_US = 500, 2500, 1500
-MAX_STEP_US = 50          # per write: the browser cannot snap a servo
+RAMP_US_PER_S = 400.0     # smooth server-side ramp toward the slider target
+TICK_S = 0.02             # 50 Hz ramp loop
 CAL_FILE = 'servo_calibration.json'
 
 # Measured wiring 2026-07-22 (docs/wiring.md). Torso L16 (ch 3) excluded.
@@ -62,13 +65,38 @@ class Board:
         self.bus_num = bus_num
         self.armed = False
         self.active = None                 # channel allowed to move
-        self.last_us = {}                  # channel -> last commanded pulse
+        self.last_us = {}                  # channel -> pulse currently on the wire
+        self.target_us = {}                # channel -> where the slider wants it
         self.lock = threading.Lock()
         self.bus.write_byte_data(ADDR, MODE1, 0x10)
         self.bus.write_byte_data(ADDR, PRESCALE, 121)   # exactly 50.0 Hz
         self.bus.write_byte_data(ADDR, MODE1, 0x20)
         time.sleep(0.01)
         self.all_off()
+        threading.Thread(target=self._ramp_loop, daemon=True).start()
+
+    def _ramp_loop(self):
+        """50 Hz: walk each commanded channel smoothly toward its target.
+
+        The browser can spam or reorder requests all it wants; the wire only
+        ever sees this ramp. Same philosophy as rate_limit() in the driver.
+        """
+        step = RAMP_US_PER_S * TICK_S
+        while True:
+            time.sleep(TICK_S)
+            with self.lock:
+                if not self.armed:
+                    continue
+                for ch, target in self.target_us.items():
+                    cur = self.last_us.get(ch)
+                    if cur is None or cur == target:
+                        continue
+                    if abs(target - cur) <= step:
+                        new = target
+                    else:
+                        new = cur + (step if target > cur else -step)
+                    self._write_us(ch, new)
+                    self.last_us[ch] = new
 
     def _write_us(self, ch, us):
         counts = round(us / 20000.0 * 4096.0)
@@ -82,21 +110,26 @@ class Board:
             if ch != self.active:
                 return 'refused: not the active servo'
             us = max(MIN_US, min(MAX_US, float(us)))
-            last = self.last_us.get(ch, CENTER_US)
-            us = max(last - MAX_STEP_US, min(last + MAX_STEP_US, us))
-            self._write_us(ch, us)
-            self.last_us[ch] = us
-            return f'{us:.0f}'
+            if ch not in self.last_us:
+                # First pulse on this channel: the servo snaps to it from
+                # wherever it physically is. One unavoidable jump; from here
+                # on, everything is ramped. Keep the arm resting.
+                self._write_us(ch, us)
+                self.last_us[ch] = us
+            self.target_us[ch] = us
+            return f'target {us:.0f}'
 
     def release(self, ch):
         with self.lock:
             self.bus.write_i2c_block_data(ADDR, LED0 + 4 * ch, [0, 0, 0, 0x10])
             self.last_us.pop(ch, None)
+            self.target_us.pop(ch, None)
 
     def all_off(self):
         with self.lock:
             self.bus.write_byte_data(ADDR, ALL_OFF_H, 0x10)
             self.last_us.clear()
+            self.target_us.clear()
             self.armed = False
             self.active = None
 
@@ -162,18 +195,15 @@ input[type=range]{width:100%}
 <div id="list"></div>
 <script>
 let S={armed:false,active:null,servos:[]};
-function render(){
- document.getElementById('arm').textContent=S.armed?'DISARM':'ARM';
- document.getElementById('arm').className=S.armed?'on':'';
+let built=false, dragging=null, pending={}, timers={};
+
+function build(){
  const L=document.getElementById('list');L.innerHTML='';
  for(const s of S.servos){
-  const d=document.createElement('div');
-  d.className='servo'+(s.ch===S.active?' active':'');
-  const cal=s.cal?` <span class="badge">zero:${s.cal.zero??'-'} min:${s.cal.min??'-'} max:${s.cal.max??'-'}</span>`:'';
-  d.innerHTML=`<div class="nm"><b>ch${s.ch}</b> ${s.name}${cal}</div>
-  <input type="range" min="500" max="2500" step="10" value="${s.us||1500}"
-   oninput="slide(${s.ch},this.value)">
-  <div class="us">${s.us?s.us+'us':'off'}</div>
+  const d=document.createElement('div');d.id='sv'+s.ch;d.className='servo';
+  d.innerHTML=`<div class="nm"><b>ch${s.ch}</b> ${s.name} <span class="badge" id="cal${s.ch}"></span></div>
+  <input type="range" id="sl${s.ch}" min="500" max="2500" step="5" value="1500">
+  <div class="us" id="us${s.ch}">off</div>
   <div class="row2">
    <button onclick="api({action:'select',ch:${s.ch}})">select</button>
    <button onclick="nudge(${s.ch},-50)">-50</button><button onclick="nudge(${s.ch},-10)">-10</button>
@@ -183,14 +213,47 @@ function render(){
    <button class="mark" onclick="api({action:'mark',ch:${s.ch},kind:'max'})">mark MAX</button>
    <button onclick="api({action:'release',ch:${s.ch}})">release</button>
   </div>`;
-  L.appendChild(d);}
+  L.appendChild(d);
+  const sl=d.querySelector('input');
+  sl.addEventListener('pointerdown',()=>dragging=s.ch);
+  sl.addEventListener('pointerup',()=>{dragging=null;flush(s.ch);});
+  sl.addEventListener('input',()=>{
+   document.getElementById('us'+s.ch).textContent=sl.value+'us';
+   pending[s.ch]=+sl.value;
+   if(!timers[s.ch])timers[s.ch]=setTimeout(()=>flush(s.ch),120);});
+ }
+ built=true;
+}
+function flush(ch){
+ clearTimeout(timers[ch]);timers[ch]=null;
+ if(pending[ch]!=null){const v=pending[ch];pending[ch]=null;
+  api({action:'set',ch:ch,us:v});}
+}
+function update(){
+ document.getElementById('arm').textContent=S.armed?'DISARM':'ARM';
+ document.getElementById('arm').className=S.armed?'on':'';
+ for(const s of S.servos){
+  const d=document.getElementById('sv'+s.ch);if(!d)continue;
+  d.className='servo'+(s.ch===S.active?' active':'');
+  const c=s.cal?`zero:${s.cal.zero??'-'} min:${s.cal.min??'-'} max:${s.cal.max??'-'}`:'';
+  document.getElementById('cal'+s.ch).textContent=c;
+  // never touch the slider the user is holding, nor overwrite a pending send
+  if(dragging!==s.ch&&pending[s.ch]==null&&s.us){
+   document.getElementById('sl'+s.ch).value=s.us;
+   document.getElementById('us'+s.ch).textContent=s.us+'us';}
+  if(!s.us&&dragging!==s.ch)document.getElementById('us'+s.ch).textContent='off';
+ }
 }
 async function api(body){
  const r=await fetch('/api',{method:'POST',body:JSON.stringify(body)});
  const j=await r.json();S=j.state;
- document.getElementById('msg').textContent=j.msg||'';render();}
-function slide(ch,v){api({action:'set',ch:ch,us:+v})}
-function nudge(ch,d){api({action:'nudge',ch:ch,delta:d})}
+ if(body.action!=='state'&&j.msg)document.getElementById('msg').textContent=j.msg;
+ if(!built)build();update();}
+function nudge(ch,d){
+ const sl=document.getElementById('sl'+ch);
+ sl.value=+sl.value+d;
+ document.getElementById('us'+ch).textContent=sl.value+'us';
+ api({action:'set',ch:ch,us:+sl.value});}
 function toggleArm(){api({action:S.armed?'disarm':'arm'})}
 api({action:'state'});setInterval(()=>api({action:'state'}),4000);
 </script></body></html>"""
@@ -240,8 +303,8 @@ def make_handler(board, cal):
             elif act == 'set':
                 msg = f'ch{ch}: {board.command(ch, req.get("us", CENTER_US))}'
             elif act == 'nudge':
-                last = board.last_us.get(ch, CENTER_US)
-                msg = f'ch{ch}: {board.command(ch, last + req.get("delta", 0))}'
+                base = board.target_us.get(ch, board.last_us.get(ch, CENTER_US))
+                msg = f'ch{ch}: {board.command(ch, base + req.get("delta", 0))}'
             elif act == 'release':
                 board.release(ch)
                 msg = f'ch{ch} released (signal cut).'
