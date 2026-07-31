@@ -112,7 +112,7 @@ issue, not a reason to keep the project open.
 | Version | Milestone | What has to be true | Status |
 |---|---|---|---|
 | **v0.1** | Calibrated URDF | Every `[calibrate]` length measured with calipers and corrected, model right in RViz, CI green on tests and xacro | in progress |
-| **v0.2** | Real driver | Sliders move metal. Mock to hardware, arming procedure exercised end to end. The code already exists, the hardware run does not | |
+| **v0.2** | Real driver | Sliders move metal. Mock to hardware, arming procedure exercised end to end. The code already exists, the hardware run does not | bench first: all 13 actuators verified live from a Jetson Orin Nano through `scripts/servo_workbench.py` (2026-07-30) |
 | **v0.3** | MoveIt2 | Planned trajectories on both arms, `candle` and `compact` poses, gripper as an end effector | |
 | **v0.4** | Basic teleop | A human drives the arms directly from keyboard or web, no planning in the loop | |
 | **v0.5** | Vision teleop | OAK-D Lite running BlazePose **on the camera VPU**, the arms imitate a human. The Pi only receives landmarks | |
