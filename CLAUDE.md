@@ -137,10 +137,16 @@ you if you forgot.
 
 ## The tests are the specification
 
-24 tests came over from the bench driver and they encode every hardware
-contract. If a change breaks one, the change is wrong until proven otherwise.
-Never edit a test to make a change pass without saying so explicitly and
-explaining why the hardware fact changed.
+24 tests came over from the bench driver, and the suite has grown since.
+**Current count: 50 passing plus 1 skipped** (the skipped one needs `rclpy`
+and runs in the ROS job of CI). They encode every hardware contract. If a
+change breaks one, the change is wrong until proven otherwise. Never edit a
+test to make a change pass without saying so explicitly and explaining why
+the hardware fact changed.
+
+If a test count is ever quoted publicly, run the suite and read the number
+off the terminal first. The honest-numbers rule applies to our own metrics
+before it applies to anyone else's datasheet.
 
 Run the fast suite before and after any driver change, no ROS or hardware
 needed:

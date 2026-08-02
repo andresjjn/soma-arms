@@ -214,12 +214,16 @@ Blocked only by physical measurement, which is Andres and a caliper.
 
 1. Capture zeros and mechanical limits for the 13 actuators with
    `scripts/servo_workbench.py`. Output: `servo_calibration.json`.
-2. Re-center the horns: with the servo held at 1500 us, unbolt the horn
-   and re-spline it so the mechanical zero of each joint matches the
-   electrical center. The 25T spline gives 14.4 degree steps; whatever is
-   left over becomes a software offset.
-3. Caliper the 14 arm dimensions into `dimensions.yaml`, status
-   `measured`.
+2. **FILM BEFORE.** Re-center the horns: with the servo held at 1500 us,
+   unbolt the horn and re-spline it so the mechanical zero of each joint
+   matches the electrical center. The 25T spline gives 14.4 degree steps;
+   whatever is left over becomes a software offset. This step permanently
+   changes how every joint rests, so the current pose is unrepeatable
+   afterwards. See section 11.
+3. **FILM BEFORE.** Caliper the 14 arm dimensions into `dimensions.yaml`,
+   status `measured`. This closes the gap between a visibly wrong model and
+   the metal, which is the entire point of v0.1 and only exists until it is
+   measured.
 4. Weigh each subassembly, recompute inertias, re-verify the lifted mass
    budget (4 kg rule) against real numbers.
 5. Fold the measured zeros and ranges into `SERVO_MAP` as per joint
@@ -248,10 +252,12 @@ ramp, with the emergency switch never needed. Tag `v0.2`.
 
 This is the phase that makes everything after it possible.
 
-1. **Rigid rig**: both arms bolted to one board at a measured separation,
-   OAK-D on a fixed mast looking down at the work area. New model
-   `soma_rig.urdf.xacro` describing exactly that geometry. Without a rigid
-   rig, extrinsics die every time something shifts.
+1. **Rigid rig. FILM BEFORE.** Both arms bolted to one board at a measured
+   separation, OAK-D on a fixed mast looking down at the work area. New
+   model `soma_rig.urdf.xacro` describing exactly that geometry. Without a
+   rigid rig, extrinsics die every time something shifts. This also ends
+   the era of loose arms on a table, so the provisional bench has to be
+   photographed before the first bolt goes in.
 2. **Deprojection**: pixel plus depth to XYZ in the camera frame, using
    the factory intrinsics from `device.readCalibration()`.
 3. **Extrinsics camera to arm base**: an ArUco marker on the gripper,
@@ -352,10 +358,78 @@ These do not bend for a demo, a deadline or an agent.
 ## 10. Immediate next actions
 
 1. Finish zeros and mechanical limits with the workbench (in progress).
-2. Re-center the horns at 1500 us, one servo at a time.
-3. Caliper session when the tool arrives, fill `dimensions.yaml`, tag
-   `v0.1`.
-4. Build the rigid rig (board, bolts, camera mast) and measure the arm
-   separation for `soma_rig.urdf.xacro`.
+2. **FILM BEFORE**, then re-center the horns at 1500 us, one servo at a
+   time.
+3. **FILM BEFORE**, then the caliper session when the tool arrives, fill
+   `dimensions.yaml`, tag `v0.1`.
+4. **FILM BEFORE**, then build the rigid rig (board, bolts, camera mast)
+   and measure the arm separation for `soma_rig.urdf.xacro`.
 5. Record the step response videos for L1 while the arms are already
-   powered and instrumented.
+   powered and instrumented. These double as capture material.
+
+---
+
+## 11. Capture
+
+Raw material is unrecoverable. Engineering that was not captured did not
+happen as far as anyone outside this bench is concerned, and every
+milestone in section 6 is supposed to ship with a video.
+
+**This is not a new rule.** A capture rule already existed in the rover
+project and produced exactly one tracked image in eight months. A rule
+fails when it has no defined moment, no defined destination and no cost
+ceiling. This section supplies all three.
+
+### 11.1 The session checklist
+
+Four items. Three minutes total. If it takes longer, the checklist is
+wrong, not the engineer.
+
+```
+BEFORE the 6 V rail comes up (or before the first command of the session):
+  [ ] 1 still, wide: the bench exactly as it is right now.
+  [ ] 1 still, close: the thing this session is about to change.
+
+AT SESSION CLOSE, before anything is put away:
+  [ ] 1 clip, 20 s vertical: the most surprising thing that happened today.
+      If nothing surprised you, film what failed. If nothing failed, film
+      the terminal showing the number that changed.
+  [ ] 1 line appended to the logbook:
+      capture: <folder>/<file> - <what it shows>
+```
+
+Rules that keep this survivable:
+
+- Phone, vertical, no edit, no narration, no lighting rig. Raw only.
+- Destination: `~/Robotics/capturas/YYYY-MM-DD/`. Never a git repo, never
+  deleted. Video never enters a repository; only a still that is already
+  used inside a document does.
+- Security sweep before anything leaves the phone: no tokens, no keys, no
+  dashboard URLs, no full floor plan of a home, no client material.
+- The two "before" shots happen while the rail is still off, which is the
+  only window a tired person actually has.
+
+### 11.2 One-way doors
+
+A step that cannot be undone does not feel different at 11pm, so it gets
+marked in the plan itself. Every step tagged **FILM BEFORE** in sections 6
+and 10 destroys a state that can never be filmed again:
+
+| Step | Where | What it destroys |
+|---|---|---|
+| Re-center the horns at 1500 us | v0.1 step 2 | The current resting angle of all twelve joints |
+| Caliper session | v0.1 step 3 | The visibly wrong twin, 16 of 30 dimensions still guessed |
+| Build the rigid rig | v0.3 step 1 | The era of loose arms on a table |
+| Definitive harness (JST, 16 AWG) | `docs/wiring.md` | The provisional dupont wiring, and the broken jumper next to it |
+| Fit the second UBEC | `docs/hardware.md` 7 | The single-rail configuration the docs call a known weak point |
+| Diagnose the left wrist | open issue | An unresolved fault, on camera, undiagnosed |
+| First `git tag` | v0.1 | `git tag -l` returning nothing: day zero, unrepeatable |
+
+### 11.3 Incidents carry a capture
+
+`docs/safety.md` keeps an incident log where every row pairs a failure with
+the change it forced, and it closes with "an incident with no change is an
+incident that will happen again". The same applies to evidence: an incident
+with no footage is an incident that gets described instead of shown, and
+description does not survive a phone screen with the sound off. New rows in
+that table should name their capture when one exists.
