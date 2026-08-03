@@ -9,7 +9,10 @@ Safety rules of the project, encoded here:
   - The node ALWAYS starts on the MOCK backend and DISARMED. Arming is an
     explicit service call, and it is refused unless the node was also
     started with allow_real:=true. Two independent gates, on purpose.
-  - Per joint ramp (rate limit from servo_map): no snap moves, ever.
+  - Per joint minimum-jerk profile (trajectory.py): velocity follows a
+    bell curve, so motion starts and stops softly instead of at constant
+    speed with hard corners. The rate limit from servo_map remains a HARD
+    CEILING enforced on every tick: no snap moves, ever.
   - Incoming targets are clamped to the soft limits, so /joint_states never
     reports a pose the hardware is not allowed to reach.
   - Self locking joints (the L16) drop their signal once settled, so a
@@ -27,7 +30,8 @@ from std_srvs.srv import SetBool
 
 from .pca9685_backend import MockPca9685, RealPca9685
 from .servo_map import (
-    MIMIC_JOINTS, RELEASE_WHEN_SETTLED, SERVO_MAP, SETTLE_S, rate_limit)
+    MIMIC_JOINTS, RELEASE_WHEN_SETTLED, SERVO_MAP, SETTLE_S)
+from .trajectory import JointMotion
 
 RATE_HZ = 50.0
 
@@ -60,6 +64,9 @@ class ArmController(Node):
         # pulse the driver emits on its first tick.
         self.current = {name: spec.clamp(0.0) for name, spec in SERVO_MAP.items()}
         self.target = dict(self.current)
+        # One minimum-jerk planner per joint, seeded at the initial pose.
+        self.motion = {name: JointMotion(self.current[name], spec.max_rate)
+                       for name, spec in SERVO_MAP.items()}
         # Time settled on target, used to release self locking joints.
         self.settled_s = {name: 0.0 for name in RELEASE_WHEN_SETTLED}
 
@@ -78,7 +85,11 @@ class ArmController(Node):
             if spec is not None:
                 # Clamp on arrival: the published joint state must never
                 # claim a pose outside the soft limits.
-                self.target[name] = spec.clamp(pos)
+                clamped = spec.clamp(pos)
+                self.target[name] = clamped
+                # Replans from the CURRENT position and velocity, so a new
+                # command mid-motion never causes a discontinuity.
+                self.motion[name].set_target(clamped)
             elif name not in MIMIC_JOINTS:
                 self.get_logger().warn(f'unknown joint: {name}')
 
@@ -104,8 +115,12 @@ class ArmController(Node):
             self.backend = MockPca9685()
             return False, f'REFUSED: real backend failed ({exc}). Staying on MOCK.'
         # Nothing moves on the arming call itself: hold the current pose
-        # until a fresh command arrives.
+        # until a fresh command arrives. Any in-flight trajectory is
+        # retargeted to where the joint is right now, so it decelerates
+        # smoothly instead of continuing toward a stale goal.
         self.target = dict(self.current)
+        for name, m in self.motion.items():
+            m.set_target(self.current[name])
         self.armed = True
         return True, 'ARMED: real PCA9685 output is live'
 
@@ -119,8 +134,7 @@ class ArmController(Node):
         dt = 1.0 / RATE_HZ
         names, positions = [], []
         for name, spec in SERVO_MAP.items():
-            self.current[name] = rate_limit(
-                self.current[name], self.target[name], spec.max_rate, dt)
+            self.current[name] = self.motion[name].step(dt)
             if name in RELEASE_WHEN_SETTLED:
                 # L16: self locking lead screw. Once settled, signal off.
                 # Holding PWM against a stop wedges it (2026-07-22).
