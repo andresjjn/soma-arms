@@ -12,6 +12,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     liburdfdom-tools \
     python3-pytest \
     python3-yaml \
+    python3-pip \
     && rm -rf /var/lib/apt/lists/*
+
+# I2C access for the real backend (harmless in headless validation runs)
+RUN pip3 install --no-cache-dir smbus2
 
 WORKDIR /ros2_ws

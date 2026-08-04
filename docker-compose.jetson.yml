@@ -1,0 +1,36 @@
+# SOMA runtime on the Jetson Orin Nano (JetPack 7.2 has no ROS 2 Humble,
+# so the driver runs in a Humble container with the I2C bus passed through).
+#
+#   docker compose -f docker-compose.jetson.yml up -d      # MOCK, disarmed
+#   docker compose -f docker-compose.jetson.yml logs -f
+#
+# The container boots the driver in MOCK and DISARMED, always. Going live
+# is the same two-gate ritual as everywhere else, from a shell inside:
+#
+#   docker exec -it soma_driver bash -c "source /opt/ros/humble/setup.bash \
+#     && source /ros2_ws/install/setup.bash \
+#     && ros2 param set /soma_driver allow_real true"   # gate 1 is a LAUNCH
+#                                                       # param: prefer
+#                                                       # relaunching with
+#                                                       # allow_real:=true
+#   ros2 service call /soma/arm std_srvs/srv/SetBool "{data: true}"  # gate 2
+#
+# Build-on-boot is a known tradeoff (same debt as the Waver stack, task
+# tracked there); acceptable while the workspace changes daily.
+services:
+  driver:
+    build: ./docker
+    container_name: soma_driver
+    network_mode: host      # DDS discovery
+    ipc: host               # FastDDS shared memory
+    devices:
+      - /dev/i2c-7:/dev/i2c-7   # Orin Nano 40 pin header, pins 3/5
+    volumes:
+      - ./:/ros2_ws/src/soma-arms
+    command: >
+      bash -c "source /opt/ros/humble/setup.bash &&
+               cd /ros2_ws && colcon build --symlink-install &&
+               source install/setup.bash &&
+               ros2 launch soma_driver driver.launch.py"
+    mem_limit: 1g
+    restart: unless-stopped
