@@ -148,8 +148,15 @@
       </inertial>
     </link>
 
-    <!-- the two arms, splayed at +/- 45 deg -->
-    <xacro:soma_arm prefix="left_arm_" parent="torso_plate_link">
+    <!-- the two arms, splayed at +/- 45 deg. Joint limits were MEASURED
+         per side on 2026-08-03 (hug convention: negative = inward); the
+         macro defaults carry the right arm, the left passes its own. -->
+    <xacro:soma_arm prefix="left_arm_" parent="torso_plate_link"
+                    yaw_lower="-3.0788" yaw_upper="0.0"
+                    shoulder_lower="-0.3927" shoulder_upper="2.1206"
+                    elbow_lower="-1.5708" elbow_upper="0.7854"
+                    wrist_pitch_lower="-1.6179" wrist_pitch_upper="1.0996"
+                    wrist_roll_lower="-1.5080" wrist_roll_upper="1.3509">
       <origin xyz="${arm_x} ${arm_y} ${plate_lz}" rpy="0 0 ${arm_yaw}"/>
     </xacro:soma_arm>
 

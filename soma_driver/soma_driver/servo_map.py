@@ -53,39 +53,46 @@ class ServoSpec:
 
 HALF_PI = 1.5707963267948966
 
-
-def _arm_servo(ch: int) -> ServoSpec:
-    """180 deg servo: 500 to 2500 us over +/- 90 deg.
-
-    MG996R does roughly 0.17 s/60 deg, about 6 rad/s. We cap at 2.5 rad/s
-    on purpose: the project rule is smooth motion, never snap moves.
-    """
-    return ServoSpec(ch, 500.0, 2500.0, -HALF_PI, HALF_PI, 2.5)
-
-
-def _gripper_servo(ch: int) -> ServoSpec:
-    """Gripper: joint 0 to 1 rad mapped onto the upper half of the band.
-
-    [calibrate] against the real gear gripper once it is assembled.
-    """
-    return ServoSpec(ch, 1500.0, 2500.0, 0.0, 1.0, 2.5)
-
+# MEASURED CALIBRATION, 2026-08-03. Every horn was re-splined with its
+# servo holding the electrical center, then the mechanical zero and both
+# travel limits were captured per channel with scripts/servo_workbench.py.
+# Raw captures: calibration/servo_calibration_2026-08-03.json.
+#
+# THE HUG CONVENTION (Andres's rule, and it is the sign convention of the
+# whole project): negative = inward, as if the robot were closing a hug,
+# grasping features facing forward; positive = outward/up. It is mirrored
+# by construction, so "inward" is physically opposite between arms, which
+# is exactly why some channels below have min_us > max_us: on those, more
+# microseconds moves the joint inward. That inversion is measured, not a
+# typo, same as the L16.
+#
+# Zeros are asymmetric on purpose (a shoulder needs far more travel up
+# than down); the 25T spline only lands every 14.4 deg, so the electrical
+# zero absorbs the residue. MG996R does roughly 6 rad/s; we cap at
+# 2.5 rad/s by project rule: smooth motion, never snap moves.
+#
+# Open flags from the capture session (docs/ESTADO.md in the Waver repo):
+#   - left yaw's zero sits AT its 2500 us end stop: it can hug 176 deg
+#     but cannot rotate outward at all (upper = 0.0). Re-spline one tooth
+#     pending; until then the model carries the truth.
+#   - the grippers open different amounts (1490 us right vs 1030 us
+#     left); physical check pending.
 
 SERVO_MAP: dict[str, ServoSpec] = {
     # Right arm: channels 15 down to 10, gripper first (measured wiring).
-    'right_arm_finger_l_joint':    _gripper_servo(15),   # F, gripper
-    'right_arm_wrist_roll_joint':  _arm_servo(14),       # E
-    'right_arm_wrist_pitch_joint': _arm_servo(13),       # D, "elbow 2"
-    'right_arm_elbow_joint':       _arm_servo(12),       # C, "elbow 1"
-    'right_arm_shoulder_joint':    _arm_servo(11),       # B
-    'right_arm_yaw_joint':         _arm_servo(10),       # A, base yaw
-    # Left arm: channels 9 down to 4, same order.
-    'left_arm_finger_l_joint':    _gripper_servo(9),     # F, gripper
-    'left_arm_wrist_roll_joint':  _arm_servo(8),         # E
-    'left_arm_wrist_pitch_joint': _arm_servo(7),         # D, "elbow 2"
-    'left_arm_elbow_joint':       _arm_servo(6),         # C, "elbow 1"
-    'left_arm_shoulder_joint':    _arm_servo(5),         # B
-    'left_arm_yaw_joint':         _arm_servo(4),         # A, base yaw
+    'right_arm_finger_l_joint':    ServoSpec(15, 850.0, 2340.0, 0.0, 1.0, 2.5),   # F: 850 closed, 2340 open
+    'right_arm_wrist_roll_joint':  ServoSpec(14, 520.0, 2490.0, -1.8222, 1.2724, 2.5),   # E, zero 1680
+    'right_arm_wrist_pitch_joint': ServoSpec(13, 660.0, 2500.0, -2.0420, 0.8482, 2.5),   # D, zero 1960
+    'right_arm_elbow_joint':       ServoSpec(12, 2500.0, 520.0, -2.1363, 0.9739, 2.5),   # C, zero 1140, inverted
+    'right_arm_shoulder_joint':    ServoSpec(11, 700.0, 2500.0, -0.4712, 2.3562, 2.5),   # B, zero 1000
+    'right_arm_yaw_joint':         ServoSpec(10, 2500.0, 500.0, -2.7960, 0.3456, 2.5),   # A, zero 720, inverted
+    # Left arm: channels 9 down to 4, same order, mirrored signs.
+    'left_arm_finger_l_joint':    ServoSpec(9, 1160.0, 2190.0, 0.0, 1.0, 2.5),    # F: 1160 closed, 2190 open
+    'left_arm_wrist_roll_joint':  ServoSpec(8, 2500.0, 680.0, -1.5080, 1.3509, 2.5),    # E, zero 1540, inverted
+    'left_arm_wrist_pitch_joint': ServoSpec(7, 770.0, 2500.0, -1.6179, 1.0996, 2.5),    # D, zero 1800
+    'left_arm_elbow_joint':       ServoSpec(6, 2300.0, 800.0, -1.5708, 0.7854, 2.5),    # C, zero 1300, inverted
+    'left_arm_shoulder_joint':    ServoSpec(5, 900.0, 2500.0, -0.3927, 2.1206, 2.5),    # B, zero 1150
+    'left_arm_yaw_joint':         ServoSpec(4, 540.0, 2500.0, -3.0788, 0.0, 2.5),       # A, zero AT the stop
     # Torso: L16-140 on channel 3 (VERIFIED with power on, 2026-07-22).
     #
     # This unit has an INVERTED convention (measured, not from the

@@ -1,0 +1,86 @@
+{
+  "10": {
+    "date": "2026-08-03",
+    "max": 500,
+    "min": 2500,
+    "name": "right yaw",
+    "zero": 720
+  },
+  "11": {
+    "date": "2026-08-03",
+    "max": 2500,
+    "min": 700,
+    "name": "right shoulder",
+    "zero": 1000
+  },
+  "12": {
+    "date": "2026-08-03",
+    "max": 520,
+    "min": 2500,
+    "name": "right elbow",
+    "zero": 1140
+  },
+  "13": {
+    "date": "2026-08-03",
+    "max": 2500,
+    "min": 660,
+    "name": "right wrist pitch",
+    "zero": 1960
+  },
+  "14": {
+    "date": "2026-08-03",
+    "max": 2490,
+    "min": 520,
+    "name": "right wrist roll",
+    "zero": 1680
+  },
+  "15": {
+    "date": "2026-08-03",
+    "max": 2340,
+    "min": 840,
+    "name": "right gripper",
+    "zero": 850
+  },
+  "4": {
+    "date": "2026-08-03",
+    "max": 2500,
+    "min": 540,
+    "name": "left yaw",
+    "zero": 2500
+  },
+  "5": {
+    "date": "2026-08-03",
+    "max": 2500,
+    "min": 900,
+    "name": "left shoulder",
+    "zero": 1150
+  },
+  "6": {
+    "date": "2026-08-03",
+    "max": 800,
+    "min": 2300,
+    "name": "left elbow",
+    "zero": 1300
+  },
+  "7": {
+    "date": "2026-08-03",
+    "max": 2500,
+    "min": 770,
+    "name": "left wrist pitch",
+    "zero": 1800
+  },
+  "8": {
+    "date": "2026-08-03",
+    "max": 680,
+    "min": 2500,
+    "name": "left wrist roll",
+    "zero": 1540
+  },
+  "9": {
+    "date": "2026-08-03",
+    "max": 2190,
+    "min": 1160,
+    "name": "left gripper",
+    "zero": 1160
+  }
+}

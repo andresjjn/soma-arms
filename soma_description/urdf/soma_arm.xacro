@@ -53,9 +53,14 @@
   <xacro:property name="servo_ly" value="0.020"/>
   <xacro:property name="servo_lz" value="0.038"/>
 
-  <!-- Limits: 180 degree servos, so +/- 90 from center. These MUST stay in
-       sync with SERVO_MAP in soma_driver/servo_map.py. -->
-  <xacro:property name="lim"        value="${pi/2}"/>
+  <!-- Limits: MEASURED on 2026-08-03, joint by joint, after re-splining
+       every horn so the mechanical zero matches the electrical center.
+       Convention (Andres's "hug rule"): negative = inward, as if the robot
+       were closing a hug, grasping features facing forward; positive =
+       outward/up. Limits are asymmetric and differ per side, so they are
+       macro parameters below (defaults = RIGHT arm; the torso passes the
+       left values). They MUST stay in sync with SERVO_MAP in
+       soma_driver/servo_map.py; CI checks exactly that. -->
   <xacro:property name="effort_nm"  value="1.0"/>   <!-- MG996R ~10 kg.cm = 0.98 N.m -->
   <xacro:property name="vel_rads"   value="3.0"/>   <!-- ~0.17 s/60 deg plus margin -->
 
@@ -85,7 +90,13 @@
   </xacro:macro>
 
   <!-- ==================== the arm macro ==================== -->
-  <xacro:macro name="soma_arm" params="prefix parent *origin">
+  <xacro:macro name="soma_arm"
+               params="prefix parent *origin
+                       yaw_lower:=-2.7960 yaw_upper:=0.3456
+                       shoulder_lower:=-0.4712 shoulder_upper:=2.3562
+                       elbow_lower:=-2.1363 elbow_upper:=0.9739
+                       wrist_pitch_lower:=-2.0420 wrist_pitch_upper:=0.8482
+                       wrist_roll_lower:=-1.8222 wrist_roll_upper:=1.2724">
 
     <!-- mount to the parent link -->
     <joint name="${prefix}mount_joint" type="fixed">
@@ -114,7 +125,7 @@
       <child link="${prefix}turntable_link"/>
       <origin xyz="0 0 ${base_lz}"/>
       <axis xyz="0 0 1"/>
-      <limit lower="${-lim}" upper="${lim}" effort="${effort_nm}" velocity="${vel_rads}"/>
+      <limit lower="${yaw_lower}" upper="${yaw_upper}" effort="${effort_nm}" velocity="${vel_rads}"/>
     </joint>
 
     <link name="${prefix}turntable_link">
@@ -142,7 +153,7 @@
       <child link="${prefix}upper_arm_link"/>
       <origin xyz="0 0 ${turntable_h + shoulder_off_z}"/>
       <axis xyz="0 1 0"/>
-      <limit lower="${-lim}" upper="${lim}" effort="${effort_nm}" velocity="${vel_rads}"/>
+      <limit lower="${shoulder_lower}" upper="${shoulder_upper}" effort="${effort_nm}" velocity="${vel_rads}"/>
     </joint>
 
     <link name="${prefix}upper_arm_link">
@@ -165,7 +176,7 @@
       <child link="${prefix}forearm_link"/>
       <origin xyz="0 0 ${upper_len}"/>
       <axis xyz="0 1 0"/>
-      <limit lower="${-lim}" upper="${lim}" effort="${effort_nm}" velocity="${vel_rads}"/>
+      <limit lower="${elbow_lower}" upper="${elbow_upper}" effort="${effort_nm}" velocity="${vel_rads}"/>
     </joint>
 
     <link name="${prefix}forearm_link">
@@ -188,7 +199,7 @@
       <child link="${prefix}wrist_link"/>
       <origin xyz="0 0 ${fore_len}"/>
       <axis xyz="0 1 0"/>
-      <limit lower="${-lim}" upper="${lim}" effort="${effort_nm}" velocity="${vel_rads}"/>
+      <limit lower="${wrist_pitch_lower}" upper="${wrist_pitch_upper}" effort="${effort_nm}" velocity="${vel_rads}"/>
     </joint>
 
     <link name="${prefix}wrist_link">
@@ -210,7 +221,7 @@
       <child link="${prefix}gripper_base_link"/>
       <origin xyz="0 0 ${wrist_len}"/>
       <axis xyz="0 0 1"/>
-      <limit lower="${-lim}" upper="${lim}" effort="${effort_nm}" velocity="${vel_rads}"/>
+      <limit lower="${wrist_roll_lower}" upper="${wrist_roll_upper}" effort="${effort_nm}" velocity="${vel_rads}"/>
     </joint>
 
     <link name="${prefix}gripper_base_link">
