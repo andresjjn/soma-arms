@@ -70,41 +70,76 @@ class MockPca9685(Pca9685Backend):
         self.last_us.pop(channel, None)
 
 
-class RealPca9685(Pca9685Backend):
-    """Real hardware over I2C (adafruit-circuitpython-pca9685).
+# PCA9685 registers (datasheet). Same register-level protocol the bench
+# tools (scripts/servo_workbench.py, scripts/pi/*) already validated on
+# the real chip, on both a Raspberry Pi (bus 1) and a Jetson Orin Nano
+# (bus 7).
+_MODE1, _PRESCALE = 0x00, 0xFE
+_LED0_ON_L, _ALL_LED_OFF_H = 0x06, 0xFD
+_PRESCALE_50HZ = 121          # 25 MHz / (4096 * (121+1)) = exactly 50.0 Hz
+_FULL_OFF = 0x10
 
-    Only ever instantiated with explicit arming and hardware present.
-    The import is lazy: simulating does not require the library, so the
-    unit tests and CI run on any laptop.
+
+class RealPca9685(Pca9685Backend):
+    """Real hardware over I2C, driven at register level with smbus2.
+
+    Deliberately NOT the Adafruit/Blinka stack: smbus2 is a plain kernel
+    ioctl wrapper that works identically on the Pi and on the Jetson
+    (JetPack 7.2 included), with no platform detection layer to break.
+    The import is lazy AND happens only after the arming check, so the
+    unit tests and CI run on any laptop, and the golden rule fires before
+    any hardware library is even loaded.
+
+    If no bus number is given, every /dev/i2c-* is probed for a device
+    answering at the address: the header pins are bus 1 on a Pi and bus 7
+    on an Orin Nano, and autodetection removes that footgun.
     """
 
     is_real = True
 
-    def __init__(self, i2c_address: int = 0x40, armed: bool = False) -> None:
+    def __init__(self, i2c_address: int = 0x40, armed: bool = False,
+                 bus: int | None = None) -> None:
         if not armed:
             raise PermissionError(
                 'GOLDEN RULE: the real backend requires explicit arming '
                 '(the arm service). Use the mock to simulate.')
-        from adafruit_pca9685 import PCA9685  # lazy import
-        import board
-        import busio
-        self._pca = PCA9685(busio.I2C(board.SCL, board.SDA), address=i2c_address)
-        self._pca.frequency = int(PCA9685_FREQ_HZ)
+        from smbus2 import SMBus  # lazy import, after the arming check
+        self._addr = i2c_address
+        self._bus = SMBus(self._find_bus(SMBus, bus))
+        # 50 Hz: sleep, set prescale, wake with auto-increment, all off.
+        self._bus.write_byte_data(self._addr, _MODE1, 0x10)
+        self._bus.write_byte_data(self._addr, _PRESCALE, _PRESCALE_50HZ)
+        self._bus.write_byte_data(self._addr, _MODE1, 0x20)
+        time.sleep(0.01)
+        self.disable_all()
+
+    def _find_bus(self, smbus_cls, forced: int | None) -> int:
+        import glob
+        if forced is not None:
+            return forced
+        for path in sorted(glob.glob('/dev/i2c-*')):
+            n = int(path.rsplit('-', 1)[1])
+            try:
+                with smbus_cls(n) as probe:
+                    probe.read_byte_data(self._addr, _MODE1)
+                return n
+            except OSError:
+                continue
+        raise OSError(f'no PCA9685 at 0x{self._addr:02x} on any I2C bus')
 
     def write(self, spec: ServoSpec, position: float) -> float:
         us = spec.command_to_us(position)
-        # the adafruit driver takes a 16 bit duty cycle
-        duty16 = int(us / (1_000_000.0 / PCA9685_FREQ_HZ) * 0xFFFF)
-
-        def _tx():
-            self._pca.channels[spec.channel].duty_cycle = duty16
-
-        retry_i2c(_tx)
+        counts = round(us / (1_000_000.0 / PCA9685_FREQ_HZ) * 4096.0)
+        base = _LED0_ON_L + 4 * spec.channel
+        retry_i2c(lambda: self._bus.write_i2c_block_data(
+            self._addr, base, [0, 0, counts & 0xFF, counts >> 8]))
         return us
 
     def disable_all(self) -> None:
-        for ch in self._pca.channels:
-            retry_i2c(lambda c=ch: setattr(c, 'duty_cycle', 0))
+        retry_i2c(lambda: self._bus.write_byte_data(
+            self._addr, _ALL_LED_OFF_H, _FULL_OFF))
 
     def release(self, channel: int) -> None:
-        retry_i2c(lambda: setattr(self._pca.channels[channel], 'duty_cycle', 0))
+        base = _LED0_ON_L + 4 * channel
+        retry_i2c(lambda: self._bus.write_i2c_block_data(
+            self._addr, base, [0, 0, 0, _FULL_OFF]))

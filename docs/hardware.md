@@ -206,7 +206,7 @@ Usable travel is therefore **130 mm**, and a full sweep takes 6.5 s at
 | Interface | I2C, address `0x40` |
 | Frequency | 50 Hz (20 ms period), the servo standard. Prescale 121 gives exactly 50.0 Hz, verified on the chip |
 | Duty conversion | `duty12 = us / 20000 * 4095`, so 1500 us is 307 counts |
-| Library | `adafruit-circuitpython-pca9685`, imported lazily |
+| Library | `smbus2`, register level, imported lazily after the arming check. Same protocol the bench tools validated on the chip; works identically on the Pi (bus 1) and the Jetson Orin Nano (bus 7), with autodetection |
 
 Channel allocation and the power wiring live in [wiring.md](wiring.md).
 

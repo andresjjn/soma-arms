@@ -44,6 +44,9 @@ class ArmController(Node):
         # consider talking to the I2C bus. Default is no.
         self.declare_parameter('allow_real', False)
         self.declare_parameter('i2c_address', 0x40)
+        # -1 = autodetect: probe /dev/i2c-* for the PCA9685 (bus 1 on a
+        # Pi, bus 7 on a Jetson Orin Nano header).
+        self.declare_parameter('i2c_bus', -1)
 
         # Gate 2: armed state, flipped only by the arm service. Starts off.
         self.armed = False
@@ -110,7 +113,9 @@ class ArmController(Node):
                 'with allow_real:=true to enable the real backend.')
         try:
             addr = int(self.get_parameter('i2c_address').value)
-            self.backend = RealPca9685(i2c_address=addr, armed=True)
+            bus = int(self.get_parameter('i2c_bus').value)
+            self.backend = RealPca9685(i2c_address=addr, armed=True,
+                                       bus=None if bus < 0 else bus)
         except Exception as exc:  # hardware missing, bus down, no library
             self.backend = MockPca9685()
             return False, f'REFUSED: real backend failed ({exc}). Staying on MOCK.'
