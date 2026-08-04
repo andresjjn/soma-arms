@@ -71,6 +71,10 @@ servo connectors, 16 AWG or thicker for V+.
 ### 6. Language and public content
 
 - **Talk to Andres in Spanish, always.** Every reply, explanation and question.
+- **Explain every technical decision as it is made**: what was done, why
+  that option, what the alternative would have cost. Andres is here to
+  learn the system end to end and ride this wave as high as it goes, not
+  to delegate it. Every change is also a lesson; write it like one.
 - **Everything committed here is in English**: code, comments, docstrings,
   test names, docs, commit messages, issues, README.
 - **No em dash characters in public content.** Use commas, colons,
