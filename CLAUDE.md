@@ -125,6 +125,7 @@ them in. Full context in `docs/hardware.md`.
 
 | Fact | Value |
 |---|---|
+| Bench configuration | both arms HANG from a central box on a monitor-stand column (measured 2026-08-05). First joint axis horizontal, outboard; J1 to J4 axes PARALLEL per arm (planar 4R chain plus wrist roll). The L16 torso is NOT on this bench |
 | Channel map | right arm 15 down to 10 (gripper first), left arm 9 down to 4, L16 on 3 |
 | Channel 0 | out of service, suspected during a fault and never cleared |
 | L16 convention | **INVERTED**: 2000 us retracted, 1000 us extended. `min_us > max_us` is correct |
@@ -142,7 +143,7 @@ you if you forgot.
 ## The tests are the specification
 
 24 tests came over from the bench driver, and the suite has grown since
-(62 passing plus 1 skipped as of 2026-08-02; the skipped one needs `rclpy`
+(85 passing plus 1 skipped as of 2026-08-05; the skipped one needs `rclpy`
 and runs in the ROS job of CI). They encode every hardware contract. If a
 change breaks one, the change is wrong until proven otherwise. Never edit a
 test to make a change pass without saying so explicitly and explaining why

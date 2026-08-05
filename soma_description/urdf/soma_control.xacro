@@ -42,8 +42,9 @@
       <hardware>
         <plugin>gazebo_ros2_control/GazeboSystem</plugin>
       </hardware>
-      <!-- the lift starts mid stroke: never initialise on a stop -->
-      <xacro:joint_pos name="torso_lift_joint" initial="0.07"/>
+      <!-- torso_lift_joint returns here with the printed torso (task #9);
+           the hanging bench of 2026-08-05 has no lift. When it does, it
+           must initialise mid stroke (0.07): never initialise on a stop. -->
       <xacro:arm_control_joints prefix="left_arm_"/>
       <xacro:arm_control_joints prefix="right_arm_"/>
     </ros2_control>

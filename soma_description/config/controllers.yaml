@@ -5,8 +5,10 @@ controller_manager:
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
 
-    torso_controller:
-      type: joint_trajectory_controller/JointTrajectoryController
+    # torso_controller returns with the printed torso (task #9); the
+    # hanging bench of 2026-08-05 has no lift joint to control.
+    # torso_controller:
+    #   type: joint_trajectory_controller/JointTrajectoryController
 
     left_arm_controller:
       type: joint_trajectory_controller/JointTrajectoryController
@@ -20,15 +22,16 @@ controller_manager:
     right_gripper_controller:
       type: position_controllers/GripperActionController
 
-torso_controller:
-  ros__parameters:
-    joints: [torso_lift_joint]
-    interface_name: position
-    command_interfaces: [position]
-    state_interfaces: [position, velocity]
-    # the real L16 moves at 0.02 m/s: the trajectory has to respect that
-    constraints:
-      torso_lift_joint: {trajectory: 0.02, goal: 0.005}
+# Kept for the printed torso: the real L16 moves at 0.02 m/s and its
+# trajectory constraints must respect that when this controller returns.
+# torso_controller:
+#   ros__parameters:
+#     joints: [torso_lift_joint]
+#     interface_name: position
+#     command_interfaces: [position]
+#     state_interfaces: [position, velocity]
+#     constraints:
+#       torso_lift_joint: {trajectory: 0.02, goal: 0.005}
 
 left_arm_controller:
   ros__parameters:

@@ -19,6 +19,13 @@ from soma_driver.servo_map import MIMIC_JOINTS, SERVO_MAP  # noqa: E402
 
 TOL = 1e-6
 
+# Real, measured hardware that is deliberately NOT on the current bench:
+# the L16 lift sits in a drawer until the printed torso exists (task #9).
+# Its SERVO_MAP row stays (channel 3 is its wiring contract and carries
+# the wedging protection of 2026-07-22), so the sync check must tolerate
+# its absence from the bench URDF, and nothing else's.
+OFF_MODEL = {'torso_lift_joint'}
+
 
 def main(urdf_path: str) -> int:
     root = ET.parse(urdf_path).getroot()
@@ -28,7 +35,8 @@ def main(urdf_path: str) -> int:
     for name, spec in SERVO_MAP.items():
         j = joints.get(name)
         if j is None:
-            problems.append(f'{name}: in SERVO_MAP but missing from the URDF')
+            if name not in OFF_MODEL:
+                problems.append(f'{name}: in SERVO_MAP but missing from the URDF')
             continue
         limit = j.find('limit')
         if limit is None:

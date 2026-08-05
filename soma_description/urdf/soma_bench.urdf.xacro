@@ -1,13 +1,26 @@
 <?xml version="1.0"?>
 <!--
-  Full SOMA on the bench: electronics bay, L16 torso lift, two 6DOF arms
-  and the OAK-D head, standing on the world frame.
+  SOMA on the real bench, as measured 2026-08-05: a monitor-stand column
+  carries a central metal box (the two arm base boxes bolted back to
+  back), and both arms HANG from the slew discs on its side faces, first
+  joint axis horizontal and colinear between arms. Fingertips at zero
+  pose hang a few millimeters above the base plate, which matches the
+  photos of the rig.
 
-  This is the reference model of the repository. Everything the driver can
-  command appears here, and nothing else does: SOMA carries no chassis, no
-  wheels and no navigation sensors. Mounting it on a mobile platform is the
-  integrator's job, done by calling the soma_torso macro with their own
-  parent link.
+  This is the reference model of the repository. The bench itself is one
+  STATIC link on purpose: a fixed support contributes anchor transforms
+  and collision volumes, never dynamics. The stand is temporary; the
+  printed torso (soma_torso.xacro, design) replaces it and this file's
+  geometry, not the arm macro.
+
+  Frame: world origin on the plate top surface, directly under the disc
+  axis midpoint. X forward, Y left, Z up (REP-103).
+
+  Arm mounts: each soma_arm root has +Z along the disc axis pointing
+  outboard and +X pointing world-down (the hanging zero pose):
+    left  arm at y=+mount_ly/2, rpy (-pi/2, pi/2, 0), side=+1
+    right arm at y=-mount_ly/2, rpy (+pi/2, pi/2, 0), side=-1
+  side mirrors the hug-convention joint sense, see soma_arm.xacro.
 
   Usage:
     ros2 launch soma_description display.launch.py
@@ -16,12 +29,79 @@
 
   <xacro:include filename="$(find soma_description)/urdf/materials.xacro"/>
   <xacro:include filename="$(find soma_description)/urdf/soma_arm.xacro"/>
-  <xacro:include filename="$(find soma_description)/urdf/soma_torso.xacro"/>
+
+  <!-- ============ bench dimensions, measured 2026-08-05 ============
+       Provenance for every literal: config/dimensions.yaml, bench section. -->
+  <xacro:property name="mount_lx"     value="0.0811"/>  <!-- central box front-back -->
+  <xacro:property name="mount_ly"     value="0.1098"/>  <!-- disc seat to disc seat -->
+  <xacro:property name="mount_lz"     value="0.0856"/>  <!-- central box top-bottom -->
+  <xacro:property name="mount_h"      value="0.343"/>   <!-- disc axis over the plate -->
+  <xacro:property name="plate_lx"     value="0.220"/>
+  <xacro:property name="plate_ly"     value="0.280"/>
+  <xacro:property name="plate_lz"     value="0.008"/>
+  <xacro:property name="plate_x_back" value="0.055"/>   <!-- plate center behind origin -->
+  <xacro:property name="col_lx"       value="0.035"/>
+  <xacro:property name="col_ly"       value="0.060"/>
+  <xacro:property name="col_gap_x"    value="0.078"/>   <!-- box rear to column front -->
+  <xacro:property name="col_h"        value="0.386"/>
+  <xacro:property name="col_cx"       value="${-mount_lx/2 - col_gap_x - col_lx/2}"/>
 
   <link name="world"/>
 
-  <xacro:soma_torso parent="world">
-    <origin xyz="0 0 0" rpy="0 0 0"/>
-  </xacro:soma_torso>
+  <joint name="bench_joint" type="fixed">
+    <parent link="world"/>
+    <child link="bench_link"/>
+    <origin xyz="0 0 0"/>
+  </joint>
+
+  <!-- plate + column + central box: one rigid, static piece of world -->
+  <link name="bench_link">
+    <visual>
+      <origin xyz="${-plate_x_back} 0 ${-plate_lz/2}"/>
+      <geometry><box size="${plate_lx} ${plate_ly} ${plate_lz}"/></geometry>
+      <material name="matte_black"/>
+    </visual>
+    <visual>
+      <origin xyz="${col_cx} 0 ${col_h/2}"/>
+      <geometry><box size="${col_lx} ${col_ly} ${col_h}"/></geometry>
+      <material name="matte_black"/>
+    </visual>
+    <visual>
+      <origin xyz="0 0 ${mount_h}"/>
+      <geometry><box size="${mount_lx} ${mount_ly} ${mount_lz}"/></geometry>
+      <material name="aluminum"/>
+    </visual>
+    <collision>
+      <origin xyz="${-plate_x_back} 0 ${-plate_lz/2}"/>
+      <geometry><box size="${plate_lx} ${plate_ly} ${plate_lz}"/></geometry>
+    </collision>
+    <collision>
+      <origin xyz="${col_cx} 0 ${col_h/2}"/>
+      <geometry><box size="${col_lx + 0.01} ${col_ly + 0.01} ${col_h}"/></geometry>
+    </collision>
+    <collision>
+      <origin xyz="0 0 ${mount_h}"/>
+      <geometry><box size="${mount_lx} ${mount_ly} ${mount_lz}"/></geometry>
+    </collision>
+    <inertial>
+      <mass value="3.0"/>
+      <inertia ixx="0.05" iyy="0.05" izz="0.05" ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </link>
+
+  <!-- left arm: measured limits of 2026-08-03, hug sense side=+1 -->
+  <xacro:soma_arm prefix="left_arm_" parent="bench_link" side="1"
+                  yaw_lower="-3.0788" yaw_upper="0.0"
+                  shoulder_lower="-0.3927" shoulder_upper="2.1206"
+                  elbow_lower="-1.5708" elbow_upper="0.7854"
+                  wrist_pitch_lower="-1.6179" wrist_pitch_upper="1.0996"
+                  wrist_roll_lower="-1.5080" wrist_roll_upper="1.3509">
+    <origin xyz="0 ${mount_ly/2} ${mount_h}" rpy="${-pi/2} ${pi/2} 0"/>
+  </xacro:soma_arm>
+
+  <!-- right arm: macro defaults carry its measured limits, side=-1 -->
+  <xacro:soma_arm prefix="right_arm_" parent="bench_link" side="-1">
+    <origin xyz="0 ${-mount_ly/2} ${mount_h}" rpy="${pi/2} ${pi/2} 0"/>
+  </xacro:soma_arm>
 
 </robot>

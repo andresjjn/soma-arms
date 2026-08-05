@@ -1,7 +1,9 @@
 <?xml version="1.0"?>
 <!--
-  One 6DOF arm bolted to the bench, for studying and calibrating a single
-  arm in isolation. This is the model to use with calipers in hand.
+  One 6DOF arm hanging in isolation, for studying and calibrating a
+  single arm. Mounted exactly like the RIGHT arm on the bench (same
+  height, same orientation, same side=-1 hug sense), minus the bench
+  geometry, so numbers read here transfer 1:1 to the full model.
 
   Usage:
     ros2 launch soma_description display.launch.py model:=single_arm.urdf.xacro
@@ -13,8 +15,8 @@
 
   <link name="world"/>
 
-  <xacro:soma_arm prefix="arm_" parent="world">
-    <origin xyz="0 0 0" rpy="0 0 0"/>
+  <xacro:soma_arm prefix="arm_" parent="world" side="-1">
+    <origin xyz="0 0 0.343" rpy="${pi/2} ${pi/2} 0"/>
   </xacro:soma_arm>
 
 </robot>

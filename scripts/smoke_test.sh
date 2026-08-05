@@ -6,7 +6,8 @@
 #   1. the workspace builds
 #   2. the unit tests pass (channel map, safety rules, golden rule)
 #   3. all three xacro models process and are valid URDF
-#   4. end to end: the driver in MOCK mode raises the torso and TF agrees
+#   4. end to end: the driver in MOCK mode bends the left elbow and TF
+#      confirms the geometry measured on 2026-08-05
 #
 # Nothing here can move a motor: the driver boots on the mock backend and
 # is never armed.
@@ -83,28 +84,30 @@ require_z() {
   fi
 }
 
-echo '--- initial pose (torso at the bottom soft limit) ---'
+echo '--- initial pose (both arms hanging at zero) ---'
 Z0=$(read_z)
 require_z "$Z0"
-echo "  tool0 z initial = ${Z0} (expected ~0.662)"
+echo "  tool0 z initial = ${Z0} (expected ~0.006: fingertips nearly touch the plate)"
 
-echo '--- command: torso to 0.14 m, clamped to 0.135, L16 ramp is 6.5 s ---'
+echo '--- command: left elbow to -2.0 rad, clamped to its -1.5708 soft limit ---'
 ros2 topic pub --once /soma/command sensor_msgs/msg/JointState \
-  "{name: [torso_lift_joint], position: [0.14]}"
-sleep 9
+  "{name: [left_arm_elbow_joint], position: [-2.0]}"
+sleep 5
 
 Z1=$(read_z)
 require_z "$Z1"
-echo "  tool0 z final = ${Z1} (expected ~0.792)"
+echo "  tool0 z final = ${Z1} (expected ~0.231)"
 
 kill $RSP $DRV 2>/dev/null || true
 
 python3 - "$Z0" "$Z1" <<'EOF'
 import sys
 z0, z1 = float(sys.argv[1]), float(sys.argv[2])
-assert abs(z0 - 0.662) < 0.005, f'initial z {z0} != 0.662'
-assert abs(z1 - 0.792) < 0.005, f'final z {z1} != 0.792'
-# 140 mm of physical stroke minus the two 5 mm safety margins
-assert abs((z1 - z0) - 0.130) < 0.005, 'travel is not 130 mm'
-print(f'\nSMOKE TEST OK: the torso rose {1000*(z1-z0):.1f} mm, confirmed by TF')
+# Hanging chain below the elbow: fore 0.075 + wrist 0.0664 + gripper to
+# tool0 0.0836 = 0.225 m. A 90 degree elbow bend lifts the tool exactly
+# that much, and the overshooting command proves soft-limit clamping.
+assert abs(z0 - 0.0057) < 0.005, f'initial z {z0} != 0.0057'
+assert abs(z1 - 0.2307) < 0.005, f'final z {z1} != 0.2307'
+assert abs((z1 - z0) - 0.225) < 0.005, 'elbow bend did not lift the tool 225 mm'
+print(f'\nSMOKE TEST OK: the left elbow lifted tool0 {1000*(z1-z0):.1f} mm, confirmed by TF')
 EOF

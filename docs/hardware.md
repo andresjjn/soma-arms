@@ -317,3 +317,27 @@ The dated facts above come from real sessions. The short version:
 Session close: 13 channels mapped and verified with power, both arms and the
 spine responding, and four hardware lessons the digital twin could never have
 taught us.
+
+**2026-08-05, caliper session: the geometry stops being an estimate.**
+
+- Every arm-chain length measured on the right arm with a caliper; bench
+  anchors with a tape measure. All values and exact endpoints live in
+  `soma_description/config/dimensions.yaml` with per-entry provenance.
+  The manual-photo estimates were off by up to 40 mm (upper arm: 79.3 mm
+  real vs 120 mm estimated). Measured beats estimated, again.
+- **The real bench configuration was established**: both arms HANG from a
+  shared central box (the two base boxes bolted back to back, 109.8 mm
+  disc seat to disc seat) on a monitor-stand column, disc axes horizontal,
+  colinear, pointing outboard, 343 mm above the base plate.
+- **The first four joint axes of each arm are PARALLEL** (disc, shoulder,
+  elbow, wrist pitch): each arm is a planar 4R chain in its own vertical
+  plane; the wrist roll provides the out-of-plane motion. A 33 mm link
+  (the "clavicle") joins the disc center to the shoulder axis. This
+  contradicts the manual's upright yaw-first chain and the model now
+  follows the hardware.
+- Cross-check that closed the loop: with every joint at zero the model
+  puts the fingertips 5.7 mm above the base plate, which is what the
+  photos of the rig show.
+- Still pending: arm weight (arms never left the bench), joint axis SIGNS
+  versus the hug convention (needs the first powered RViz-vs-reality
+  comparison, v0.2), and the left yaw re-spline.

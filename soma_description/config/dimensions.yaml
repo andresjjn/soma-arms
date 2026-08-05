@@ -6,13 +6,18 @@
 # file and the model cannot drift apart.
 #
 # status values:
-#   estimated  taken from manual photos / frame-family standards. Needs a
-#              caliper. Replacing every "estimated" with "measured" is THE
-#              deliverable of v0.1.
-#   measured   confirmed on the physical hardware (caliper or datasheet of
-#              the exact purchased unit).
-#   design     the part does not exist yet (torso column, task in Onshape);
-#              value is the design intent, to be confirmed after the build.
+#   estimated  taken from manual photos / frame-family standards, or a
+#              placement nobody has measured yet.
+#   measured   confirmed on the physical hardware (caliper, tape measure,
+#              or the datasheet of the exact purchased unit).
+#   design     the part does not exist yet (printed torso, task in
+#              Onshape); value is the design intent.
+#
+# 2026-08-05: caliper session. Every arm-chain length was measured on the
+# right arm (the left is its mirror by construction). The session also
+# established the REAL bench configuration: both arms HANG from a shared
+# central box on a monitor-stand column, first joint axis HORIZONTAL,
+# pointing outboard. See the `bench` section and soma_arm.xacro's header.
 #
 # When you measure: update value AND status AND date here, update the same
 # literal in the xacro named under `file`, and let CI prove they agree.
@@ -20,26 +25,47 @@
 arm:
   file: soma_description/urdf/soma_arm.xacro
   dimensions:
-    base_lx:        {value: 0.095, status: estimated, source: manual photos, date: 2026-07-25, measure: base box, outer width X}
-    base_ly:        {value: 0.095, status: estimated, source: manual photos, date: 2026-07-25, measure: base box, outer width Y}
-    base_lz:        {value: 0.062, status: estimated, source: manual photos, date: 2026-07-25, measure: base box, floor to slew bearing face}
-    turntable_r:    {value: 0.042, status: estimated, source: manual photos, date: 2026-07-25, measure: turntable disc diameter / 2}
-    turntable_h:    {value: 0.012, status: estimated, source: manual photos, date: 2026-07-25, measure: turntable disc thickness}
-    shoulder_off_z: {value: 0.045, status: estimated, source: manual photos, date: 2026-07-25, measure: disc top face to shoulder servo AXIS (screw center)}
-    upper_len:      {value: 0.120, status: estimated, source: manual photos, date: 2026-07-25, measure: shoulder axis to elbow axis, center to center}
-    fore_len:       {value: 0.090, status: estimated, source: manual photos, date: 2026-07-25, measure: elbow axis to wrist pitch axis, center to center}
-    wrist_len:      {value: 0.055, status: estimated, source: manual photos, date: 2026-07-25, measure: wrist pitch axis to roll flange face}
-    gripper_base_h: {value: 0.045, status: estimated, source: manual photos, date: 2026-07-25, measure: roll flange face to finger gear axis}
-    finger_len:     {value: 0.075, status: estimated, source: manual photos, date: 2026-07-25, measure: finger gear axis to fingertip}
-    finger_sep:     {value: 0.024, status: estimated, source: manual photos, date: 2026-07-25, measure: distance between the two finger gear axes}
-    plate_w:        {value: 0.030, status: estimated, source: manual photos, date: 2026-07-25, measure: link plate width}
-    plate_t:        {value: 0.060, status: estimated, source: manual photos, date: 2026-07-25, measure: outer depth of the plate pair}
+    disc_r:         {value: 0.02455, status: measured, source: caliper, date: 2026-08-05, measure: slew disc diameter 49.1 mm / 2 (the INNER disc that rotates with the arm; the outer ring is decorative)}
+    disc_h:         {value: 0.0074,  status: measured, source: caliper, date: 2026-08-05, measure: disc protrusion, from its outer face to the box it sits on}
+    clavicle_len:   {value: 0.033,   status: measured, source: caliper, date: 2026-08-05, measure: straight line, disc center screw to shoulder horn center screw (Andres named it the clavicle)}
+    upper_len:      {value: 0.0793,  status: measured, source: caliper, date: 2026-08-05, measure: shoulder horn screw center to elbow horn screw center}
+    fore_len:       {value: 0.075,   status: measured, source: caliper, date: 2026-08-05, measure: elbow horn screw center to wrist pitch horn screw center}
+    wrist_len:      {value: 0.0664,  status: measured, source: caliper, date: 2026-08-05, measure: wrist pitch axis to the gripper mounting face (the face carrying the gripper servo connector)}
+    gripper_base_h: {value: 0.0179,  status: measured, source: caliper, date: 2026-08-05, measure: gripper mounting face to the finger gear axes}
+    finger_len:     {value: 0.0657,  status: measured, source: caliper, date: 2026-08-05, measure: finger gear axis to fingertip}
+    finger_sep:     {value: 0.0257,  status: measured, source: caliper, date: 2026-08-05, measure: distance between the two finger gear axes}
+    plate_w:        {value: 0.0319,  status: measured, source: caliper, date: 2026-08-05, measure: link plate width, seen from the robot front}
+    plate_t:        {value: 0.0528,  status: measured, source: caliper, date: 2026-08-05, measure: outer width of the arm sandwich at its widest, shoulder to elbow}
     servo_lx:       {value: 0.041, status: measured, source: MG996R datasheet, date: 2026-07-25, measure: servo body length}
     servo_ly:       {value: 0.020, status: measured, source: MG996R datasheet, date: 2026-07-25, measure: servo body width}
     servo_lz:       {value: 0.038, status: measured, source: MG996R datasheet, date: 2026-07-25, measure: servo body height, case only}
     effort_nm:      {value: 1.0,   status: estimated, source: MG996R datasheet ~10 kg.cm, date: 2026-07-25, measure: stall torque in N.m (F4 calibration with power)}
     vel_rads:       {value: 3.0,   status: estimated, source: MG996R datasheet 0.17 s/60deg, date: 2026-07-25, measure: no-load speed in rad/s (F4 calibration with power)}
 
+# The real bench, measured 2026-08-05: a monitor-stand column carries a
+# central metal box (the two arm base boxes bolted back to back); the arms
+# hang from the discs on its side faces. Modelled as ONE static box on
+# purpose: a fixed support contributes anchors and collision volumes to
+# the simulation, never dynamics. The support is temporary; the printed
+# torso (soma_torso.xacro, status design) replaces it later.
+bench:
+  file: soma_description/urdf/soma_bench.urdf.xacro
+  dimensions:
+    mount_lx:     {value: 0.0811, status: measured, source: caliper, date: 2026-08-05, measure: central box, outer side front-to-back}
+    mount_ly:     {value: 0.1098, status: measured, source: caliper, date: 2026-08-05, measure: central box width, disc seat face to disc seat face}
+    mount_lz:     {value: 0.0856, status: measured, source: caliper, date: 2026-08-05, measure: central box, outer side top-to-bottom}
+    mount_h:      {value: 0.343,  status: measured, source: tape measure, date: 2026-08-05, measure: disc center (the J1 axis line) to the base plate top surface, vertical}
+    plate_lx:     {value: 0.220,  status: measured, source: tape measure, date: 2026-08-05, measure: base plate, front-to-back}
+    plate_ly:     {value: 0.280,  status: measured, source: tape measure, date: 2026-08-05, measure: base plate, left-to-right}
+    plate_lz:     {value: 0.008,  status: estimated, source: eyeball, date: 2026-08-05, measure: base plate thickness}
+    plate_x_back: {value: 0.055,  status: estimated, source: photos, date: 2026-08-05, measure: how far the plate center sits behind the disc axis vertical}
+    col_lx:       {value: 0.035,  status: measured, source: tape measure, date: 2026-08-05, measure: column depth, front-to-back}
+    col_ly:       {value: 0.060,  status: measured, source: tape measure, date: 2026-08-05, measure: column width, left-to-right}
+    col_gap_x:    {value: 0.078,  status: measured, source: tape measure, date: 2026-08-05, measure: central box rear face to column front face}
+    col_h:        {value: 0.386,  status: estimated, source: derived mount_h + mount_lz/2, date: 2026-08-05, measure: column height, plate to roughly the central box top}
+
+# The future printed torso keeps its design-intent numbers; it is not on
+# the bench today and its xacro is dormant until task #9 builds it.
 torso:
   file: soma_description/urdf/soma_torso.xacro
   dimensions:
@@ -55,8 +81,8 @@ torso:
     arm_x:       {value: 0.035, status: design, source: torso module sketch, date: 2026-07-25, measure: arm mount offset X on the plate}
     arm_y:       {value: 0.058, status: design, source: torso module sketch, date: 2026-07-25, measure: arm mount offset Y on the plate}
 
-# Masses (kg). The xacro inertia macros take these as literals too; they are
-# checked by name where the xacro uses a named property, and listed here as
-# provenance either way. Weigh each subassembly once disassembly allows.
+# Masses (kg). Still estimated: the arms did not come off the bench for
+# the caliper session. Weigh a whole arm when one is off the rig; per-link
+# masses in the xacro are a plausible split of that total.
 masses:
-  notes: whole arm with six servos, estimated about 0.9 kg; verify against the D3 rule (lifted mass under 4 kg total)
+  notes: whole arm with six servos, estimated about 0.9 kg; the central box with two base servos, about 0.5 kg; verify against the D3 rule (lifted mass under 4 kg total)

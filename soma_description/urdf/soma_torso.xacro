@@ -1,6 +1,15 @@
 <?xml version="1.0"?>
 <!--
-  SOMA torso: the structure that carries the two arms.
+  SOMA torso: the FUTURE printed structure that carries the two arms.
+
+  DORMANT since 2026-08-05: the reference bench model no longer includes
+  this file. The real interim bench is a hanging rig (see
+  soma_bench.urdf.xacro); this torso is design intent for task #9 and
+  its arm mount origins PREDATE the hanging-arm macro rework, so they
+  must be redefined when the torso is actually built. The L16 lift data
+  in here stays authoritative: it is measured hardware waiting in a
+  drawer, and its soft limits are still pinned to servo_map by the
+  dimensions sync test.
 
     electronics bay (fixed)  ->  PCA9685, Raspberry Pi 5, power rail
       + column with the linear rails
