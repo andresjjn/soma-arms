@@ -111,7 +111,7 @@ issue, not a reason to keep the project open.
 
 | Version | Milestone | What has to be true | Status |
 |---|---|---|---|
-| **v0.1** | Calibrated URDF | Every `[calibrate]` length measured with calipers and corrected, servo zeros and ranges captured, model right in RViz, CI green | **TAGGED 2026-08-06.** Caliper session 2026-08-05: real hanging-bench configuration modeled (parallel J1-J4 axes, 33 mm clavicle); FK predicted the fingertips 5.7 mm above the plate and the photos agreed. Axis signs pinned down at the first powered session |
+| **v0.1** | Calibrated URDF | Every `[calibrate]` length measured with calipers and corrected, servo zeros and ranges captured, model right in RViz, CI green | **TAGGED 2026-08-10.** Caliper session 2026-08-05: real hanging-bench configuration modeled (parallel J1-J4 axes, 33 mm clavicle); FK predicted the fingertips 5.7 mm above the plate and the photos agreed. Axis signs pinned down at the first powered session |
 | **v0.2** | Real driver | Sliders move metal through the ROS driver: mock to hardware, arming procedure exercised end to end | bench first: all 13 actuators verified live from a Jetson Orin Nano through `scripts/servo_workbench.py` (2026-07-30) |
 | **v0.3** | Eye-hand | Both arms bolted to the bench rig with the OAK-D fixed above. Pixel + depth deprojects to 3D in each arm's frame, IK reaches it. Acceptance: **click a point in the image and the arm touches it** | |
 | **v0.4** | Language-directed manipulation | Gemini Robotics-ER 2 points, plans and verifies; SOMA executes through its safety gates (the reasoner proposes, the armed driver disposes; the cloud can never arm the robot). Bimanual pick and place directed in natural language | |
