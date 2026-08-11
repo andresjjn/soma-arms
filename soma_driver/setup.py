@@ -24,6 +24,8 @@ setup(
     entry_points={
         'console_scripts': [
             'arm_controller = soma_driver.arm_controller_node:main',
+            'soma_primitives = soma_driver.primitives_cli:main',
+            'soma_sign_check = soma_driver.sign_check_cli:main',
         ],
     },
 )

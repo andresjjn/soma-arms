@@ -99,6 +99,10 @@ soma_driver/          PCA9685 driver
   soma_driver/servo_map.py         channel map and pulse conversion, pure Python
   soma_driver/pca9685_backend.py   mock and real backends
   soma_driver/arm_controller_node.py  the ROS node
+  soma_driver/primitives.py        named poses and sequences, pure and tested
+                                   (the surface the v0.4 agent will call)
+  soma_driver/primitives_cli.py    ros2 run soma_driver soma_primitives <name>
+  soma_driver/sign_check_cli.py    bench tool: verify joint axis signs (v0.2)
   test/                            the safety test suite
 docs/                 hardware, wiring, safety, bench, migration
 scripts/              smoke_test.sh, check_model_driver_sync.py
@@ -143,7 +147,7 @@ you if you forgot.
 ## The tests are the specification
 
 24 tests came over from the bench driver, and the suite has grown since
-(85 passing plus 1 skipped as of 2026-08-05; the skipped one needs `rclpy`
+(118 passing plus 1 skipped as of 2026-08-06; the skipped one needs `rclpy`
 and runs in the ROS job of CI). They encode every hardware contract. If a
 change breaks one, the change is wrong until proven otherwise. Never edit a
 test to make a change pass without saying so explicitly and explaining why
