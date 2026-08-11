@@ -1,0 +1,27 @@
+<mujoco model="soma_pendulum_oracle">
+  <!--
+    The one-joint oracle of the L1 track.
+
+    Before trusting MuJoCo with the full 14-joint bench, we trust it with
+    a single pendulum whose behavior pencil-and-paper physics can predict
+    exactly. The link is a box with SOMA's measured forearm numbers
+    (75 x 31.9 x 52.8 mm, 160 g estimated), hinged at its top end like an
+    elbow, swinging freely under gravity.
+
+    test_sim_oracle.py derives the analytic small-angle period from these
+    same numbers and demands the simulation match within 1 percent, plus
+    energy conservation. If either fails, the pipeline (units, inertia
+    conventions, gravity, integrator) is lying, and we learn it on a
+    20-line model instead of a 19-joint one. Pattern borrowed from
+    kimi-k3-in-c's 13-layer oracle: validate the engine on a miniature
+    with the same structure as the real thing.
+  -->
+  <option timestep="0.0005" integrator="RK4" gravity="0 0 -9.81"/>
+  <worldbody>
+    <body name="forearm" pos="0 0 0">
+      <joint name="pivot" type="hinge" axis="0 1 0" damping="0"/>
+      <geom name="link" type="box" pos="0 0 -0.0375"
+            size="0.01595 0.0264 0.0375" mass="0.16" rgba="0.78 0.78 0.8 1"/>
+    </body>
+  </worldbody>
+</mujoco>
