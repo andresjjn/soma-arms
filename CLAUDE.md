@@ -103,6 +103,7 @@ soma_driver/          PCA9685 driver
                                    (the surface the v0.4 agent will call)
   soma_driver/primitives_cli.py    ros2 run soma_driver soma_primitives <name>
   soma_driver/sign_check_cli.py    bench tool: verify joint axis signs (v0.2)
+  soma_driver/ina3221.py           power monitor, read-only, no gates needed
   test/                            the safety test suite
 docs/                 hardware, wiring, safety, bench, migration
 scripts/              smoke_test.sh, check_model_driver_sync.py
@@ -147,7 +148,7 @@ you if you forgot.
 ## The tests are the specification
 
 24 tests came over from the bench driver, and the suite has grown since
-(118 passing plus 1 skipped as of 2026-08-10; the skipped one needs `rclpy`
+(135 passing plus 1 skipped as of 2026-08-10; the skipped one needs `rclpy`
 and runs in the ROS job of CI). They encode every hardware contract. If a
 change breaks one, the change is wrong until proven otherwise. Never edit a
 test to make a change pass without saying so explicitly and explaining why
