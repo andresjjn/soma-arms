@@ -16,7 +16,17 @@ from pathlib import Path
 
 import pytest
 
-mujoco = pytest.importorskip('mujoco')
+# Runtime skip, NOT pytest.importorskip at module level: the ROS
+# container ships pytest 6.2.5 with pluggy 0.13, and a Skipped raised
+# during collection import aborts collection of every sibling file
+# (observed 2026-08-10: 125 tests collapsed to 0). pytestmark skips at
+# run time and leaves the rest of the suite alone.
+try:
+    import mujoco
+except ImportError:  # pragma: no cover
+    mujoco = None
+
+pytestmark = pytest.mark.skipif(mujoco is None, reason='mujoco not installed')
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
