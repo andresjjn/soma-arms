@@ -43,7 +43,10 @@ DEFAULT_ADDRESS = 0x44   # module jumpers offer 0x40/41/44/45; 0x40 and
                          # 0x41 belong to the PCA9685 plan (I2C map in
                          # INVENTARIO.md), so the INA lives at 0x44.
 
-BATTERY_FLOOR_V = 15.0   # DCB203 5S at 3.0 V/cell: below this, charge.
+# Chemistry floor for a DCB203 5S pack is 3.0 V/cell = 15.0 V. The 12 V
+# dock converter (Amazon B0FP1B1F86) cuts at 15.2 V, so software adopts
+# the strictest guard in the system and every branch behaves the same.
+BATTERY_FLOOR_V = 15.2
 
 CHANNELS = (1, 2, 3)
 

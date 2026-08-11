@@ -45,10 +45,12 @@ class TestAddressPlan:
 
 
 class TestBatteryFloor:
-    def test_floor_is_three_volts_per_cell(self):
-        # DCB203 is a 5S pack; 3.0 V/cell is the no-damage floor that
-        # the drill would normally enforce and the robot must.
-        assert BATTERY_FLOOR_V == pytest.approx(5 * 3.0)
+    def test_floor_matches_the_strictest_guard_in_the_system(self):
+        # Chemistry floor for the 5S DCB203 is 15.0 V; the 12 V dock
+        # converter (B0FP1B1F86) cuts at 15.2 V. Software mirrors the
+        # strictest guard so every power branch behaves identically.
+        assert BATTERY_FLOOR_V == pytest.approx(15.2)
+        assert BATTERY_FLOOR_V >= 5 * 3.0
 
     def test_mock_battery_ok_above_floor(self):
         ina = MockIna3221()
