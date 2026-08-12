@@ -75,6 +75,60 @@ class TestArmingGates:
         assert _is_mock_fleet(node.backend)
 
 
+class TestBatteryVeto:
+    """battery_source adds a THIRD veto: it can refuse arming, never arm.
+
+    On the CI machine there is no INA3221, so a node started with a
+    battery profile falls back to the mock monitor (0 V): that IS the
+    fail-safe contract, and the first test rides on it.
+    """
+
+    def _node_with(self, **params):
+        from rclpy.parameter import Parameter
+        overrides = [Parameter(k, value=v) for k, v in params.items()]
+        return ArmController(parameter_overrides=overrides)
+
+    def test_dead_battery_refuses_arming_before_any_backend(self):
+        rclpy.init()
+        n = None
+        try:
+            n = self._node_with(allow_real=True, battery_source='lipo_2s')
+            res = _arm(n, True)
+            assert res.success is False
+            assert 'battery' in res.message.lower()
+            assert n.armed is False
+            assert _is_mock_fleet(n.backend)
+        finally:
+            if n is not None:
+                n.destroy_node()
+            rclpy.shutdown()
+
+    def test_healthy_battery_lets_arming_proceed_past_the_veto(self):
+        rclpy.init()
+        n = None
+        try:
+            n = self._node_with(allow_real=True, battery_source='lipo_2s')
+            n.power_monitor.set_reading(1, voltage_v=8.0, current_a=0.4)
+            res = _arm(n, True)
+            # The veto passed; arming then fails at the real fleet
+            # (no PCA9685 on this machine), which is exactly the point:
+            # a healthy pack must never be blocked by the monitor.
+            assert res.success is False
+            assert 'battery' not in res.message.lower()
+        finally:
+            if n is not None:
+                n.destroy_node()
+            rclpy.shutdown()
+
+    def test_unknown_profile_refuses_to_boot(self):
+        rclpy.init()
+        try:
+            with pytest.raises(ValueError):
+                self._node_with(battery_source='potato_9v')
+        finally:
+            rclpy.shutdown()
+
+
 class TestCommandClamping:
     def test_target_is_clamped_to_soft_limits(self, node):
         from sensor_msgs.msg import JointState

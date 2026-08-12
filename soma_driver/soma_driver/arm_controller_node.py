@@ -25,9 +25,10 @@ why the ramp, the soft limits and the arming gates all exist.
 """
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import JointState
+from sensor_msgs.msg import BatteryState, JointState
 from std_srvs.srv import SetBool
 
+from .ina3221 import BATTERY_PROFILES, Ina3221, MockIna3221
 from .pca9685_backend import mock_fleet, real_fleet
 from .servo_map import (
     MIMIC_JOINTS, RELEASE_WHEN_SETTLED, SERVO_MAP, SETTLE_S)
@@ -37,8 +38,9 @@ RATE_HZ = 50.0
 
 
 class ArmController(Node):
-    def __init__(self) -> None:
-        super().__init__('soma_driver')
+    def __init__(self, parameter_overrides=None) -> None:
+        super().__init__('soma_driver',
+                         parameter_overrides=parameter_overrides or [])
 
         # Gate 1: the node must have been launched with permission to even
         # consider talking to the I2C bus. Default is no.
@@ -47,6 +49,35 @@ class ArmController(Node):
         # -1 = autodetect: probe /dev/i2c-* for the PCA9685 (bus 1 on a
         # Pi, bus 7 on a Jetson Orin Nano header).
         self.declare_parameter('i2c_bus', -1)
+
+        # Optional THIRD veto: the INA3221 battery monitor. 'none'
+        # (default) keeps the exact pre-monitor behaviour. A named
+        # profile publishes soma/power and refuses arming below that
+        # chemistry's floor. A floor can VETO arming; nothing here can
+        # arm, so the two gates above stay the only way in.
+        self.declare_parameter('battery_source', 'none')
+        source = str(self.get_parameter('battery_source').value)
+        if source != 'none' and source not in BATTERY_PROFILES:
+            raise ValueError(
+                f'unknown battery_source {source!r}: pick one of '
+                f"{sorted(BATTERY_PROFILES)} or 'none'")
+        self.battery_floor_v = BATTERY_PROFILES.get(source)
+        self.power_monitor = None
+        if source != 'none':
+            try:
+                self.power_monitor = Ina3221()
+            except Exception as exc:
+                # Fail safe: supervision was requested, so without a
+                # readable monitor the node still runs and simulates,
+                # but arming stays refused (the mock reads 0 V, below
+                # any floor) until the INA3221 answers.
+                self.power_monitor = MockIna3221()
+                self.get_logger().warn(
+                    f'battery_source={source} but no INA3221 answered '
+                    f'({exc}): arming will be refused until it does.')
+            self.pub_power = self.create_publisher(
+                BatteryState, 'soma/power', 10)
+            self.create_timer(1.0, self._power_tick)
 
         # Gate 2: armed state, flipped only by the arm service. Starts off.
         self.armed = False
@@ -113,6 +144,13 @@ class ArmController(Node):
             return False, (
                 'REFUSED: node was started with allow_real:=false. Restart '
                 'with allow_real:=true to enable the real backend.')
+        if self.power_monitor is not None:
+            volts = self.power_monitor.bus_voltage_v(1)
+            if volts < self.battery_floor_v:
+                return False, (
+                    f'REFUSED: battery at {volts:.2f} V, below the '
+                    f'{self.battery_floor_v:.1f} V floor. Charge or swap '
+                    'the pack; the driver stays on MOCK.')
         addr_param = int(self.get_parameter('i2c_address').value)
         if addr_param != 0x40:
             self.get_logger().warn(
@@ -142,6 +180,15 @@ class ArmController(Node):
         self.backend = mock_fleet(SERVO_MAP)
         self.armed = False
         return True, 'DISARMED: signal cut, back on MOCK'
+
+    def _power_tick(self) -> None:
+        """Publish pack voltage and current from INA3221 channel 1 at 1 Hz."""
+        msg = BatteryState()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.voltage = float(self.power_monitor.bus_voltage_v(1))
+        msg.current = float(self.power_monitor.shunt_current_a(1))
+        msg.present = not isinstance(self.power_monitor, MockIna3221)
+        self.pub_power.publish(msg)
 
     def _tick(self) -> None:
         dt = 1.0 / RATE_HZ

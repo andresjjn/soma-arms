@@ -12,8 +12,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from soma_driver.ina3221 import (  # noqa: E402
-    BATTERY_FLOOR_V, CHANNELS, DEFAULT_ADDRESS, SHUNT_OHMS,
-    MockIna3221, _twos13)
+    BATTERY_FLOOR_V, BATTERY_PROFILES, CHANNELS, DEFAULT_ADDRESS,
+    SHUNT_OHMS, MockIna3221, _twos13)
 
 
 class TestRegisterMath:
@@ -97,3 +97,19 @@ class TestMockMirrorsTheInterface:
         # too: importing the module must never require smbus2.
         from soma_driver import ina3221
         assert hasattr(ina3221, 'Ina3221')
+
+
+class TestBatteryProfiles:
+    def test_dewalt_profile_mirrors_the_dock_uvlo(self):
+        # Software fires first (graceful shutdown), the dock's 15.2 V
+        # hardware cut is the last resort: same number on purpose.
+        assert BATTERY_PROFILES['dewalt_5s'] == BATTERY_FLOOR_V
+        assert BATTERY_PROFILES['dewalt_5s'] == pytest.approx(15.2)
+
+    def test_lipo_profile_is_a_conservative_two_cell_floor(self):
+        assert BATTERY_PROFILES['lipo_2s'] == pytest.approx(6.4)
+        assert BATTERY_PROFILES['lipo_2s'] >= 2 * 3.0
+
+    def test_none_is_not_a_profile(self):
+        # 'none' is the node's "no monitor" sentinel, never a floor.
+        assert 'none' not in BATTERY_PROFILES

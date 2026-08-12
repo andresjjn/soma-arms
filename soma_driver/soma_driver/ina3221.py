@@ -51,6 +51,17 @@ DEFAULT_ADDRESS = 0x41   # BENCH FACT 2026-08-11: the A0 pin offers only
 # the strictest guard in the system and every branch behaves the same.
 BATTERY_FLOOR_V = 15.2
 
+# Arming floors per battery chemistry, keyed by the node's
+# battery_source parameter. 'dewalt_5s' mirrors the dock's UVLO so
+# software fires before the hardware cut; 'lipo_2s' is a conservative
+# 3.2 V per cell for the bench pack. The node treats a floor as a VETO
+# on arming, never as something that can arm ('none' means no monitor
+# and is deliberately not a key here).
+BATTERY_PROFILES = {
+    'dewalt_5s': BATTERY_FLOOR_V,   # 15.2 V, the strictest guard
+    'lipo_2s': 6.4,                 # 2 cells x 3.2 V
+}
+
 CHANNELS = (1, 2, 3)
 
 

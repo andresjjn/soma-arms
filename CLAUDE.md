@@ -150,7 +150,7 @@ you if you forgot.
 ## The tests are the specification
 
 24 tests came over from the bench driver, and the suite has grown since
-(148 passing plus 1 skipped as of 2026-08-12; the skipped one needs `rclpy`
+(151 passing plus 1 skipped as of 2026-08-12; the skipped one needs `rclpy`
 and runs in the ROS job of CI). They encode every hardware contract. If a
 change breaks one, the change is wrong until proven otherwise. Never edit a
 test to make a change pass without saying so explicitly and explaining why
