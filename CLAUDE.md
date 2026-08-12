@@ -35,7 +35,9 @@ that could reach a real servo, including over SSH on the Pi.
 ### 2. The node boots MOCK and DISARMED. Arming is an explicit service
 
 Never add a configuration, a default or a shortcut that starts the driver on
-the real backend. `ArmController` constructs `MockPca9685` first, always.
+the real backend. `ArmController` constructs the mock backend first, always
+(since the two-board bench of 2026-08-11, a fleet of `MockPca9685`, one per
+board address in the map).
 Arming requires both the `allow_real` parameter and a `/soma/arm` service
 call. Do not collapse those two gates into one.
 `RealPca9685(armed=False)` raising `PermissionError` is load bearing.
@@ -97,7 +99,7 @@ soma_description/     URDF/xacro, SRDF, RViz, MoveIt kinematics
   urdf/soma_bench_sim.urdf.xacro bench model plus ros2_control
 soma_driver/          PCA9685 driver
   soma_driver/servo_map.py         channel map and pulse conversion, pure Python
-  soma_driver/pca9685_backend.py   mock and real backends
+  soma_driver/pca9685_backend.py   mock/real backends + per-board fleet
   soma_driver/arm_controller_node.py  the ROS node
   soma_driver/primitives.py        named poses and sequences, pure and tested
                                    (the surface the v0.4 agent will call)
@@ -148,7 +150,7 @@ you if you forgot.
 ## The tests are the specification
 
 24 tests came over from the bench driver, and the suite has grown since
-(135 passing plus 1 skipped as of 2026-08-10; the skipped one needs `rclpy`
+(148 passing plus 1 skipped as of 2026-08-12; the skipped one needs `rclpy`
 and runs in the ROS job of CI). They encode every hardware contract. If a
 change breaks one, the change is wrong until proven otherwise. Never edit a
 test to make a change pass without saying so explicitly and explaining why

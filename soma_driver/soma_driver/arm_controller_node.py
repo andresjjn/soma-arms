@@ -28,7 +28,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_srvs.srv import SetBool
 
-from .pca9685_backend import MockPca9685, RealPca9685
+from .pca9685_backend import mock_fleet, real_fleet
 from .servo_map import (
     MIMIC_JOINTS, RELEASE_WHEN_SETTLED, SERVO_MAP, SETTLE_S)
 from .trajectory import JointMotion
@@ -51,8 +51,10 @@ class ArmController(Node):
         # Gate 2: armed state, flipped only by the arm service. Starts off.
         self.armed = False
 
-        # The node ALWAYS boots on the mock. No exceptions.
-        self.backend = MockPca9685()
+        # The node ALWAYS boots on the mock. No exceptions. Since the
+        # two-board bench (2026-08-11) "the mock" is a fleet of mocks,
+        # one per board address in the map: same spirit, more boards.
+        self.backend = mock_fleet(SERVO_MAP)
         self.get_logger().info(
             'SOMA driver up: MOCK backend, DISARMED. Pulses are logged, '
             'nothing moves.')
@@ -111,13 +113,19 @@ class ArmController(Node):
             return False, (
                 'REFUSED: node was started with allow_real:=false. Restart '
                 'with allow_real:=true to enable the real backend.')
+        addr_param = int(self.get_parameter('i2c_address').value)
+        if addr_param != 0x40:
+            self.get_logger().warn(
+                'i2c_address parameter is deprecated and IGNORED: board '
+                'addresses live per channel in servo_map.py now.')
         try:
-            addr = int(self.get_parameter('i2c_address').value)
             bus = int(self.get_parameter('i2c_bus').value)
-            self.backend = RealPca9685(i2c_address=addr, armed=True,
-                                       bus=None if bus < 0 else bus)
+            # All or none: real_fleet arms every board in the map or
+            # raises, so a half armed bench cannot exist.
+            self.backend = real_fleet(SERVO_MAP, armed=True,
+                                      bus=None if bus < 0 else bus)
         except Exception as exc:  # hardware missing, bus down, no library
-            self.backend = MockPca9685()
+            self.backend = mock_fleet(SERVO_MAP)
             return False, f'REFUSED: real backend failed ({exc}). Staying on MOCK.'
         # Nothing moves on the arming call itself: hold the current pose
         # until a fresh command arrives. Any in-flight trajectory is
@@ -131,7 +139,7 @@ class ArmController(Node):
 
     def _disarm(self) -> tuple[bool, str]:
         self.backend.disable_all()
-        self.backend = MockPca9685()
+        self.backend = mock_fleet(SERVO_MAP)
         self.armed = False
         return True, 'DISARMED: signal cut, back on MOCK'
 
@@ -148,7 +156,7 @@ class ArmController(Node):
                 else:
                     self.settled_s[name] = 0.0
                 if self.settled_s[name] >= SETTLE_S:
-                    self.backend.release(spec.channel)
+                    self.backend.release(spec)
                 else:
                     self.backend.write(spec, self.current[name])
             else:

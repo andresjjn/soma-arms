@@ -16,8 +16,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from std_srvs.srv import SetBool  # noqa: E402
 
 from soma_driver.arm_controller_node import ArmController  # noqa: E402
-from soma_driver.pca9685_backend import MockPca9685  # noqa: E402
+from soma_driver.pca9685_backend import MockPca9685, Pca9685Fleet  # noqa: E402
 from soma_driver.servo_map import SERVO_MAP  # noqa: E402
+
+
+def _is_mock_fleet(backend) -> bool:
+    """Boot contract since the two-board bench (2026-08-11): the node
+    boots a FLEET of mocks, one per board address in the map. Same
+    spirit as before, more boards: it can simulate, never move metal."""
+    return (isinstance(backend, Pca9685Fleet)
+            and backend.is_real is False
+            and all(isinstance(b, MockPca9685)
+                    for b in backend.boards.values()))
 
 
 @pytest.fixture
@@ -37,8 +47,7 @@ def _arm(node, value: bool):
 
 class TestBootsSafe:
     def test_boots_on_mock_and_disarmed(self, node):
-        assert isinstance(node.backend, MockPca9685)
-        assert node.backend.is_real is False
+        assert _is_mock_fleet(node.backend)
         assert node.armed is False
 
     def test_allow_real_defaults_to_false(self, node):
@@ -57,13 +66,13 @@ class TestArmingGates:
         res = _arm(node, True)
         assert res.success is False
         assert node.armed is False
-        assert isinstance(node.backend, MockPca9685)
+        assert _is_mock_fleet(node.backend)
 
     def test_disarm_always_succeeds_and_returns_to_mock(self, node):
         res = _arm(node, False)
         assert res.success is True
         assert node.armed is False
-        assert isinstance(node.backend, MockPca9685)
+        assert _is_mock_fleet(node.backend)
 
 
 class TestCommandClamping:

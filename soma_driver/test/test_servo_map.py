@@ -186,7 +186,9 @@ class TestSelfLockingRelease:
         mock = MockPca9685()
         spec = SERVO_MAP['torso_lift_joint']
         mock.write(spec, 0.07)
-        mock.release(spec.channel)
+        # release takes the spec since the two-board bench (2026-08-11):
+        # a bare channel no longer names an output, (address, channel) does.
+        mock.release(spec)
         assert spec.channel in mock.released
         assert spec.channel not in mock.last_us
         mock.write(spec, 0.10)

@@ -35,6 +35,12 @@ class ServoSpec:
     lower: float           # joint lower limit (rad or m)
     upper: float           # joint upper limit (rad or m)
     max_rate: float        # max allowed rate (rad/s or m/s), safety ramp
+    address: int = 0x40    # I2C board this channel lives on. The bench
+                           # carries two boards since 2026-08-11 (0x40 in
+                           # service with all 12 servos, 0x43 standing
+                           # by); every channel stays on 0x40 until the
+                           # left arm switchover session edits its rows
+                           # here, with the suite watching.
 
     def clamp(self, value: float) -> float:
         """Saturate a joint position to the soft limits of this channel."""
