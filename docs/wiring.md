@@ -93,17 +93,23 @@ the fault is mechanical and no amount of retry logic will fix it.
 
 | | |
 |---|---|
-| Bus | Raspberry Pi 5, bus 1, header pins 1 (3V3), 3 (SDA), 5 (SCL), 6 (GND) |
-| Address | `0x40` |
+| Bus | Jetson Orin Nano, bus i2c-7, header pins 1 (3V3), 3 (SDA), 5 (SCL), 6 (GND). Pi era: bus 1 |
+| Addresses | `0x40` PCA9685 #1 (12 servos) · `0x43` PCA9685 #2 (A0+A1 bridged, no servos yet) · `0x41` INA3221 (A0 to VS) · `0x70` PCA all-call, always present |
 | Frequency | 50 Hz, prescale 121 gives exactly 50.0 Hz |
+
+Address facts, verified live on 2026-08-11: the INA3221 A0 pin offers only
+0x40 to 0x43 (datasheet SBOS576), so the old 0x44 plan was impossible (that
+option belonged to the rover's INA219). Pad adjacency on the breakout chose
+the final map: INA bridged A0 to VS (0x41), PCA #2 closed A0+A1 (0x43).
 
 First check of any bench session, before anything is energised:
 
 ```bash
-i2cdetect -y 1
+i2cdetect -y -r 7
 ```
 
-`0x40` must appear. If it does not, stop: nothing below this line will work.
+`0x40`, `0x41` and `0x43` must appear. If any is missing, stop: nothing
+below this line will work.
 
 ### Retries handle glitches, not broken wires
 

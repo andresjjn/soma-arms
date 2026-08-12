@@ -39,9 +39,12 @@ _BUS_LSB_V = 0.008       # 8 mV per count
 _SHUNT_LSB_V = 0.000040  # 40 uV per count
 
 SHUNT_OHMS = 0.1
-DEFAULT_ADDRESS = 0x44   # module jumpers offer 0x40/41/44/45; 0x40 and
-                         # 0x41 belong to the PCA9685 plan (I2C map in
-                         # INVENTARIO.md), so the INA lives at 0x44.
+DEFAULT_ADDRESS = 0x41   # BENCH FACT 2026-08-11: the A0 pin offers only
+                         # 0x40-0x43 (datasheet SBOS576); the 0x44/45
+                         # idea belonged to the rover's INA219, a
+                         # different chip. Pad adjacency on the breakout
+                         # set the final map: INA at 0x41 (A0 bridged to
+                         # VS), PCA #2 moved to 0x43 (A0+A1 closed).
 
 # Chemistry floor for a DCB203 5S pack is 3.0 V/cell = 15.0 V. The 12 V
 # dock converter (Amazon B0FP1B1F86) cuts at 15.2 V, so software adopts

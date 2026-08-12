@@ -37,11 +37,15 @@ class TestRegisterMath:
 
 
 class TestAddressPlan:
-    def test_default_address_avoids_the_pca9685(self):
-        # I2C map (INVENTARIO.md): 0x40 PCA #1, 0x41 PCA #2 future,
-        # 0x44 INA3221. The module's own options are 0x40/41/44/45.
-        assert DEFAULT_ADDRESS == 0x44
-        assert DEFAULT_ADDRESS not in (0x40, 0x41)
+    def test_default_address_avoids_both_pca9685_boards(self):
+        # Edited 2026-08-11 because the physical fact changed: the
+        # INA3221 A0 pin offers only 0x40-0x43 (datasheet SBOS576);
+        # the 0x44/45 options recorded earlier belonged to the rover's
+        # INA219, a different chip. Verified live on Jetson i2c-7:
+        # INA at 0x41 answers 0x5449 ('TI') and die ID 0x3220; PCA #2
+        # sits at 0x43 (A0+A1 bridged); PCA #1 keeps 0x40.
+        assert DEFAULT_ADDRESS == 0x41
+        assert DEFAULT_ADDRESS not in (0x40, 0x43)
 
 
 class TestBatteryFloor:

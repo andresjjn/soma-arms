@@ -138,7 +138,7 @@ them in. Full context in `docs/hardware.md`.
 | Servos | MG996R at about 10 kg.cm, **not** the "25KG" the manual advertises |
 | Payload | about 330 g at 30 cm of reach. Work in compact poses |
 | Power | LiPo 2S to switch and fuse to UBEC 6 V to V+. **Never the LiPo directly**, 8.4 V exceeds the 7.2 V servo rating |
-| I2C | bus 1 at `0x40`, prescale 121 for exactly 50.0 Hz |
+| I2C | Jetson Orin bus i2c-7, header pins 1/3/5/6. PCA #1 at `0x40` (12 servos), PCA #2 at `0x43` (A0+A1 bridged, no servos yet), INA3221 at `0x41` (A0 to VS). Verified live 2026-08-11. Prescale 121 for exactly 50.0 Hz. Pi era: bus 1 |
 | Gripper | geared pair, the right finger is mimic and owns no channel |
 
 `servo_map.py` and the URDF hold the same physical facts. If you change one,
