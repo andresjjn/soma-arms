@@ -5,9 +5,10 @@ same bus (0x40 in service, 0x43 standing by), so a channel number alone
 no longer names an output; the pair (address, channel) does. These tests
 pin three promises:
 
-  1. TODAY NOTHING CHANGES: every channel still lives on 0x40, and a
-     spec built without an address lands on 0x40. The switchover session
-     will edit that test explicitly, with the map rows.
+  1. THE MAP MATCHES THE BENCH: the switchover happened on 2026-08-12
+     (left arm on 0x43 with its channel numbers unchanged; right arm
+     and L16 stay on 0x40), and a spec built without an address still
+     lands on 0x40.
   2. Routing is by spec.address, and boards never bleed into each other.
   3. Arming is all or none, and the golden rule holds board by board.
 """
@@ -33,20 +34,24 @@ TWO_BOARDS = {
 }
 
 
-class TestTodayNothingChanges:
+class TestMapMatchesTheBench:
     def test_spec_without_address_lands_on_0x40(self):
         spec = ServoSpec(9, 1000.0, 2000.0, 0.0, 1.0, 2.5)
         assert spec.address == 0x40
 
-    def test_entire_map_still_lives_on_board_1(self):
-        # THE PIN of the migration plan: all 12 servos plus the L16 stay
-        # on 0x40 until the left arm switchover session, which must edit
-        # this test together with the map rows, saying so.
-        assert addresses_in(SERVO_MAP) == (0x40,)
+    def test_the_map_spans_exactly_the_two_bench_boards(self):
+        # Edited 2026-08-12 because the physical fact changed, exactly
+        # as the old pin demanded: the switchover happened. The left arm
+        # rows moved to 0x43 (same channel numbers, six connectors
+        # replugged); the right arm and the L16 stay on 0x40.
+        assert addresses_in(SERVO_MAP) == (0x40, 0x43)
+        for joint, spec in SERVO_MAP.items():
+            expected = 0x43 if joint.startswith('left_') else 0x40
+            assert spec.address == expected, joint
 
-    def test_boot_fleet_of_the_real_map_has_exactly_one_board(self):
+    def test_boot_fleet_of_the_real_map_has_both_boards(self):
         fleet = mock_fleet(SERVO_MAP)
-        assert set(fleet.boards) == {0x40}
+        assert set(fleet.boards) == {0x40, 0x43}
 
 
 class TestRouting:

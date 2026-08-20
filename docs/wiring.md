@@ -9,27 +9,32 @@ authority. It is also locked in by
 change the wiring and that test goes red, which is exactly what should happen.
 
 The pattern is: **channels descend from 15, right arm first, outermost joint
-first**. Gripper, then wrist roll, then down the arm to the base.
+first**. Gripper, then wrist roll, then down the arm to the base. Since
+2026-08-12 the left arm's six channels live on **board #2 (0x43)** keeping
+their channel numbers: the switchover was six connectors plus the address
+column in `servo_map.py`, nothing else.
 
-| Channel | Joint | Manual label | Actuator |
-|---|---|---|---|
-| 15 | `right_arm_finger_l_joint` | F | MG996R, gripper |
-| 14 | `right_arm_wrist_roll_joint` | E | MG996R |
-| 13 | `right_arm_wrist_pitch_joint` | D | MG996R, called "elbow 2" while wiring |
-| 12 | `right_arm_elbow_joint` | C | MG996R, "elbow 1" |
-| 11 | `right_arm_shoulder_joint` | B | MG996R |
-| 10 | `right_arm_yaw_joint` | A | MG996R, base |
-| 9 | `left_arm_finger_l_joint` | F | MG996R, gripper |
-| 8 | `left_arm_wrist_roll_joint` | E | MG996R |
-| 7 | `left_arm_wrist_pitch_joint` | D | MG996R |
-| 6 | `left_arm_elbow_joint` | C | MG996R |
-| 5 | `left_arm_shoulder_joint` | B | MG996R |
-| 4 | `left_arm_yaw_joint` | A | MG996R, base |
-| 3 | `torso_lift_joint` | n/a | Actuonix L16-140-63-6-R |
-| 2, 1 | spare | | |
-| 0 | spare, **under suspicion** | | see below |
+| Board | Channel | Joint | Manual label | Actuator |
+|---|---|---|---|---|
+| 0x40 | 15 | `right_arm_finger_l_joint` | F | MG996R, gripper |
+| 0x40 | 14 | `right_arm_wrist_roll_joint` | E | MG996R |
+| 0x40 | 13 | `right_arm_wrist_pitch_joint` | D | MG996R, called "elbow 2" while wiring |
+| 0x40 | 12 | `right_arm_elbow_joint` | C | MG996R, "elbow 1" |
+| 0x40 | 11 | `right_arm_shoulder_joint` | B | MG996R |
+| 0x40 | 10 | `right_arm_yaw_joint` | A | MG996R, base |
+| 0x43 | 9 | `left_arm_finger_l_joint` | F | MG996R, gripper |
+| 0x43 | 8 | `left_arm_wrist_roll_joint` | E | MG996R |
+| 0x43 | 7 | `left_arm_wrist_pitch_joint` | D | MG996R |
+| 0x43 | 6 | `left_arm_elbow_joint` | C | MG996R |
+| 0x43 | 5 | `left_arm_shoulder_joint` | B | MG996R |
+| 0x43 | 4 | `left_arm_yaw_joint` | A | MG996R, base |
+| 0x40 | 3 | `torso_lift_joint` | n/a | Actuonix L16-140-63-6-R |
+| 0x40 | 2, 1 | spare | | |
+| 0x40 | 0 | spare, **under suspicion** | | see below |
 
-Thirteen actuators on a sixteen channel board, three channels to spare.
+Thirteen actuators across two sixteen channel boards, and board #2 has no
+silkscreen either: the first armed session after the switchover re-confirms
+the left arm channel by channel, same ritual as 2026-07-22.
 
 **Channel 0 is left empty on purpose.** The L16 was originally wired there.
 When it went deaf, channel 0 was one of the suspects. The real cause turned
@@ -94,7 +99,7 @@ the fault is mechanical and no amount of retry logic will fix it.
 | | |
 |---|---|
 | Bus | Jetson Orin Nano, bus i2c-7, header pins 1 (3V3), 3 (SDA), 5 (SCL), 6 (GND). Pi era: bus 1 |
-| Addresses | `0x40` PCA9685 #1 (12 servos) · `0x43` PCA9685 #2 (A0+A1 bridged, no servos yet) · `0x41` INA3221 (A0 to VS) · `0x70` PCA all-call, always present |
+| Addresses | `0x40` PCA9685 #1 (right arm + L16) · `0x43` PCA9685 #2 (A0+A1 bridged, left arm since 2026-08-12) · `0x41` INA3221 (A0 to VS) · `0x70` PCA all-call, always present |
 | Frequency | 50 Hz, prescale 121 gives exactly 50.0 Hz |
 
 Address facts, verified live on 2026-08-11: the INA3221 A0 pin offers only

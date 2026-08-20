@@ -133,14 +133,14 @@ them in. Full context in `docs/hardware.md`.
 | Fact | Value |
 |---|---|
 | Bench configuration | both arms HANG from a central box on a monitor-stand column (measured 2026-08-05). First joint axis horizontal, outboard; J1 to J4 axes PARALLEL per arm (planar 4R chain plus wrist roll). The L16 torso is NOT on this bench |
-| Channel map | right arm 15 down to 10 (gripper first), left arm 9 down to 4, L16 on 3 |
+| Channel map | right arm 15 down to 10 (gripper first) on board `0x40`, left arm 9 down to 4 on board `0x43` (switched 2026-08-12, channel numbers unchanged), L16 on 3 (`0x40`) |
 | Channel 0 | out of service, suspected during a fault and never cleared |
 | L16 convention | **INVERTED**: 2000 us retracted, 1000 us extended. `min_us > max_us` is correct |
 | L16 soft limits | 5 to 135 mm, never 0 to 140 |
 | Servos | MG996R at about 10 kg.cm, **not** the "25KG" the manual advertises |
 | Payload | about 330 g at 30 cm of reach. Work in compact poses |
 | Power | LiPo 2S to switch and fuse to UBEC 6 V to V+. **Never the LiPo directly**, 8.4 V exceeds the 7.2 V servo rating |
-| I2C | Jetson Orin bus i2c-7, header pins 1/3/5/6. PCA #1 at `0x40` (12 servos), PCA #2 at `0x43` (A0+A1 bridged, no servos yet), INA3221 at `0x41` (A0 to VS). Verified live 2026-08-11. Prescale 121 for exactly 50.0 Hz. Pi era: bus 1 |
+| I2C | Jetson Orin bus i2c-7, header pins 1/3/5/6. PCA #1 at `0x40` (12 servos), PCA #2 at `0x43` (A0+A1 bridged, left arm since 2026-08-12), INA3221 at `0x41` (A0 to VS). Verified live 2026-08-11. Prescale 121 for exactly 50.0 Hz. Pi era: bus 1 |
 | Gripper | geared pair, the right finger is mimic and owns no channel |
 
 `servo_map.py` and the URDF hold the same physical facts. If you change one,

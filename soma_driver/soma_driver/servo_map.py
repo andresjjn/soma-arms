@@ -15,6 +15,10 @@ Sources of truth:
   order (9 down to 4). Six independent servos per arm, no mirrored pairs.
   The board carries no silkscreen; the map below was confirmed channel by
   channel with power on, not read off a label.
+- 2026-08-12: the left arm moved to board #2 (0x43) keeping its channel
+  numbers, so the physical move was six connectors plus the address
+  column below. Board #2 has no silkscreen either: the first armed
+  session re-confirms channel by channel, same ritual as 2026-07-22.
 
 See docs/wiring.md for the full channel table and docs/hardware.md for
 part numbers and datasheets.
@@ -35,12 +39,11 @@ class ServoSpec:
     lower: float           # joint lower limit (rad or m)
     upper: float           # joint upper limit (rad or m)
     max_rate: float        # max allowed rate (rad/s or m/s), safety ramp
-    address: int = 0x40    # I2C board this channel lives on. The bench
-                           # carries two boards since 2026-08-11 (0x40 in
-                           # service with all 12 servos, 0x43 standing
-                           # by); every channel stays on 0x40 until the
-                           # left arm switchover session edits its rows
-                           # here, with the suite watching.
+    address: int = 0x40    # I2C board this channel lives on. Two boards
+                           # since 2026-08-11; the left arm switched to
+                           # 0x43 on 2026-08-12 (same channel numbers,
+                           # different board). The default stays 0x40:
+                           # the right arm and the L16 live there.
 
     def clamp(self, value: float) -> float:
         """Saturate a joint position to the soft limits of this channel."""
@@ -93,12 +96,15 @@ SERVO_MAP: dict[str, ServoSpec] = {
     'right_arm_shoulder_joint':    ServoSpec(11, 700.0, 2500.0, -0.4712, 2.3562, 2.5),   # B, zero 1000
     'right_arm_yaw_joint':         ServoSpec(10, 2500.0, 500.0, -2.7960, 0.3456, 2.5),   # A, zero 720, inverted
     # Left arm: channels 9 down to 4, same order, mirrored signs.
-    'left_arm_finger_l_joint':    ServoSpec(9, 1160.0, 2190.0, 0.0, 1.0, 2.5),    # F: 1160 closed, 2190 open
-    'left_arm_wrist_roll_joint':  ServoSpec(8, 2500.0, 680.0, -1.5080, 1.3509, 2.5),    # E, zero 1540, inverted
-    'left_arm_wrist_pitch_joint': ServoSpec(7, 770.0, 2500.0, -1.6179, 1.0996, 2.5),    # D, zero 1800
-    'left_arm_elbow_joint':       ServoSpec(6, 2300.0, 800.0, -1.5708, 0.7854, 2.5),    # C, zero 1300, inverted
-    'left_arm_shoulder_joint':    ServoSpec(5, 900.0, 2500.0, -0.3927, 2.1206, 2.5),    # B, zero 1150
-    'left_arm_yaw_joint':         ServoSpec(4, 540.0, 2500.0, -3.0788, 0.0, 2.5),       # A, zero AT the stop
+    # SWITCHED to board #2 (0x43) on 2026-08-12: same channel numbers,
+    # different board. Pulses and limits are untouched on purpose: they
+    # belong to the servos and their horns, not to the driver board.
+    'left_arm_finger_l_joint':    ServoSpec(9, 1160.0, 2190.0, 0.0, 1.0, 2.5, address=0x43),    # F: 1160 closed, 2190 open
+    'left_arm_wrist_roll_joint':  ServoSpec(8, 2500.0, 680.0, -1.5080, 1.3509, 2.5, address=0x43),    # E, zero 1540, inverted
+    'left_arm_wrist_pitch_joint': ServoSpec(7, 770.0, 2500.0, -1.6179, 1.0996, 2.5, address=0x43),    # D, zero 1800
+    'left_arm_elbow_joint':       ServoSpec(6, 2300.0, 800.0, -1.5708, 0.7854, 2.5, address=0x43),    # C, zero 1300, inverted
+    'left_arm_shoulder_joint':    ServoSpec(5, 900.0, 2500.0, -0.3927, 2.1206, 2.5, address=0x43),    # B, zero 1150
+    'left_arm_yaw_joint':         ServoSpec(4, 540.0, 2500.0, -3.0788, 0.0, 2.5, address=0x43),       # A, zero AT the stop
     # Torso: L16-140 on channel 3 (VERIFIED with power on, 2026-07-22).
     #
     # This unit has an INVERTED convention (measured, not from the

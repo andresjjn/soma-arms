@@ -224,23 +224,26 @@ class TestI2CRetry:
 #: place. min_us > max_us means more microseconds moves the joint INWARD
 #: on that channel: measured, mirrored, and intentional.
 #:
-#: joint -> (channel, min_us, max_us, lower, upper, max_rate)
+#: joint -> (channel, min_us, max_us, lower, upper, max_rate, address)
+#: The address column joined on 2026-08-12: the left arm switched to
+#: board #2 (0x43) keeping its channel numbers, so a wrong board here
+#: is now as much of a mis-drive as a wrong channel.
 EXACT_SERVO_MAP = {
-    'right_arm_finger_l_joint':    (15, 850.0, 2340.0, 0.0, 1.0, 2.5),
-    'right_arm_wrist_roll_joint':  (14, 520.0, 2490.0, -1.8222, 1.2724, 2.5),
-    'right_arm_wrist_pitch_joint': (13, 660.0, 2500.0, -2.0420, 0.8482, 2.5),
-    'right_arm_elbow_joint':       (12, 2500.0, 520.0, -2.1363, 0.9739, 2.5),
-    'right_arm_shoulder_joint':    (11, 700.0, 2500.0, -0.4712, 2.3562, 2.5),
-    'right_arm_yaw_joint':         (10, 2500.0, 500.0, -2.7960, 0.3456, 2.5),
-    'left_arm_finger_l_joint':     (9, 1160.0, 2190.0, 0.0, 1.0, 2.5),
-    'left_arm_wrist_roll_joint':   (8, 2500.0, 680.0, -1.5080, 1.3509, 2.5),
-    'left_arm_wrist_pitch_joint':  (7, 770.0, 2500.0, -1.6179, 1.0996, 2.5),
-    'left_arm_elbow_joint':        (6, 2300.0, 800.0, -1.5708, 0.7854, 2.5),
-    'left_arm_shoulder_joint':     (5, 900.0, 2500.0, -0.3927, 2.1206, 2.5),
-    'left_arm_yaw_joint':          (4, 540.0, 2500.0, -3.0788, 0.0, 2.5),
+    'right_arm_finger_l_joint':    (15, 850.0, 2340.0, 0.0, 1.0, 2.5, 0x40),
+    'right_arm_wrist_roll_joint':  (14, 520.0, 2490.0, -1.8222, 1.2724, 2.5, 0x40),
+    'right_arm_wrist_pitch_joint': (13, 660.0, 2500.0, -2.0420, 0.8482, 2.5, 0x40),
+    'right_arm_elbow_joint':       (12, 2500.0, 520.0, -2.1363, 0.9739, 2.5, 0x40),
+    'right_arm_shoulder_joint':    (11, 700.0, 2500.0, -0.4712, 2.3562, 2.5, 0x40),
+    'right_arm_yaw_joint':         (10, 2500.0, 500.0, -2.7960, 0.3456, 2.5, 0x40),
+    'left_arm_finger_l_joint':     (9, 1160.0, 2190.0, 0.0, 1.0, 2.5, 0x43),
+    'left_arm_wrist_roll_joint':   (8, 2500.0, 680.0, -1.5080, 1.3509, 2.5, 0x43),
+    'left_arm_wrist_pitch_joint':  (7, 770.0, 2500.0, -1.6179, 1.0996, 2.5, 0x43),
+    'left_arm_elbow_joint':        (6, 2300.0, 800.0, -1.5708, 0.7854, 2.5, 0x43),
+    'left_arm_shoulder_joint':     (5, 900.0, 2500.0, -0.3927, 2.1206, 2.5, 0x43),
+    'left_arm_yaw_joint':          (4, 540.0, 2500.0, -3.0788, 0.0, 2.5, 0x43),
     # The L16 keeps its 2026-07-22 anchors: its stops have not been
     # re-measured (that capture comes with the torso build).
-    'torso_lift_joint':            (3, 1964.3, 1035.7, 0.005, 0.135, 0.020),
+    'torso_lift_joint':            (3, 1964.3, 1035.7, 0.005, 0.135, 0.020, 0x40),
 }
 
 #: Channels where more microseconds moves the joint inward (min_us >
@@ -258,8 +261,10 @@ class TestExactServoMapTable:
 
     @pytest.mark.parametrize('joint', sorted(EXACT_SERVO_MAP))
     def test_row_matches(self, joint):
-        channel, min_us, max_us, lower, upper, max_rate = EXACT_SERVO_MAP[joint]
+        (channel, min_us, max_us, lower, upper, max_rate,
+         address) = EXACT_SERVO_MAP[joint]
         spec = SERVO_MAP[joint]
+        assert spec.address == address, f'{joint}: board address'
         assert spec.channel == channel, f'{joint}: channel'
         assert spec.min_us == pytest.approx(min_us), f'{joint}: min_us'
         assert spec.max_us == pytest.approx(max_us), f'{joint}: max_us'
