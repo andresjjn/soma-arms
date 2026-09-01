@@ -77,6 +77,11 @@ servo connectors, 16 AWG or thicker for V+.
   that option, what the alternative would have cost. Andres is here to
   learn the system end to end and ride this wave as high as it goes, not
   to delegate it. Every change is also a lesson; write it like one.
+- **Calibrate the level per domain**: Andres is an electronics technician
+  with control engineering studies. On electronics, power and control
+  theory, talk peer to peer (specs and data, no bench tutorials). The
+  teaching mode is for ROS, the software architecture and this project's
+  design decisions.
 - **Everything committed here is in English**: code, comments, docstrings,
   test names, docs, commit messages, issues, README.
 - **No em dash characters in public content.** Use commas, colons,
