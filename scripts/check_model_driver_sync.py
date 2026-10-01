@@ -21,7 +21,7 @@ TOL = 1e-6
 
 # Real, measured hardware that is deliberately NOT on the current bench:
 # the L16 lift sits in a drawer until the printed torso exists (task #9).
-# Its SERVO_MAP row stays (channel 3 is its wiring contract and carries
+# Its SERVO_MAP row stays (channel 15 on 0x40 is its wiring contract and carries
 # the wedging protection of 2026-07-22), so the sync check must tolerate
 # its absence from the bench URDF, and nothing else's.
 OFF_MODEL = {'torso_lift_joint'}

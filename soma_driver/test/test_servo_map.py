@@ -103,27 +103,33 @@ class TestL16Torso:
 
 
 class TestChannels:
-    def test_no_duplicate_channels(self):
-        channels = [s.channel for s in SERVO_MAP.values()]
-        assert len(channels) == len(set(channels))
+    def test_no_duplicate_outputs(self):
+        # Since the two-board bench an output is (board, channel), not a
+        # bare channel number.
+        outputs = [(s.address, s.channel) for s in SERVO_MAP.values()]
+        assert len(outputs) == len(set(outputs))
 
     def test_13_pca9685_channels(self):
         """12 arm servos plus the L16 = 13 channels, they fit in 16."""
         assert len(SERVO_MAP) == 13
         assert all(0 <= s.channel <= 15 for s in SERVO_MAP.values())
 
-    def test_measured_wiring_2026_07_22(self):
-        """Contract with the physical wiring: right arm 15 down to 10
-        (gripper first), left arm 9 down to 4, L16 on channel 3 (verified
-        with power on; channel 0 is under suspicion and left spare)."""
-        assert SERVO_MAP['right_arm_finger_l_joint'].channel == 15
-        assert SERVO_MAP['right_arm_yaw_joint'].channel == 10
-        assert SERVO_MAP['left_arm_finger_l_joint'].channel == 9
-        assert SERVO_MAP['left_arm_yaw_joint'].channel == 4
-        assert SERVO_MAP['torso_lift_joint'].channel == 3
-        # "elbow 2" in the wiring is wrist_pitch in the URDF, next to the elbow
-        assert (SERVO_MAP['right_arm_wrist_pitch_joint'].channel
-                == SERVO_MAP['right_arm_elbow_joint'].channel + 1)
+    def test_harness_2026_10_01(self):
+        """Contract with the physical wiring, rewired by Andres on
+        2026-10-01 (this test replaces test_measured_wiring_2026_07_22,
+        which pinned the old 15-down-to-4 layout). Gripper first, base
+        yaw last, ascending: right arm 1 to 6 on 0x40, left arm 7 to 12
+        on 0x43, "right" being the robot's own right. Channel 0 stays
+        empty (under suspicion since July); the dormant L16 sits on 15."""
+        order = ('finger_l', 'wrist_roll', 'wrist_pitch', 'elbow',
+                 'shoulder', 'yaw')
+        for arm, first, board in (('right', 1, 0x40), ('left', 7, 0x43)):
+            for i, joint in enumerate(order):
+                spec = SERVO_MAP[f'{arm}_arm_{joint}_joint']
+                assert (spec.address, spec.channel) == (board, first + i), joint
+        assert (SERVO_MAP['torso_lift_joint'].address,
+                SERVO_MAP['torso_lift_joint'].channel) == (0x40, 15)
+        assert all(s.channel != 0 for s in SERVO_MAP.values())
 
     def test_mimic_joints_have_no_channel(self):
         """The right hand fingers are geared: they must own no PWM channel."""
@@ -227,23 +233,26 @@ class TestI2CRetry:
 #: joint -> (channel, min_us, max_us, lower, upper, max_rate, address)
 #: The address column joined on 2026-08-12: the left arm switched to
 #: board #2 (0x43) keeping its channel numbers, so a wrong board here
-#: is now as much of a mis-drive as a wrong channel.
+#: is now as much of a mis-drive as a wrong channel. Channel numbers
+#: edited 2026-10-01 because the harness changed (Andres rewired both
+#: arms: right 1-6 on 0x40, left 7-12 on 0x43, L16 3 -> 15). Every
+#: pulse, limit and rate below is untouched: those belong to the servos.
 EXACT_SERVO_MAP = {
-    'right_arm_finger_l_joint':    (15, 850.0, 2340.0, 0.0, 1.0, 2.5, 0x40),
-    'right_arm_wrist_roll_joint':  (14, 520.0, 2490.0, -1.8222, 1.2724, 2.5, 0x40),
-    'right_arm_wrist_pitch_joint': (13, 660.0, 2500.0, -2.0420, 0.8482, 2.5, 0x40),
-    'right_arm_elbow_joint':       (12, 2500.0, 520.0, -2.1363, 0.9739, 2.5, 0x40),
-    'right_arm_shoulder_joint':    (11, 700.0, 2500.0, -0.4712, 2.3562, 2.5, 0x40),
-    'right_arm_yaw_joint':         (10, 2500.0, 500.0, -2.7960, 0.3456, 2.5, 0x40),
-    'left_arm_finger_l_joint':     (9, 1160.0, 2190.0, 0.0, 1.0, 2.5, 0x43),
+    'right_arm_finger_l_joint':    (1, 850.0, 2340.0, 0.0, 1.0, 2.5, 0x40),
+    'right_arm_wrist_roll_joint':  (2, 520.0, 2490.0, -1.8222, 1.2724, 2.5, 0x40),
+    'right_arm_wrist_pitch_joint': (3, 660.0, 2500.0, -2.0420, 0.8482, 2.5, 0x40),
+    'right_arm_elbow_joint':       (4, 2500.0, 520.0, -2.1363, 0.9739, 2.5, 0x40),
+    'right_arm_shoulder_joint':    (5, 700.0, 2500.0, -0.4712, 2.3562, 2.5, 0x40),
+    'right_arm_yaw_joint':         (6, 2500.0, 500.0, -2.7960, 0.3456, 2.5, 0x40),
+    'left_arm_finger_l_joint':     (7, 1160.0, 2190.0, 0.0, 1.0, 2.5, 0x43),
     'left_arm_wrist_roll_joint':   (8, 2500.0, 680.0, -1.5080, 1.3509, 2.5, 0x43),
-    'left_arm_wrist_pitch_joint':  (7, 770.0, 2500.0, -1.6179, 1.0996, 2.5, 0x43),
-    'left_arm_elbow_joint':        (6, 2300.0, 800.0, -1.5708, 0.7854, 2.5, 0x43),
-    'left_arm_shoulder_joint':     (5, 900.0, 2500.0, -0.3927, 2.1206, 2.5, 0x43),
-    'left_arm_yaw_joint':          (4, 540.0, 2500.0, -3.0788, 0.0, 2.5, 0x43),
+    'left_arm_wrist_pitch_joint':  (9, 770.0, 2500.0, -1.6179, 1.0996, 2.5, 0x43),
+    'left_arm_elbow_joint':        (10, 2300.0, 800.0, -1.5708, 0.7854, 2.5, 0x43),
+    'left_arm_shoulder_joint':     (11, 900.0, 2500.0, -0.3927, 2.1206, 2.5, 0x43),
+    'left_arm_yaw_joint':          (12, 540.0, 2500.0, -3.0788, 0.0, 2.5, 0x43),
     # The L16 keeps its 2026-07-22 anchors: its stops have not been
     # re-measured (that capture comes with the torso build).
-    'torso_lift_joint':            (3, 1964.3, 1035.7, 0.005, 0.135, 0.020, 0x40),
+    'torso_lift_joint':            (15, 1964.3, 1035.7, 0.005, 0.135, 0.020, 0x40),
 }
 
 #: Channels where more microseconds moves the joint inward (min_us >

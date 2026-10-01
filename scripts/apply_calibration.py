@@ -38,7 +38,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'soma_driver'))
 from soma_driver.servo_map import SERVO_MAP  # noqa: E402
 
 US_PER_RAD = 2000.0 / math.pi     # 180 deg over 2000 us
-L16_CH = 3
+L16_CH = SERVO_MAP["torso_lift_joint"].channel  # one source of truth: the map
 L16_US_RETRACTED, L16_US_EXTENDED = 2000.0, 1000.0
 L16_STROKE_M = 0.140
 L16_MARGIN_M = 0.005

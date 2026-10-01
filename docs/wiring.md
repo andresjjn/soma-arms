@@ -8,38 +8,35 @@ authority. It is also locked in by
 `test_measured_wiring_2026_07_22` in `soma_driver/test/test_servo_map.py`:
 change the wiring and that test goes red, which is exactly what should happen.
 
-The pattern is: **channels descend from 15, right arm first, outermost joint
-first**. Gripper, then wrist roll, then down the arm to the base. Since
-2026-08-12 the left arm's six channels live on **board #2 (0x43)** keeping
-their channel numbers: the switchover was six connectors plus the address
-column in `servo_map.py`, nothing else.
+The pattern is: **gripper first, base yaw last, numbers ascending**, one
+board per arm. "Right" is the robot's own right. This is the harness Andres
+rewired on 2026-10-01 (the July layout ran 15 down to 4 on one board).
 
 | Board | Channel | Joint | Manual label | Actuator |
 |---|---|---|---|---|
-| 0x40 | 15 | `right_arm_finger_l_joint` | F | MG996R, gripper |
-| 0x40 | 14 | `right_arm_wrist_roll_joint` | E | MG996R |
-| 0x40 | 13 | `right_arm_wrist_pitch_joint` | D | MG996R, called "elbow 2" while wiring |
-| 0x40 | 12 | `right_arm_elbow_joint` | C | MG996R, "elbow 1" |
-| 0x40 | 11 | `right_arm_shoulder_joint` | B | MG996R |
-| 0x40 | 10 | `right_arm_yaw_joint` | A | MG996R, base |
-| 0x43 | 9 | `left_arm_finger_l_joint` | F | MG996R, gripper |
+| 0x40 | 1 | `right_arm_finger_l_joint` | F | MG996R, gripper |
+| 0x40 | 2 | `right_arm_wrist_roll_joint` | E | MG996R |
+| 0x40 | 3 | `right_arm_wrist_pitch_joint` | D | MG996R |
+| 0x40 | 4 | `right_arm_elbow_joint` | C | MG996R |
+| 0x40 | 5 | `right_arm_shoulder_joint` | B | MG996R |
+| 0x40 | 6 | `right_arm_yaw_joint` | A | MG996R, base |
+| 0x43 | 7 | `left_arm_finger_l_joint` | F | MG996R, gripper |
 | 0x43 | 8 | `left_arm_wrist_roll_joint` | E | MG996R |
-| 0x43 | 7 | `left_arm_wrist_pitch_joint` | D | MG996R |
-| 0x43 | 6 | `left_arm_elbow_joint` | C | MG996R |
-| 0x43 | 5 | `left_arm_shoulder_joint` | B | MG996R |
-| 0x43 | 4 | `left_arm_yaw_joint` | A | MG996R, base |
-| 0x40 | 3 | `torso_lift_joint` | n/a | Actuonix L16-140-63-6-R |
-| 0x40 | 2, 1 | spare | | |
+| 0x43 | 9 | `left_arm_wrist_pitch_joint` | D | MG996R |
+| 0x43 | 10 | `left_arm_elbow_joint` | C | MG996R |
+| 0x43 | 11 | `left_arm_shoulder_joint` | B | MG996R |
+| 0x43 | 12 | `left_arm_yaw_joint` | A | MG996R, base |
+| 0x40 | 15 | `torso_lift_joint` | n/a | Actuonix L16-140-63-6-R, not on this bench |
 | 0x40 | 0 | spare, **under suspicion** | | see below |
 
-Thirteen actuators across two sixteen channel boards, and board #2 has no
-silkscreen either: the first armed session after the switchover re-confirms
-the left arm channel by channel, same ritual as 2026-07-22.
+Neither board has a silkscreen. The first armed session after the rewire
+re-confirms every channel with `soma_sign_check`, one joint at a time.
 
 **Channel 0 is left empty on purpose.** The L16 was originally wired there.
 When it went deaf, channel 0 was one of the suspects. The real cause turned
 out to be a wedged lead screw, not the channel, but by then the actuator had
-been moved to channel 3 and everything was verified there. Channel 0 was never
+been moved to channel 3 and everything was verified there (it moved again,
+to 15, in the 2026-10-01 rewire). Channel 0 was never
 cleared, so it stays out of service until someone proves it good.
 
 The right hand fingers (`*_finger_r_joint`) appear nowhere in this table.

@@ -138,7 +138,7 @@ them in. Full context in `docs/hardware.md`.
 | Fact | Value |
 |---|---|
 | Bench configuration | both arms HANG from a central box on a monitor-stand column (measured 2026-08-05). First joint axis horizontal, outboard; J1 to J4 axes PARALLEL per arm (planar 4R chain plus wrist roll). The L16 torso is NOT on this bench |
-| Channel map | right arm 15 down to 10 (gripper first) on board `0x40`, left arm 9 down to 4 on board `0x43` (switched 2026-08-12, channel numbers unchanged), L16 on 3 (`0x40`) |
+| Channel map | gripper first, base yaw last: right arm 1 to 6 on board `0x40`, left arm 7 to 12 on board `0x43` (harness rewired 2026-10-01; right = the robot's own right), dormant L16 on 15 (`0x40`), channel 0 empty |
 | Channel 0 | out of service, suspected during a fault and never cleared |
 | L16 convention | **INVERTED**: 2000 us retracted, 1000 us extended. `min_us > max_us` is correct |
 | L16 soft limits | 5 to 135 mm, never 0 to 140 |
