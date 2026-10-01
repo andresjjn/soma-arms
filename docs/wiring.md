@@ -2,7 +2,8 @@
 
 ## The channel map
 
-**Verified channel by channel on 2026-07-22 with the 6 V rail live.** The
+**Harness rewired 2026-10-01; not yet verified with power (the first armed
+sign_check does that, channel by channel, as on 2026-07-22).** The
 PCA9685 board has no silkscreen numbering, so this table is the only
 authority. It is also locked in by
 `test_harness_2026_10_01` in `soma_driver/test/test_servo_map.py`:
