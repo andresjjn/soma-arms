@@ -5,7 +5,7 @@
 **Verified channel by channel on 2026-07-22 with the 6 V rail live.** The
 PCA9685 board has no silkscreen numbering, so this table is the only
 authority. It is also locked in by
-`test_measured_wiring_2026_07_22` in `soma_driver/test/test_servo_map.py`:
+`test_harness_2026_10_01` in `soma_driver/test/test_servo_map.py`:
 change the wiring and that test goes red, which is exactly what should happen.
 
 The pattern is: **gripper first, base yaw last, numbers ascending**, one
