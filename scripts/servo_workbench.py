@@ -1,35 +1,36 @@
 #!/usr/bin/env python3
 """SOMA servo workbench: browser sliders to jog, zero and range-map each servo.
 
-Runs on any Linux host with the PCA9685 on an I2C bus (Raspberry Pi or
-Jetson Orin Nano, 40 pin header). Serves a single page web UI; move one
-servo at a time, capture its mechanical zero and its physical min/max, and
-save everything to a JSON file that later feeds the offsets in servo_map.py.
+Runs on any Linux host with the PCA9685 boards on an I2C bus (Raspberry Pi
+or Jetson Orin Nano, 40 pin header). Serves a single page web UI; move one
+servo at a time, check which joint really answers on each output, capture
+its mechanical zero and its physical min/max, and save everything to a JSON
+file that later feeds the anchors in servo_map.py.
+
+The joint list comes from SERVO_MAP, the single source of truth: board
+address, channel, joint name and the calibrated zero all come from there,
+so the page can never disagree with the driver about the wiring. (The old
+version kept its own hand copied channel table, which went stale when the
+harness changed.) The dormant L16 torso is left out on purpose.
 
 Safety model (the project rules, encoded):
-  - Starts DISARMED with every output in FULL_OFF. Arming is an explicit
-    button, and nothing moves until a servo is selected on purpose.
+  - NEVER run it while the ROS driver is up: both would write the same
+    boards. Disarm and stop the soma_driver container first.
+  - Starts DISARMED with every output of every board in FULL_OFF. Arming
+    is an explicit button, and nothing moves until a servo is selected.
   - ONE servo active at a time. Selecting another does not release the
     previous one (arm servos need holding torque), but only the active one
     accepts commands.
   - Pulses are clamped to 500-2500 us. The browser only sets TARGETS; a
     50 Hz server-side ramp walks the wire toward them at 400 us/s, so no
-    slider gesture can snap a servo. Exception: the very first pulse on a
-    channel snaps the servo from its unknown physical pose, once — keep the
-    arm resting when you arm.
-  - Big ALL OFF button: every channel to FULL_OFF, disarmed.
-  - The L16 torso (ch 3) is included WITH ITS OWN PHYSICS: band clamped to
-    1000-2000 us, ramp matched to its real 20 mm/s, and auto release 2 s
-    after settling, so a command can never be held against a stop (it
-    wedged once on 2026-07-22; see docs/bench.md for the slow stop-probing
-    procedure: approach stops with the +/-10 nudges, never park on them).
+    slider gesture can snap a servo.
+  - The very first pulse on an output snaps the servo from its unknown
+    physical pose, once. Every slider therefore STARTS AT THE CALIBRATED
+    ZERO from the map, which is where a hanging arm already rests, so that
+    first snap is as small as the bench allows. Use "go ZERO" first.
+  - Big ALL OFF button: every output of every board to FULL_OFF, disarmed.
 
-Bring-up order (docs/wiring.md): wire with the servo rail OFF, run this
-tool and check the bus scan, fold the arms into a compact resting pose,
-only then energise the 6 V rail, and only then arm.
-
-Usage on the Jetson/Pi:
-    sudo apt install -y python3-smbus2 || pip3 install smbus2 --break-system-packages
+Usage on the Jetson/Pi (driver container stopped):
     python3 scripts/servo_workbench.py            # autodetects the I2C bus
     python3 scripts/servo_workbench.py --bus 7    # or force one
 Then open http://<host-ip>:8080 from any browser on the LAN.
@@ -38,145 +39,145 @@ import argparse
 import glob
 import json
 import os
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
-ADDR = 0x40
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'soma_driver'))
+from soma_driver.servo_map import SERVO_MAP  # noqa: E402
+
 MODE1, PRESCALE, LED0, ALL_OFF_H = 0x00, 0xFE, 0x06, 0xFD
-MIN_US, MAX_US, CENTER_US = 500, 2500, 1500
+MIN_US, MAX_US = 500, 2500
 RAMP_US_PER_S = 400.0     # smooth server-side ramp toward the slider target
 TICK_S = 0.02             # 50 Hz ramp loop
-CAL_FILE = 'servo_calibration.json'
-
-# Measured wiring 2026-07-22 (docs/wiring.md).
-L16_CH = 3
-SERVOS = [
-    (15, 'right gripper'), (14, 'right wrist roll'), (13, 'right wrist pitch'),
-    (12, 'right elbow'), (11, 'right shoulder'), (10, 'right yaw'),
-    (9, 'left gripper'), (8, 'left wrist roll'), (7, 'left wrist pitch'),
-    (6, 'left elbow'), (5, 'left shoulder'), (4, 'left yaw'),
-    (3, 'torso L16 (INVERTED: 2000us = retracted)'),
-]
-
-# The L16 gets its own physics (it wedged once, 2026-07-22, docs/bench.md):
-#   - band clamped to its real 1.0-2.0 ms interface, never the servo band
-#   - ramp matched to its 20 mm/s (140 mm over 1000 us -> ~140 us/s), so
-#     the signal can never run ahead of the rod and lean on a stop
-#   - AUTO-RELEASE: 2 s after the signal settles, the channel is cut. The
-#     lead screw is self locking (46 N unpowered), nothing sags, and a
-#     command can never be held against a mechanical stop.
-CH_LIMITS = {L16_CH: (1000.0, 2000.0)}
-CH_RAMP = {L16_CH: 140.0}
-CH_RELEASE_S = {L16_CH: 2.0}
+US_PER_DEG = 2000.0 / 180.0
+CAL_FILE = 'servo_calibration_2026-10-01.json'
+SKIP = {'torso_lift_joint'}   # dormant, not on this bench
 
 
-class Board:
-    """Thin PCA9685 driver with the safety rules baked in."""
+def joint_rows(servo_map=SERVO_MAP):
+    """One row per commandable joint, ordered board by board, channel up.
 
-    def __init__(self, bus_num):
+    Pure, so the suite can pin it: every key unique, every zero inside its
+    calibrated band, the dormant torso absent.
+    """
+    rows = []
+    for name, spec in servo_map.items():
+        if name in SKIP:
+            continue
+        lo_us, hi_us = sorted((spec.min_us, spec.max_us))
+        rows.append({
+            'key': f'{spec.address:02x}:{spec.channel}',
+            'addr': spec.address, 'ch': spec.channel, 'name': name,
+            'zero_us': round(spec.command_to_us(spec.clamp(0.0))),
+            'band': [round(lo_us), round(hi_us)],
+        })
+    rows.sort(key=lambda r: (r['addr'], r['ch']))
+    return rows
+
+
+class Fleet:
+    """Every PCA9685 in the map on one bus, with the safety rules baked in."""
+
+    def __init__(self, bus_num, rows):
         from smbus2 import SMBus
         self.bus = SMBus(bus_num)
         self.bus_num = bus_num
+        self.rows = {r['key']: r for r in rows}
+        self.addrs = sorted({r['addr'] for r in rows})
         self.armed = False
-        self.active = None                 # channel allowed to move
-        self.last_us = {}                  # channel -> pulse currently on the wire
-        self.target_us = {}                # channel -> where the slider wants it
+        self.active = None                 # key allowed to move
+        self.last_us = {}                  # key -> pulse currently on the wire
+        self.target_us = {}                # key -> where the slider wants it
         self.lock = threading.Lock()
-        self.bus.write_byte_data(ADDR, MODE1, 0x10)
-        self.bus.write_byte_data(ADDR, PRESCALE, 121)   # exactly 50.0 Hz
-        self.bus.write_byte_data(ADDR, MODE1, 0x20)
+        for a in self.addrs:
+            self.bus.write_byte_data(a, MODE1, 0x10)
+            self.bus.write_byte_data(a, PRESCALE, 121)   # exactly 50.0 Hz
+            self.bus.write_byte_data(a, MODE1, 0x20)
         time.sleep(0.01)
         self.all_off()
         threading.Thread(target=self._ramp_loop, daemon=True).start()
 
     def _ramp_loop(self):
-        """50 Hz: walk each commanded channel smoothly toward its target.
+        """50 Hz: walk each commanded output smoothly toward its target.
 
         The browser can spam or reorder requests all it wants; the wire only
         ever sees this ramp. Same philosophy as rate_limit() in the driver.
         """
-        settled = {}
         while True:
             time.sleep(TICK_S)
             with self.lock:
                 if not self.armed:
                     continue
-                for ch in list(self.target_us):
-                    target = self.target_us[ch]
-                    cur = self.last_us.get(ch)
-                    if cur is None:
+                for key in list(self.target_us):
+                    target, cur = self.target_us[key], self.last_us.get(key)
+                    if cur is None or cur == target:
                         continue
-                    if cur == target:
-                        # settled: self locking channels get their signal cut
-                        settled[ch] = settled.get(ch, 0.0) + TICK_S
-                        if settled[ch] >= CH_RELEASE_S.get(ch, float('inf')):
-                            self.bus.write_i2c_block_data(
-                                ADDR, LED0 + 4 * ch, [0, 0, 0, 0x10])
-                            self.last_us.pop(ch, None)
-                            self.target_us.pop(ch, None)
-                            settled.pop(ch, None)
-                        continue
-                    settled[ch] = 0.0
-                    step = CH_RAMP.get(ch, RAMP_US_PER_S) * TICK_S
-                    if abs(target - cur) <= step:
-                        new = target
-                    else:
-                        new = cur + (step if target > cur else -step)
-                    self._write_us(ch, new)
-                    self.last_us[ch] = new
+                    step = RAMP_US_PER_S * TICK_S
+                    new = target if abs(target - cur) <= step else (
+                        cur + (step if target > cur else -step))
+                    self._write_us(key, new)
+                    self.last_us[key] = new
 
-    def _write_us(self, ch, us):
+    def _write_us(self, key, us):
+        r = self.rows[key]
         counts = round(us / 20000.0 * 4096.0)
         self.bus.write_i2c_block_data(
-            ADDR, LED0 + 4 * ch, [0, 0, counts & 0xFF, counts >> 8])
+            r['addr'], LED0 + 4 * r['ch'], [0, 0, counts & 0xFF, counts >> 8])
 
-    def command(self, ch, us):
+    def command(self, key, us):
         with self.lock:
             if not self.armed:
                 return 'refused: DISARMED'
-            if ch != self.active:
+            if key != self.active:
                 return 'refused: not the active servo'
-            lo, hi = CH_LIMITS.get(ch, (MIN_US, MAX_US))
-            us = max(lo, min(hi, float(us)))
-            if ch not in self.last_us:
-                # First pulse on this channel: the servo snaps to it from
+            us = max(MIN_US, min(MAX_US, float(us)))
+            if key not in self.last_us:
+                # First pulse on this output: the servo snaps to it from
                 # wherever it physically is. One unavoidable jump; from here
-                # on, everything is ramped. Keep the arm resting.
-                self._write_us(ch, us)
-                self.last_us[ch] = us
-            self.target_us[ch] = us
-            return f'target {us:.0f}'
+                # on, everything is ramped. Start from the map zero.
+                self._write_us(key, us)
+                self.last_us[key] = us
+            self.target_us[key] = us
+            return f'target {us:.0f} us'
 
-    def release(self, ch):
+    def release(self, key):
         with self.lock:
-            self.bus.write_i2c_block_data(ADDR, LED0 + 4 * ch, [0, 0, 0, 0x10])
-            self.last_us.pop(ch, None)
-            self.target_us.pop(ch, None)
+            r = self.rows[key]
+            self.bus.write_i2c_block_data(
+                r['addr'], LED0 + 4 * r['ch'], [0, 0, 0, 0x10])
+            self.last_us.pop(key, None)
+            self.target_us.pop(key, None)
 
     def all_off(self):
         with self.lock:
-            self.bus.write_byte_data(ADDR, ALL_OFF_H, 0x10)
+            for a in self.addrs:
+                self.bus.write_byte_data(a, ALL_OFF_H, 0x10)
             self.last_us.clear()
             self.target_us.clear()
             self.armed = False
             self.active = None
 
 
-def find_bus(forced=None):
-    """Scan /dev/i2c-* for a PCA9685 answering at 0x40 with our prescale reg."""
+def find_bus(addrs, forced=None):
+    """Scan /dev/i2c-* for the bus where EVERY board in the map answers."""
     from smbus2 import SMBus
     candidates = ([forced] if forced is not None else
                   sorted(int(p.rsplit('-', 1)[1]) for p in glob.glob('/dev/i2c-*')))
     for n in candidates:
         try:
             with SMBus(n) as b:
-                b.read_byte_data(ADDR, MODE1)
+                for a in addrs:
+                    b.read_byte_data(a, MODE1)
             return n
         except OSError:
             continue
-    raise SystemExit('No PCA9685 at 0x40 on any I2C bus. Check wiring and '
-                     'that your user can read /dev/i2c-* (or use sudo).')
+    raise SystemExit(
+        'No bus has every board of the map: ' + ', '.join(hex(a) for a in addrs)
+        + '. Check wiring, address bridges, and that your user can read '
+        '/dev/i2c-* (or use sudo).')
 
 
 class Cal:
@@ -186,8 +187,11 @@ class Cal:
             with open(CAL_FILE) as f:
                 self.data = json.load(f)
 
-    def mark(self, ch, name, kind, us):
-        entry = self.data.setdefault(str(ch), {'name': name})
+    def mark(self, row, kind, us):
+        # Keyed by channel (unique across both boards in the current map),
+        # the format scripts/apply_calibration.py already reads.
+        entry = self.data.setdefault(str(row['ch']), {'name': row['name']})
+        entry['address'] = hex(row['addr'])
         entry[kind] = round(us)
         entry['date'] = time.strftime('%Y-%m-%d')
 
@@ -200,109 +204,109 @@ class Cal:
 PAGE = """<!DOCTYPE html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SOMA servo workbench</title><style>
-body{font-family:system-ui;margin:0;background:#111;color:#eee}
-header{display:flex;gap:.6rem;align-items:center;padding:.6rem 1rem;background:#1b1b1b;position:sticky;top:0}
+:root{--bg:#0f1113;--panel:#171a1d;--line:#262a2e;--ink:#e8eaec;--muted:#8b949e;
+--go:#2f855a;--stop:#c53030;--accent:#3b82d8;--warn:#d69e2e}
+body{font-family:system-ui,sans-serif;margin:0;background:var(--bg);color:var(--ink)}
+header{display:flex;gap:.6rem;align-items:center;padding:.6rem 1rem;background:var(--panel);
+position:sticky;top:0;z-index:2;border-bottom:1px solid var(--line)}
 h1{font-size:1rem;margin:0;flex:1}
-button{border:0;border-radius:8px;padding:.55rem .9rem;font-weight:700;cursor:pointer}
-#arm{background:#2c6e49;color:#fff}#arm.on{background:#c92a2a}
-#alloff{background:#c92a2a;color:#fff;font-size:1rem}
-.servo{padding:.7rem 1rem;border-bottom:1px solid #2a2a2a;display:grid;
-grid-template-columns:auto 1fr auto;gap:.5rem;align-items:center;opacity:.45}
-.servo.active{opacity:1;background:#16211b}
-.servo .nm{min-width:11rem}.servo .us{font-variant-numeric:tabular-nums;min-width:4.5rem;text-align:right}
+button{border:0;border-radius:8px;padding:.5rem .8rem;font-weight:700;cursor:pointer;color:#fff}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#arm{background:var(--go)}#arm.on{background:var(--stop)}
+#alloff{background:var(--stop);font-size:1rem;padding:.6rem 1.1rem}
+#msg{padding:.45rem 1rem;color:var(--warn);min-height:1.2rem;font-size:.85rem}
+h2{font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+margin:1rem 1rem .3rem}
+.servo{padding:.65rem 1rem;border-bottom:1px solid var(--line);display:grid;
+grid-template-columns:minmax(12rem,auto) 1fr 9rem;gap:.35rem .8rem;align-items:center;opacity:.5}
+.servo.active{opacity:1;background:#13201a;box-shadow:inset 3px 0 0 var(--go)}
+.nm b{font-family:ui-monospace,monospace;color:var(--accent)}
+.nm small{display:block;color:var(--muted);font-size:.75rem}
+.rd{font-family:ui-monospace,monospace;text-align:right;font-variant-numeric:tabular-nums}
+.rd .us{font-size:1.05rem}.rd .deg{display:block;color:var(--muted);font-size:.8rem}
 input[type=range]{width:100%}
-.row2{grid-column:1/4;display:flex;gap:.4rem;flex-wrap:wrap}
-.row2 button{background:#333;color:#eee;padding:.35rem .6rem;font-weight:600}
-.row2 .mark{background:#1c4587}
-.badge{font-size:.72rem;color:#9ad1a5}
-#msg{padding:.4rem 1rem;color:#ffd43b;min-height:1.2rem;font-size:.85rem}
+.row2{grid-column:1/4;display:flex;gap:.35rem;flex-wrap:wrap}
+.row2 button{background:#2b3036;padding:.32rem .55rem;font-weight:600}
+.row2 .sel{background:var(--go)}.row2 .zero{background:#285e8e}.row2 .mark{background:#1c4587}
+.cal{grid-column:1/4;font-family:ui-monospace,monospace;font-size:.75rem;color:#9ad1a5}
+@media (max-width:640px){.servo{grid-template-columns:1fr 7rem}.servo input{grid-column:1/3}}
 </style></head><body>
 <header><h1>SOMA servo workbench</h1>
 <button id="arm" onclick="toggleArm()">ARM</button>
 <button id="alloff" onclick="api({action:'all_off'})">ALL OFF</button></header>
-<div id="msg">DISARMED. Select a servo, then arm. One servo moves at a time.</div>
+<div id="msg">DISARMED. Arm, select ONE joint, press "go ZERO" first, then move it.</div>
 <div id="list"></div>
 <script>
 let S={armed:false,active:null,servos:[]};
-let built=false, dragging=null, pending={}, timers={};
-
+let built=false,dragging=null,pending={},timers={};
+const deg=(us,z)=>((us-z)*0.09).toFixed(1);
 function build(){
- const L=document.getElementById('list');L.innerHTML='';
+ const L=document.getElementById('list');L.innerHTML='';let board=null;
  for(const s of S.servos){
-  const d=document.createElement('div');d.id='sv'+s.ch;d.className='servo';
-  d.innerHTML=`<div class="nm"><b>ch${s.ch}</b> ${s.name} <span class="badge" id="cal${s.ch}"></span></div>
-  <input type="range" id="sl${s.ch}" min="${s.min}" max="${s.max}" step="5"
-   value="${(s.min+s.max)/2}">
-  <div class="us" id="us${s.ch}">off</div>
+  if(s.addr!==board){board=s.addr;const h=document.createElement('h2');
+   h.textContent='board 0x'+s.addr.toString(16)+(board===0x40?'  (right arm)':'  (left arm)');L.appendChild(h);}
+  const k=s.key,d=document.createElement('div');d.id='sv'+k;d.className='servo';
+  d.innerHTML=`<div class="nm"><b>ch${s.ch}</b> ${s.name.replace('_joint','')}
+   <small>map zero ${s.zero_us} us · band ${s.band[0]}-${s.band[1]} us</small></div>
+  <input type="range" id="sl${k}" min="500" max="2500" step="5" value="${s.zero_us}"
+   aria-label="${s.name} pulse">
+  <div class="rd"><span class="us" id="us${k}">off</span><span class="deg" id="dg${k}"></span></div>
   <div class="row2">
-   <button onclick="api({action:'select',ch:${s.ch}})">select</button>
-   <button onclick="nudge(${s.ch},-50)">-50</button><button onclick="nudge(${s.ch},-10)">-10</button>
-   <button onclick="nudge(${s.ch},10)">+10</button><button onclick="nudge(${s.ch},50)">+50</button>
-   <button class="mark" onclick="api({action:'mark',ch:${s.ch},kind:'zero'})">set ZERO</button>
-   <button class="mark" onclick="api({action:'mark',ch:${s.ch},kind:'min'})">mark MIN</button>
-   <button class="mark" onclick="api({action:'mark',ch:${s.ch},kind:'max'})">mark MAX</button>
-   <button onclick="api({action:'release',ch:${s.ch}})">release</button>
-  </div>`;
+   <button class="sel" onclick="api({action:'select',key:'${k}'})">select</button>
+   <button class="zero" onclick="setUs('${k}',${s.zero_us})">go ZERO</button>
+   <button onclick="nudge('${k}',-50)">-50</button><button onclick="nudge('${k}',-10)">-10</button>
+   <button onclick="nudge('${k}',-5)">-5</button><button onclick="nudge('${k}',5)">+5</button>
+   <button onclick="nudge('${k}',10)">+10</button><button onclick="nudge('${k}',50)">+50</button>
+   <button class="mark" onclick="api({action:'mark',key:'${k}',kind:'zero'})">set ZERO</button>
+   <button class="mark" onclick="api({action:'mark',key:'${k}',kind:'min'})">mark MIN</button>
+   <button class="mark" onclick="api({action:'mark',key:'${k}',kind:'max'})">mark MAX</button>
+   <button onclick="api({action:'release',key:'${k}'})">release</button>
+  </div><div class="cal" id="cal${k}"></div>`;
   L.appendChild(d);
   const sl=d.querySelector('input');
-  sl.addEventListener('pointerdown',()=>dragging=s.ch);
-  sl.addEventListener('pointerup',()=>{dragging=null;flush(s.ch);});
-  sl.addEventListener('input',()=>{
-   document.getElementById('us'+s.ch).textContent=sl.value+'us';
-   pending[s.ch]=+sl.value;
-   if(!timers[s.ch])timers[s.ch]=setTimeout(()=>flush(s.ch),120);});
+  sl.addEventListener('pointerdown',()=>dragging=k);
+  sl.addEventListener('pointerup',()=>{dragging=null;flush(k);});
+  sl.addEventListener('input',()=>{show(k,+sl.value,s.zero_us);pending[k]=+sl.value;
+   if(!timers[k])timers[k]=setTimeout(()=>flush(k),120);});
  }
  built=true;
 }
-function flush(ch){
- clearTimeout(timers[ch]);timers[ch]=null;
- if(pending[ch]!=null){const v=pending[ch];pending[ch]=null;
-  api({action:'set',ch:ch,us:v});}
-}
+function show(k,us,z){document.getElementById('us'+k).textContent=us+' us';
+ document.getElementById('dg'+k).textContent=deg(us,z)+'° vs zero';}
+function flush(k){clearTimeout(timers[k]);timers[k]=null;
+ if(pending[k]!=null){const v=pending[k];pending[k]=null;api({action:'set',key:k,us:v});}}
 function update(){
- document.getElementById('arm').textContent=S.armed?'DISARM':'ARM';
- document.getElementById('arm').className=S.armed?'on':'';
- for(const s of S.servos){
-  const d=document.getElementById('sv'+s.ch);if(!d)continue;
-  d.className='servo'+(s.ch===S.active?' active':'');
-  const c=s.cal?`zero:${s.cal.zero??'-'} min:${s.cal.min??'-'} max:${s.cal.max??'-'}`:'';
-  document.getElementById('cal'+s.ch).textContent=c;
-  // never touch the slider the user is holding, nor overwrite a pending send
-  if(dragging!==s.ch&&pending[s.ch]==null&&s.us){
-   document.getElementById('sl'+s.ch).value=s.us;
-   document.getElementById('us'+s.ch).textContent=s.us+'us';}
-  if(!s.us&&dragging!==s.ch)document.getElementById('us'+s.ch).textContent='off';
- }
-}
-async function api(body){
- const r=await fetch('/api',{method:'POST',body:JSON.stringify(body)});
+ const a=document.getElementById('arm');a.textContent=S.armed?'DISARM':'ARM';a.className=S.armed?'on':'';
+ for(const s of S.servos){const k=s.key,d=document.getElementById('sv'+k);if(!d)continue;
+  d.className='servo'+(k===S.active?' active':'');
+  document.getElementById('cal'+k).textContent=s.cal?
+   `captured: zero ${s.cal.zero??'-'} · min ${s.cal.min??'-'} · max ${s.cal.max??'-'}`:'';
+  if(dragging!==k&&pending[k]==null&&s.us){document.getElementById('sl'+k).value=s.us;show(k,s.us,s.zero_us);}
+  if(!s.us&&dragging!==k){document.getElementById('us'+k).textContent='off';
+   document.getElementById('dg'+k).textContent='';}}}
+async function api(body){const r=await fetch('/api',{method:'POST',body:JSON.stringify(body)});
  const j=await r.json();S=j.state;
  if(body.action!=='state'&&j.msg)document.getElementById('msg').textContent=j.msg;
  if(!built)build();update();}
-function nudge(ch,d){
- const sl=document.getElementById('sl'+ch);
- sl.value=+sl.value+d;
- document.getElementById('us'+ch).textContent=sl.value+'us';
- api({action:'set',ch:ch,us:+sl.value});}
+function setUs(k,v){const sl=document.getElementById('sl'+k);sl.value=v;
+ const s=S.servos.find(x=>x.key===k);show(k,v,s.zero_us);api({action:'set',key:k,us:v});}
+function nudge(k,d){setUs(k,+document.getElementById('sl'+k).value+d);}
 function toggleArm(){api({action:S.armed?'disarm':'arm'})}
-api({action:'state'});setInterval(()=>api({action:'state'}),4000);
+api({action:'state'});setInterval(()=>api({action:'state'}),3000);
 </script></body></html>"""
 
 
-def make_handler(board, cal):
+def make_handler(fleet, cal):
     class H(BaseHTTPRequestHandler):
         def log_message(self, *a):
             pass
 
         def _state(self):
             servos = []
-            for ch, name in SERVOS:
-                lo, hi = CH_LIMITS.get(ch, (MIN_US, MAX_US))
-                servos.append({'ch': ch, 'name': name,
-                               'us': round(board.last_us.get(ch, 0)) or None,
-                               'min': lo, 'max': hi,
-                               'cal': cal.data.get(str(ch))})
-            return {'armed': board.armed, 'active': board.active, 'servos': servos}
+            for key, r in fleet.rows.items():
+                servos.append({**r, 'us': round(fleet.last_us.get(key, 0)) or None,
+                               'cal': cal.data.get(str(r['ch']))})
+            return {'armed': fleet.armed, 'active': fleet.active, 'servos': servos}
 
         def _send(self, code, body, ctype='application/json'):
             data = body.encode()
@@ -318,37 +322,37 @@ def make_handler(board, cal):
         def do_POST(self):
             req = json.loads(self.rfile.read(
                 int(self.headers.get('Content-Length', 0)) or 0) or '{}')
-            act, ch = req.get('action'), req.get('ch')
+            act, key = req.get('action'), req.get('key')
+            if key is not None and key not in fleet.rows:
+                self._send(200, json.dumps({'state': self._state(),
+                                            'msg': f'refused: unknown output {key}'}))
+                return
             msg = ''
             if act == 'arm':
-                board.armed = True
-                msg = 'ARMED. The selected servo will follow its slider.'
+                fleet.armed = True
+                msg = 'ARMED. Select ONE joint and press "go ZERO" before moving it.'
             elif act == 'disarm':
-                board.armed = False
+                fleet.armed = False
                 msg = 'DISARMED (outputs keep their last pulse; use release/ALL OFF to cut).'
             elif act == 'all_off':
-                board.all_off()
-                msg = 'ALL OFF: every channel released, disarmed.'
+                fleet.all_off()
+                msg = 'ALL OFF: every output of every board released, disarmed.'
             elif act == 'select':
-                board.active = ch
-                msg = f'ch{ch} is now the active servo.'
+                fleet.active = key
+                msg = f'{fleet.rows[key]["name"]} (board 0x{fleet.rows[key]["addr"]:02x} ch{fleet.rows[key]["ch"]}) is now the active servo.'
             elif act == 'set':
-                msg = f'ch{ch}: {board.command(ch, req.get("us", CENTER_US))}'
-            elif act == 'nudge':
-                base = board.target_us.get(ch, board.last_us.get(ch, CENTER_US))
-                msg = f'ch{ch}: {board.command(ch, base + req.get("delta", 0))}'
+                msg = f'{key}: {fleet.command(key, req.get("us", fleet.rows[key]["zero_us"]))}'
             elif act == 'release':
-                board.release(ch)
-                msg = f'ch{ch} released (signal cut).'
+                fleet.release(key)
+                msg = f'{key} released (signal cut).'
             elif act == 'mark':
-                us = board.last_us.get(ch)
+                us = fleet.last_us.get(key)
                 if us is None:
                     msg = 'refused: servo has no commanded pulse yet.'
                 else:
-                    name = dict(SERVOS)[ch]
-                    cal.mark(ch, name, req.get('kind'), us)
+                    cal.mark(fleet.rows[key], req.get('kind'), us)
                     path = cal.save()
-                    msg = f'ch{ch} {req.get("kind")} = {us:.0f}us saved to {path}'
+                    msg = f'{key} {req.get("kind")} = {us:.0f} us saved to {path}'
             self._send(200, json.dumps({'state': self._state(), 'msg': msg}))
     return H
 
@@ -359,19 +363,22 @@ def main():
     ap.add_argument('--port', type=int, default=8080)
     args = ap.parse_args()
 
-    bus_num = find_bus(args.bus)
-    board = Board(bus_num)
+    rows = joint_rows()
+    addrs = sorted({r['addr'] for r in rows})
+    bus_num = find_bus(addrs, args.bus)
+    fleet = Fleet(bus_num, rows)
     cal = Cal()
-    print(f'PCA9685 found on /dev/i2c-{bus_num}, 50 Hz set, ALL OFF, DISARMED.')
+    print(f'Boards {", ".join(hex(a) for a in addrs)} on /dev/i2c-{bus_num}: '
+          f'50 Hz set, ALL OFF, DISARMED. {len(rows)} joints from SERVO_MAP.')
     print(f'Open http://<this-host>:{args.port}  (calibration -> {CAL_FILE})')
-    server = ThreadingHTTPServer(('0.0.0.0', args.port), make_handler(board, cal))
+    server = ThreadingHTTPServer(('0.0.0.0', args.port), make_handler(fleet, cal))
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
-        board.all_off()
-        print('\nALL OFF sent. Bye.')
+        fleet.all_off()
+        print('\nALL OFF sent to every board. Bye.')
 
 
 if __name__ == '__main__':
