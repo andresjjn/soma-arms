@@ -47,6 +47,22 @@ class Pca9685Backend(ABC):
         names an output; the pair (address, channel) does.
         """
 
+    @abstractmethod
+    def config_fault(self) -> str | None:
+        """None if the board still runs the 50 Hz config, else why not.
+
+        Raises OSError if the board does not answer at all.
+        """
+
+    def is_configured(self) -> bool:
+        """True while the board still runs the config set at arming.
+
+        Seen on the bench 2026-10-01: a board can lose its logic supply
+        for an instant and come back at power-on defaults, oscillator
+        asleep, every output dead, with nothing on the bus to say so.
+        """
+        return self.config_fault() is None
+
 
 class MockPca9685(Pca9685Backend):
     """Simulator: records the pulses that WOULD have been sent."""
@@ -58,6 +74,22 @@ class MockPca9685(Pca9685Backend):
         self.write_count = 0
         self.enabled = True
         self.released: set[int] = set()
+        # None = healthy. Set by simulate_reset() for the tests.
+        self._reset: str | None = None
+
+    def simulate_reset(self, answering: bool = True) -> None:
+        """Pretend the board came back at power-on defaults (tests only).
+
+        answering=False models a board that dropped off the bus instead.
+        """
+        self._reset = 'answering' if answering else 'silent'
+
+    def config_fault(self) -> str | None:
+        if self._reset == 'silent':
+            raise OSError(121, 'Remote I/O error (simulated)')
+        if self._reset == 'answering':
+            return describe_config(_POWER_ON_MODE1, _POWER_ON_PRESCALE)
+        return None
 
     def write(self, spec: ServoSpec, position: float) -> float:
         us = spec.command_to_us(position)
@@ -83,6 +115,26 @@ _MODE1, _PRESCALE = 0x00, 0xFE
 _LED0_ON_L, _ALL_LED_OFF_H = 0x06, 0xFD
 _PRESCALE_50HZ = 121          # 25 MHz / (4096 * (121+1)) = exactly 50.0 Hz
 _FULL_OFF = 0x10
+_MODE1_SLEEP = 0x10           # oscillator off: no PWM on any output
+# What the chip reads after losing its logic supply (datasheet defaults,
+# and exactly what the bench read back on 2026-10-01): asleep, 200 Hz.
+_POWER_ON_MODE1, _POWER_ON_PRESCALE = 0x11, 0x1E
+
+
+def describe_config(mode1: int, prescale: int) -> str | None:
+    """None if MODE1/PRESCALE are the armed 50 Hz config, else why not.
+
+    Pure, so the suite can pin it. Only the SLEEP bit of MODE1 is judged:
+    RESTART and ALLCALL can legitimately read back either way.
+    """
+    problems = []
+    if mode1 & _MODE1_SLEEP:
+        problems.append(f'SLEEP set (MODE1 0x{mode1:02x})')
+    if prescale != _PRESCALE_50HZ:
+        problems.append(f'prescale 0x{prescale:02x}, not {_PRESCALE_50HZ}')
+    if not problems:
+        return None
+    return 'reset to power-on defaults: ' + ', '.join(problems)
 
 
 class RealPca9685(Pca9685Backend):
@@ -132,6 +184,13 @@ class RealPca9685(Pca9685Backend):
             except OSError:
                 continue
         raise OSError(f'no PCA9685 at 0x{self._addr:02x} on any I2C bus')
+
+    def config_fault(self) -> str | None:
+        mode1 = retry_i2c(lambda: self._bus.read_byte_data(
+            self._addr, _MODE1))
+        prescale = retry_i2c(lambda: self._bus.read_byte_data(
+            self._addr, _PRESCALE))
+        return describe_config(mode1, prescale)
 
     def write(self, spec: ServoSpec, position: float) -> float:
         us = spec.command_to_us(position)
@@ -183,11 +242,42 @@ class Pca9685Fleet(Pca9685Backend):
         return self._board(spec).write(spec, position)
 
     def disable_all(self) -> None:
+        # Every board gets its cut even if an earlier one fails: a silent
+        # 0x40 must never leave 0x43 driving. The first error is raised
+        # afterwards so the caller still knows the cut was not clean.
+        first_error = None
         for board in self.boards.values():
-            board.disable_all()
+            try:
+                board.disable_all()
+            except Exception as exc:
+                first_error = first_error or exc
+        if first_error is not None:
+            raise first_error
 
     def release(self, spec: ServoSpec) -> None:
         self._board(spec).release(spec)
+
+    def board_faults(self) -> dict[int, str]:
+        """Address to fault for every board that lost its config, or {}.
+
+        A board that does not answer is a fault too: if it cannot be
+        read, nobody can claim it is still driving pulses.
+        """
+        faults: dict[int, str] = {}
+        for address, board in sorted(self.boards.items()):
+            try:
+                fault = board.config_fault()
+            except OSError as exc:
+                fault = f'not answering ({exc})'
+            if fault is not None:
+                faults[address] = fault
+        return faults
+
+    def config_fault(self) -> str | None:
+        faults = self.board_faults()
+        if not faults:
+            return None
+        return '; '.join(f'0x{a:02x} {f}' for a, f in faults.items())
 
 
 def addresses_in(servo_map: dict[str, ServoSpec]) -> tuple[int, ...]:

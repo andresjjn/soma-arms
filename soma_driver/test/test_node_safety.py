@@ -147,3 +147,98 @@ class TestCommandClamping:
         msg.position = [1.0]
         node._on_command(msg)
         assert 'not_a_joint' not in node.target
+
+
+class TestBoardWatchdog:
+    """1 Hz config read-back while ARMED (bench incident 2026-10-01).
+
+    Both boards lost their 3.3 V logic supply for an instant and came
+    back asleep at 200 Hz while the node kept reporting ARMED. Here the
+    node is armed for real against the fake smbus2 of conftest.py (no
+    hardware reachable), so the full _arm / watchdog / _disarm path runs.
+    """
+
+    def _armed_node(self):
+        from rclpy.parameter import Parameter
+        n = ArmController(parameter_overrides=[
+            Parameter('allow_real', value=True),
+            Parameter('i2c_bus', value=7)])
+        res = _arm(n, True)
+        assert res.success is True, res.message
+        assert n.armed is True and n.backend.is_real is True
+        return n
+
+    def test_watchdog_is_idle_while_disarmed(self, node):
+        for board in node.backend.boards.values():
+            board.simulate_reset()
+        assert node._board_watchdog() is None
+        assert node.armed is False
+
+    def test_healthy_boards_stay_armed(self, chips):
+        rclpy.init()
+        n = None
+        try:
+            n = self._armed_node()
+            assert n._board_watchdog() is None
+            assert n.armed is True
+        finally:
+            if n is not None:
+                n.destroy_node()
+            rclpy.shutdown()
+
+    def test_reset_disarms_names_the_board_and_never_rearms(self, chips):
+        rclpy.init()
+        n = None
+        try:
+            n = self._armed_node()
+            chips.regs[0x40][0xFD] = 0x00   # 0x40 still driving
+            chips.power_glitch(0x43)
+            message = n._board_watchdog()
+            assert message is not None and '0x43' in message
+            assert n.armed is False
+            assert _is_mock_fleet(n.backend)
+            # Same path as _disarm: the cut reached the board still live.
+            assert chips.regs[0x40][0xFD] == 0x10
+            # The fault is gone from the bus view, yet nothing re-arms.
+            assert n._board_watchdog() is None
+            assert n.armed is False
+        finally:
+            if n is not None:
+                n.destroy_node()
+            rclpy.shutdown()
+
+    def test_rearming_reruns_the_board_init(self, chips):
+        rclpy.init()
+        n = None
+        try:
+            n = self._armed_node()
+            chips.power_glitch(0x40)
+            chips.power_glitch(0x43)
+            n._board_watchdog()
+            assert n.armed is False
+            res = _arm(n, True)
+            assert res.success is True
+            assert n.backend.board_faults() == {}
+            assert all(regs[0xFE] == 121 for regs in chips.regs.values())
+        finally:
+            if n is not None:
+                n.destroy_node()
+            rclpy.shutdown()
+
+    def test_a_silent_board_still_disarms(self, chips):
+        rclpy.init()
+        n = None
+        try:
+            n = self._armed_node()
+            chips.regs[0x43][0xFD] = 0x00   # 0x43 still driving
+            chips.silent.add(0x40)
+            message = n._board_watchdog()
+            assert message is not None and 'not answering' in message
+            assert n.armed is False
+            assert _is_mock_fleet(n.backend)
+            # 0x40 refused its cut; 0x43 must have had its own anyway.
+            assert chips.regs[0x43][0xFD] == 0x10
+        finally:
+            if n is not None:
+                n.destroy_node()
+            rclpy.shutdown()

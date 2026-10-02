@@ -18,6 +18,10 @@ Safety rules of the project, encoded here:
   - Self locking joints (the L16) drop their signal once settled, so a
     command is never held against a mechanical stop.
   - Mimic fingers are computed here (physical gear), never commanded.
+  - While ARMED, a 1 Hz watchdog reads back every board's config. A board
+    that reset to power-on defaults (asleep, 200 Hz) or stopped answering
+    disarms the node. It never re-arms on its own: /soma/arm again, which
+    re-runs the board init.
 
 Open loop caveat: RC servos give no position feedback. On startup the node
 assumes every joint sits at zero. It does not know the true pose, which is
@@ -35,6 +39,11 @@ from .servo_map import (
 from .trajectory import JointMotion
 
 RATE_HZ = 50.0
+# Board config read-back while ARMED. Not every 50 Hz tick: when a board
+# resets its outputs are already dead, so the check only bounds how long
+# the node keeps claiming otherwise. One second does that (same period as
+# the workbench watchdog) without adding reads to every tick on the bus.
+WATCHDOG_HZ = 1.0
 
 
 class ArmController(Node):
@@ -110,6 +119,7 @@ class ArmController(Node):
         self.pub_js = self.create_publisher(JointState, 'joint_states', 10)
         self.create_service(SetBool, 'soma/arm', self._on_arm)
         self.create_timer(1.0 / RATE_HZ, self._tick)
+        self.create_timer(1.0 / WATCHDOG_HZ, self._board_watchdog)
 
     @property
     def allow_real(self) -> bool:
@@ -176,10 +186,43 @@ class ArmController(Node):
         return True, 'ARMED: real PCA9685 output is live'
 
     def _disarm(self) -> tuple[bool, str]:
-        self.backend.disable_all()
+        try:
+            self.backend.disable_all()
+        except Exception as exc:  # a board off the bus cannot be told
+            self.backend = mock_fleet(SERVO_MAP)
+            self.armed = False
+            return True, (
+                f'DISARMED, back on MOCK, but the signal cut failed ({exc}): '
+                'a board may still be driving. Cut V+ if anything holds.')
         self.backend = mock_fleet(SERVO_MAP)
         self.armed = False
         return True, 'DISARMED: signal cut, back on MOCK'
+
+    def _board_watchdog(self) -> str | None:
+        """1 Hz while ARMED: is every board still running our config?
+
+        Seen on the bench 2026-10-01: both boards lost their shared 3.3 V
+        logic supply for an instant and came back at power-on defaults
+        (MODE1 0x11, oscillator asleep; prescale 0x1E, 200 Hz). Every
+        output went dead while the driver kept writing LED registers and
+        reporting ARMED. A driver that says ARMED over sleeping boards is
+        lying, so a reset disarms through the normal path and says which
+        board. Re-arming stays the explicit /soma/arm call: the fault
+        (a supply, a connector) has to be fixed by a person first.
+
+        Returns the error logged, or None if nothing happened (tests).
+        """
+        if not self.armed:
+            return None
+        faults = self.backend.board_faults()
+        if not faults:
+            return None
+        boards = '; '.join(f'0x{a:02x} {f}' for a, f in faults.items())
+        _, outcome = self._disarm()
+        message = (f'BOARD FAULT: {boards}. {outcome}. Check the 3.3 V '
+                   'logic supply and the I2C harness, then /soma/arm again.')
+        self.get_logger().error(message)
+        return message
 
     def _power_tick(self) -> None:
         """Publish pack voltage and current from INA3221 channel 1 at 1 Hz."""
