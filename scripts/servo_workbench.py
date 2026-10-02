@@ -101,13 +101,51 @@ class Fleet:
         self.last_us = {}                  # key -> pulse currently on the wire
         self.target_us = {}                # key -> where the slider wants it
         self.lock = threading.Lock()
+        self.fault = None                  # set when a board reset under us
+        self.init_boards()
+        self.all_off()
+        threading.Thread(target=self._ramp_loop, daemon=True).start()
+        threading.Thread(target=self._watchdog, daemon=True).start()
+
+    def init_boards(self):
         for a in self.addrs:
             self.bus.write_byte_data(a, MODE1, 0x10)
             self.bus.write_byte_data(a, PRESCALE, 121)   # exactly 50.0 Hz
             self.bus.write_byte_data(a, MODE1, 0x20)
         time.sleep(0.01)
-        self.all_off()
-        threading.Thread(target=self._ramp_loop, daemon=True).start()
+
+    def _watchdog(self):
+        """Once a second: is every board still configured?
+
+        Seen on the bench 2026-10-01: both boards lost their 3.3 V logic
+        supply for an instant and came back at power-on defaults (MODE1
+        0x11 = oscillator asleep, prescale 0x1E = 200 Hz). Every output
+        went dead while this page still showed live pulses. A tool that
+        says ARMED over sleeping boards is lying, so a reset disarms
+        everything and says so; ARM re-configures the boards.
+        """
+        while True:
+            time.sleep(1.0)
+            bad = []
+            for a in self.addrs:
+                try:
+                    mode1 = self.bus.read_byte_data(a, MODE1)
+                    pre = self.bus.read_byte_data(a, PRESCALE)
+                    if mode1 & 0x10 or pre != 121:
+                        bad.append(f'0x{a:02x} reset (MODE1 0x{mode1:02x}, prescale 0x{pre:02x})')
+                except OSError:
+                    bad.append(f'0x{a:02x} not answering')
+            if bad:
+                with self.lock:
+                    was_live = self.armed or bool(self.last_us)
+                    self.armed = False
+                    self.active = None
+                    self.last_us.clear()
+                    self.target_us.clear()
+                    if was_live or self.fault is None:
+                        self.fault = ('BOARD FAULT: ' + '; '.join(bad)
+                                      + '. Disarmed. Check the 3.3 V logic supply, then ARM again.')
+                        print(self.fault, flush=True)
 
     def _ramp_loop(self):
         """50 Hz: walk each commanded output smoothly toward its target.
@@ -302,6 +340,7 @@ function show(k,us,z){document.getElementById('us'+k).textContent=us+' us';
 function flush(k){clearTimeout(timers[k]);timers[k]=null;
  if(pending[k]!=null){const v=pending[k];pending[k]=null;api({action:'set',key:k,us:v});}}
 function update(){
+ if(S.fault)document.getElementById('msg').textContent=S.fault;
  const a=document.getElementById('arm');a.textContent=S.armed?'DISARM':'ARM';a.className=S.armed?'on':'';
  for(const s of S.servos){const k=s.key,d=document.getElementById('sv'+k);if(!d)continue;
   d.className='servo'+(k===S.active?' active':'');
@@ -332,7 +371,8 @@ def make_handler(fleet, cal):
             for key, r in fleet.rows.items():
                 servos.append({**r, 'us': round(fleet.last_us.get(key, 0)) or None,
                                'cal': cal.data.get(str(r['ch']))})
-            return {'armed': fleet.armed, 'active': fleet.active, 'servos': servos}
+            return {'armed': fleet.armed, 'active': fleet.active,
+                    'fault': fleet.fault, 'servos': servos}
 
         def _send(self, code, body, ctype='application/json'):
             data = body.encode()
@@ -355,8 +395,11 @@ def make_handler(fleet, cal):
                 return
             msg = ''
             if act == 'arm':
-                fleet.armed = True
-                msg = 'ARMED. Select ONE joint and press "go ZERO" before moving it.'
+                with fleet.lock:
+                    fleet.init_boards()          # a reset board comes back here
+                    fleet.fault = None
+                    fleet.armed = True
+                msg = 'ARMED (boards re-configured). Select ONE joint and press "go ZERO" before moving it.'
             elif act == 'disarm':
                 fleet.armed = False
                 msg = 'DISARMED (outputs keep their last pulse; use release/ALL OFF to cut).'
