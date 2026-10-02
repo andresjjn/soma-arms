@@ -27,21 +27,24 @@ from soma_driver.servo_map import (  # noqa: E402
 HALF_PI = math.pi / 2
 
 
-#: Mechanical zero of every joint, in microseconds, as captured on
-#: 2026-08-03 (fingers: the zero is CLOSED). Commanding 0.0 must land the
-#: pulse exactly here: this is what the re-splining session bought.
+#: Mechanical zero of every joint, in microseconds, as re-captured on
+#: 2026-10-01 (fingers: the zero is CLOSED; the right yaw zero was not
+#: re-captured and keeps its 2026-08-03 value). Commanding 0.0 must land
+#: the pulse exactly here. Edited 2026-10-01 because the physical fact
+#: changed: the August zeros were superseded by a full re-capture.
 MEASURED_ZERO_US = {
-    'right_arm_finger_l_joint': 850, 'right_arm_wrist_roll_joint': 1680,
-    'right_arm_wrist_pitch_joint': 1960, 'right_arm_elbow_joint': 1140,
-    'right_arm_shoulder_joint': 1000, 'right_arm_yaw_joint': 720,
-    'left_arm_finger_l_joint': 1160, 'left_arm_wrist_roll_joint': 1540,
-    'left_arm_wrist_pitch_joint': 1800, 'left_arm_elbow_joint': 1300,
-    'left_arm_shoulder_joint': 1150, 'left_arm_yaw_joint': 2500,
+    'right_arm_finger_l_joint': 860, 'right_arm_wrist_roll_joint': 1705,
+    'right_arm_wrist_pitch_joint': 1960, 'right_arm_elbow_joint': 935,
+    'right_arm_shoulder_joint': 990, 'right_arm_yaw_joint': 720,
+    'left_arm_finger_l_joint': 1080, 'left_arm_wrist_roll_joint': 1345,
+    'left_arm_wrist_pitch_joint': 1605, 'left_arm_elbow_joint': 1205,
+    'left_arm_shoulder_joint': 1075, 'left_arm_yaw_joint': 2370,
 }
 
 
 class TestMeasuredCalibration:
-    """The 2026-08-03 capture session, as executable spec."""
+    """The calibration capture (2026-10-01, superseding 2026-08-03), as
+    executable spec."""
 
     @pytest.mark.parametrize('joint', sorted(MEASURED_ZERO_US))
     def test_commanding_zero_lands_on_the_measured_zero(self, joint):
@@ -49,11 +52,12 @@ class TestMeasuredCalibration:
         assert us == pytest.approx(MEASURED_ZERO_US[joint], abs=0.5), joint
 
     def test_saturates_at_the_measured_stops(self):
-        """Safety rule number one, now with real numbers: the left elbow
-        physically stops at 800 us outward and 2300 us inward."""
+        """Safety rule number one, with real numbers: the left elbow
+        physically stops at 630 us outward and 2455 us inward (captured
+        2026-10-01; it was 800/2300 in August)."""
         spec = SERVO_MAP['left_arm_elbow_joint']
-        assert spec.command_to_us(math.pi) == pytest.approx(800.0)
-        assert spec.command_to_us(-10.0) == pytest.approx(2300.0)
+        assert spec.command_to_us(math.pi) == pytest.approx(630.0)
+        assert spec.command_to_us(-10.0) == pytest.approx(2455.0)
 
     def test_hug_convention_every_arm_joint_can_hug(self):
         """Negative = inward. Every arm joint must have inward travel."""
@@ -69,13 +73,15 @@ class TestMeasuredCalibration:
             spec = SERVO_MAP[f'{side}_arm_shoulder_joint']
             assert spec.upper > 4.0 * abs(spec.lower), side
 
-    def test_left_yaw_zero_sits_at_its_end_stop(self):
-        """Known flag, encoded so it cannot be forgotten: the left yaw
-        cannot rotate outward at all (upper == 0.0). Re-spline one tooth
-        pending; when that happens, THIS test is the one to update."""
+    def test_left_yaw_recovered_outward_travel(self):
+        """Replaces test_left_yaw_zero_sits_at_its_end_stop, as that test
+        demanded when the flag was fixed: in August the left yaw zero sat
+        AT its 2500 us stop (upper == 0.0, no outward travel). The
+        2026-10-01 capture puts the zero at 2370 us, so the joint can
+        rotate outward again (about 9 deg)."""
         spec = SERVO_MAP['left_arm_yaw_joint']
-        assert spec.upper == 0.0
-        assert spec.command_to_us(0.0) == pytest.approx(2500.0)
+        assert spec.upper > 0.1
+        assert spec.command_to_us(0.0) == pytest.approx(2370.0, abs=0.5)
 
 
 class TestL16Torso:
@@ -171,7 +177,7 @@ class TestGoldenRule:
         mock = MockPca9685()
         spec = SERVO_MAP['left_arm_shoulder_joint']
         us = mock.write(spec, 0.0)
-        assert us == pytest.approx(1150.0, abs=0.5)   # its measured zero
+        assert us == pytest.approx(1075.0, abs=0.5)   # its measured zero
         assert mock.last_us[spec.channel] == pytest.approx(us)
 
     def test_disable_all_clears_everything(self):
@@ -224,6 +230,8 @@ class TestI2CRetry:
 
 
 #: The complete channel table, transcribed field by field from the capture
+#: (re-captured 2026-10-01; generated from calibration/servo_calibration_
+#: 2026-10-01.json with each joint's direction checked against August)
 #: of 2026-08-03 (calibration/servo_calibration_2026-08-03.json). This is
 #: the contract: a single wrong field here is a servo driven to the wrong
 #: place. min_us > max_us means more microseconds moves the joint INWARD
@@ -236,18 +244,18 @@ class TestI2CRetry:
 #: numbers briefly read 1-12 after a header was counted from the wrong
 #: end; a spare-servo test, output by output, restored these.)
 EXACT_SERVO_MAP = {
-    'right_arm_finger_l_joint':    (15, 850.0, 2340.0, 0.0, 1.0, 2.5, 0x40),
-    'right_arm_wrist_roll_joint':  (14, 520.0, 2490.0, -1.8222, 1.2724, 2.5, 0x40),
-    'right_arm_wrist_pitch_joint': (13, 660.0, 2500.0, -2.0420, 0.8482, 2.5, 0x40),
-    'right_arm_elbow_joint':       (12, 2500.0, 520.0, -2.1363, 0.9739, 2.5, 0x40),
-    'right_arm_shoulder_joint':    (11, 700.0, 2500.0, -0.4712, 2.3562, 2.5, 0x40),
-    'right_arm_yaw_joint':         (10, 2500.0, 500.0, -2.7960, 0.3456, 2.5, 0x40),
-    'left_arm_finger_l_joint':     (9, 1160.0, 2190.0, 0.0, 1.0, 2.5, 0x43),
-    'left_arm_wrist_roll_joint':   (8, 2500.0, 680.0, -1.5080, 1.3509, 2.5, 0x43),
-    'left_arm_wrist_pitch_joint':  (7, 770.0, 2500.0, -1.6179, 1.0996, 2.5, 0x43),
-    'left_arm_elbow_joint':        (6, 2300.0, 800.0, -1.5708, 0.7854, 2.5, 0x43),
-    'left_arm_shoulder_joint':     (5, 900.0, 2500.0, -0.3927, 2.1206, 2.5, 0x43),
-    'left_arm_yaw_joint':          (4, 540.0, 2500.0, -3.0788, 0.0, 2.5, 0x43),
+    'right_arm_finger_l_joint':    (15, 860.0, 2185.0, 0.0, 1.0, 2.5, 0x40),
+    'right_arm_wrist_roll_joint':  (14, 615.0, 2410.0, -1.7122, 1.1074, 2.5, 0x40),
+    'right_arm_wrist_pitch_joint': (13, 760.0, 2270.0, -1.8850, 0.4869, 2.5, 0x40),
+    'right_arm_elbow_joint':       (12, 2460.0, 535.0, -2.3955, 0.6283, 2.5, 0x40),
+    'right_arm_shoulder_joint':    (11, 710.0, 2480.0, -0.4398, 2.3405, 2.5, 0x40),
+    'right_arm_yaw_joint':         (10, 2425.0, 545.0, -2.6782, 0.2749, 2.5, 0x40),
+    'left_arm_finger_l_joint':     (9, 1080.0, 2130.0, 0.0, 1.0, 2.5, 0x43),
+    'left_arm_wrist_roll_joint':   (8, 2280.0, 580.0, -1.4687, 1.2017, 2.5, 0x43),
+    'left_arm_wrist_pitch_joint':  (7, 585.0, 2430.0, -1.6022, 1.2959, 2.5, 0x43),
+    'left_arm_elbow_joint':        (6, 2455.0, 630.0, -1.9635, 0.9032, 2.5, 0x43),
+    'left_arm_shoulder_joint':     (5, 770.0, 2460.0, -0.4791, 2.1756, 2.5, 0x43),
+    'left_arm_yaw_joint':          (4, 530.0, 2475.0, -2.8903, 0.1649, 2.5, 0x43),
     # The L16 keeps its 2026-07-22 anchors: its stops have not been
     # re-measured (that capture comes with the torso build).
     'torso_lift_joint':            (3, 1964.3, 1035.7, 0.005, 0.135, 0.020, 0x40),
@@ -304,9 +312,10 @@ class TestSoftLimitClamp:
         assert spec.clamp(0.07) == pytest.approx(0.07)
 
     def test_clamp_holds_arm_servos_inside_the_measured_range(self):
+        # Limits re-captured 2026-10-01 (August: -1.5708 .. 0.7854).
         spec = SERVO_MAP['left_arm_elbow_joint']
-        assert spec.clamp(math.pi) == pytest.approx(0.7854)
-        assert spec.clamp(-math.pi) == pytest.approx(-1.5708)
+        assert spec.clamp(math.pi) == pytest.approx(0.9032)
+        assert spec.clamp(-math.pi) == pytest.approx(-1.9635)
 
     def test_clamp_and_command_to_us_agree(self):
         for name, spec in SERVO_MAP.items():

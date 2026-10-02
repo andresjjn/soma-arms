@@ -89,14 +89,14 @@ Z0=$(read_z)
 require_z "$Z0"
 echo "  tool0 z initial = ${Z0} (expected ~0.006: fingertips nearly touch the plate)"
 
-echo '--- command: left elbow to -2.0 rad, clamped to its -1.5708 soft limit ---'
+echo '--- command: left elbow to -2.5 rad, clamped to its -1.9635 soft limit ---'
 ros2 topic pub --once /soma/command sensor_msgs/msg/JointState \
-  "{name: [left_arm_elbow_joint], position: [-2.0]}"
+  "{name: [left_arm_elbow_joint], position: [-2.5]}"
 sleep 5
 
 Z1=$(read_z)
 require_z "$Z1"
-echo "  tool0 z final = ${Z1} (expected ~0.231)"
+echo "  tool0 z final = ${Z1} (expected ~0.317)"
 
 kill $RSP $DRV 2>/dev/null || true
 
@@ -104,10 +104,14 @@ python3 - "$Z0" "$Z1" <<'EOF'
 import sys
 z0, z1 = float(sys.argv[1]), float(sys.argv[2])
 # Hanging chain below the elbow: fore 0.075 + wrist 0.0664 + gripper to
-# tool0 0.0836 = 0.225 m. A 90 degree elbow bend lifts the tool exactly
-# that much, and the overshooting command proves soft-limit clamping.
+# tool0 0.0836 = L = 0.225 m. The -2.5 rad command overshoots and must
+# clamp at the measured limit (-1.9635 rad, calibration of 2026-10-01),
+# so the tool rises L * (1 - cos 1.9635) = 0.311 m: the lift proves both
+# the kinematic chain and the soft-limit clamp.
+import math
+lift = 0.225 * (1 - math.cos(1.9635))
 assert abs(z0 - 0.0057) < 0.005, f'initial z {z0} != 0.0057'
-assert abs(z1 - 0.2307) < 0.005, f'final z {z1} != 0.2307'
-assert abs((z1 - z0) - 0.225) < 0.005, 'elbow bend did not lift the tool 225 mm'
+assert abs(z1 - (0.0057 + lift)) < 0.005, f'final z {z1} != {0.0057 + lift:.4f}'
+assert abs((z1 - z0) - lift) < 0.005, f'elbow bend did not lift the tool {1000*lift:.0f} mm'
 print(f'\nSMOKE TEST OK: the left elbow lifted tool0 {1000*(z1-z0):.1f} mm, confirmed by TF')
 EOF

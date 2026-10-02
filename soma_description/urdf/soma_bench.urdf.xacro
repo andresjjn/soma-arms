@@ -91,11 +91,11 @@
 
   <!-- left arm: measured limits of 2026-08-03, hug sense side=+1 -->
   <xacro:soma_arm prefix="left_arm_" parent="bench_link" side="1"
-                  yaw_lower="-3.0788" yaw_upper="0.0"
-                  shoulder_lower="-0.3927" shoulder_upper="2.1206"
-                  elbow_lower="-1.5708" elbow_upper="0.7854"
-                  wrist_pitch_lower="-1.6179" wrist_pitch_upper="1.0996"
-                  wrist_roll_lower="-1.5080" wrist_roll_upper="1.3509">
+                  yaw_lower="-2.8903" yaw_upper="0.1649"
+                  shoulder_lower="-0.4791" shoulder_upper="2.1756"
+                  elbow_lower="-1.9635" elbow_upper="0.9032"
+                  wrist_pitch_lower="-1.6022" wrist_pitch_upper="1.2959"
+                  wrist_roll_lower="-1.4687" wrist_roll_upper="1.2017">
     <origin xyz="0 ${mount_ly/2} ${mount_h}" rpy="${-pi/2} ${pi/2} 0"/>
   </xacro:soma_arm>
 

@@ -1,0 +1,97 @@
+{
+  "10": {
+    "address": "0x40",
+    "date": "2026-10-01",
+    "max": 545,
+    "min": 2425,
+    "name": "right_arm_yaw_joint"
+  },
+  "11": {
+    "address": "0x40",
+    "date": "2026-10-01",
+    "max": 2480,
+    "min": 710,
+    "name": "right_arm_shoulder_joint",
+    "zero": 990
+  },
+  "12": {
+    "address": "0x40",
+    "date": "2026-10-01",
+    "max": 535,
+    "min": 2460,
+    "name": "right_arm_elbow_joint",
+    "zero": 935
+  },
+  "13": {
+    "address": "0x40",
+    "date": "2026-10-01",
+    "max": 2270,
+    "min": 760,
+    "name": "right_arm_wrist_pitch_joint",
+    "zero": 1960
+  },
+  "14": {
+    "address": "0x40",
+    "date": "2026-10-01",
+    "max": 2410,
+    "min": 615,
+    "name": "right_arm_wrist_roll_joint",
+    "zero": 1705
+  },
+  "15": {
+    "address": "0x40",
+    "date": "2026-10-01",
+    "max": 2185,
+    "min": 860,
+    "name": "right_arm_finger_l_joint",
+    "zero": 860
+  },
+  "4": {
+    "address": "0x43",
+    "date": "2026-10-01",
+    "max": 2475,
+    "min": 530,
+    "name": "left_arm_yaw_joint",
+    "zero": 2370
+  },
+  "5": {
+    "address": "0x43",
+    "date": "2026-10-01",
+    "max": 2460,
+    "min": 770,
+    "name": "left_arm_shoulder_joint",
+    "zero": 1075
+  },
+  "6": {
+    "address": "0x43",
+    "date": "2026-10-01",
+    "max": 630,
+    "min": 2455,
+    "name": "left_arm_elbow_joint",
+    "zero": 1205
+  },
+  "7": {
+    "address": "0x43",
+    "date": "2026-10-01",
+    "max": 2430,
+    "min": 585,
+    "name": "left_arm_wrist_pitch_joint",
+    "zero": 1605
+  },
+  "8": {
+    "address": "0x43",
+    "date": "2026-10-01",
+    "max": 580,
+    "min": 2280,
+    "name": "left_arm_wrist_roll_joint",
+    "zero": 1345
+  },
+  "9": {
+    "address": "0x43",
+    "date": "2026-10-01",
+    "max": 2130,
+    "min": 1080,
+    "name": "left_arm_finger_l_joint",
+    "zero": 1080
+  }
+}
