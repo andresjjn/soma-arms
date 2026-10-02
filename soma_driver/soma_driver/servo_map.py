@@ -19,11 +19,12 @@ Sources of truth:
   numbers, so the physical move was six connectors plus the address
   column below. Board #2 has no silkscreen either: the first armed
   session re-confirms channel by channel, same ritual as 2026-07-22.
-- 2026-10-01: Andres rewired both arms on the two-board harness. Same
-  order (gripper first, base yaw last), new numbers: right arm 1 to 6
-  on 0x40, left arm 7 to 12 on 0x43, "right" being the robot's own right.
-  The L16 (not on this bench) moves from 3 to 15. Neither board has a
-  silkscreen: the first armed sign_check re-confirms every channel.
+- 2026-10-01, a lesson worth keeping: the harness was reported as "1 to
+  12", the map followed, and the right arm went dead. Counted from the
+  wrong end of an unlabeled header. A pulse sweep plus a spare servo,
+  output by output, proved the physical truth: still 15 down to 10 on
+  0x40 and 9 down to 4 on 0x43. Never trust a channel number that was
+  not proven by moving the servo on it.
 
 See docs/wiring.md for the full channel table and docs/hardware.md for
 part numbers and datasheets.
@@ -93,26 +94,25 @@ HALF_PI = 1.5707963267948966
 #     left); physical check pending.
 
 SERVO_MAP: dict[str, ServoSpec] = {
-    # Right arm on board 0x40, channels 1 to 6, gripper first (rewired
-    # 2026-10-01: Andres's two-board harness; order unchanged, numbers new).
-    'right_arm_finger_l_joint':    ServoSpec(1, 850.0, 2340.0, 0.0, 1.0, 2.5),   # F: 850 closed, 2340 open
-    'right_arm_wrist_roll_joint':  ServoSpec(2, 520.0, 2490.0, -1.8222, 1.2724, 2.5),   # E, zero 1680
-    'right_arm_wrist_pitch_joint': ServoSpec(3, 660.0, 2500.0, -2.0420, 0.8482, 2.5),   # D, zero 1960
-    'right_arm_elbow_joint':       ServoSpec(4, 2500.0, 520.0, -2.1363, 0.9739, 2.5),   # C, zero 1140, inverted
-    'right_arm_shoulder_joint':    ServoSpec(5, 700.0, 2500.0, -0.4712, 2.3562, 2.5),   # B, zero 1000
-    'right_arm_yaw_joint':         ServoSpec(6, 2500.0, 500.0, -2.7960, 0.3456, 2.5),   # A, zero 720, inverted
-    # Left arm on board 0x43, channels 7 to 12, same order, mirrored signs
-    # (rewired 2026-10-01). Pulses and limits are untouched on purpose:
-    # they belong to the servos and their horns, not to the driver board.
-    'left_arm_finger_l_joint':    ServoSpec(7, 1160.0, 2190.0, 0.0, 1.0, 2.5, address=0x43),    # F: 1160 closed, 2190 open
+    # Right arm on board 0x40: channels 15 down to 10, gripper first
+    # (measured wiring, re-proven 2026-10-01).
+    'right_arm_finger_l_joint':    ServoSpec(15, 850.0, 2340.0, 0.0, 1.0, 2.5),   # F: 850 closed, 2340 open
+    'right_arm_wrist_roll_joint':  ServoSpec(14, 520.0, 2490.0, -1.8222, 1.2724, 2.5),   # E, zero 1680
+    'right_arm_wrist_pitch_joint': ServoSpec(13, 660.0, 2500.0, -2.0420, 0.8482, 2.5),   # D, zero 1960
+    'right_arm_elbow_joint':       ServoSpec(12, 2500.0, 520.0, -2.1363, 0.9739, 2.5),   # C, zero 1140, inverted
+    'right_arm_shoulder_joint':    ServoSpec(11, 700.0, 2500.0, -0.4712, 2.3562, 2.5),   # B, zero 1000
+    'right_arm_yaw_joint':         ServoSpec(10, 2500.0, 500.0, -2.7960, 0.3456, 2.5),   # A, zero 720, inverted
+    # Left arm on board 0x43 (since 2026-08-12): channels 9 down to 4,
+    # same order, mirrored signs. Pulses and limits are untouched on
+    # purpose: they belong to the servos and their horns, not the board.
+    'left_arm_finger_l_joint':    ServoSpec(9, 1160.0, 2190.0, 0.0, 1.0, 2.5, address=0x43),    # F: 1160 closed, 2190 open
     'left_arm_wrist_roll_joint':  ServoSpec(8, 2500.0, 680.0, -1.5080, 1.3509, 2.5, address=0x43),    # E, zero 1540, inverted
-    'left_arm_wrist_pitch_joint': ServoSpec(9, 770.0, 2500.0, -1.6179, 1.0996, 2.5, address=0x43),    # D, zero 1800
-    'left_arm_elbow_joint':       ServoSpec(10, 2300.0, 800.0, -1.5708, 0.7854, 2.5, address=0x43),    # C, zero 1300, inverted
-    'left_arm_shoulder_joint':    ServoSpec(11, 900.0, 2500.0, -0.3927, 2.1206, 2.5, address=0x43),    # B, zero 1150
-    'left_arm_yaw_joint':         ServoSpec(12, 540.0, 2500.0, -3.0788, 0.0, 2.5, address=0x43),       # A, zero AT the stop
-    # Torso: L16-140. Verified on channel 3 on 2026-07-22; REASSIGNED to
-    # channel 15 on 2026-10-01 because the right wrist pitch now owns 3.
-    # The torso is not on this bench: re-verify with power on when it is.
+    'left_arm_wrist_pitch_joint': ServoSpec(7, 770.0, 2500.0, -1.6179, 1.0996, 2.5, address=0x43),    # D, zero 1800
+    'left_arm_elbow_joint':       ServoSpec(6, 2300.0, 800.0, -1.5708, 0.7854, 2.5, address=0x43),    # C, zero 1300, inverted
+    'left_arm_shoulder_joint':    ServoSpec(5, 900.0, 2500.0, -0.3927, 2.1206, 2.5, address=0x43),    # B, zero 1150
+    'left_arm_yaw_joint':         ServoSpec(4, 540.0, 2500.0, -3.0788, 0.0, 2.5, address=0x43),       # A, zero AT the stop
+    # Torso: L16-140 on channel 3 (VERIFIED with power on, 2026-07-22).
+    # Not on this bench: re-verify with power on when the torso returns.
     #
     # This unit has an INVERTED convention (measured, not from the
     # datasheet): 2000 us = retracted, 1000 us = extended. min_us > max_us
@@ -124,8 +124,8 @@ SERVO_MAP: dict[str, ServoSpec] = {
     # 2000/1000 us = 0/140 mm; the anchors here are the pulse widths at
     # 5 mm and 135 mm so that saturation can never reach a hard stop.
     #
-    # 0x40 spares: 0 (under suspicion, unconfirmed) and 7 to 14.
-    'torso_lift_joint': ServoSpec(15, 1964.3, 1035.7, 0.005, 0.135, 0.020),
+    # 0x40 spares: 1 and 2, and 0 (under suspicion, unconfirmed).
+    'torso_lift_joint': ServoSpec(3, 1964.3, 1035.7, 0.005, 0.135, 0.020),
 }
 
 # Joints that RELEASE the PWM signal once settled on target (0.5 s).
