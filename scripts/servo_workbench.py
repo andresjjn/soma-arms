@@ -152,30 +152,47 @@ class Fleet:
             self.target_us.pop(key, None)
 
     def all_off(self):
+        # A kill switch must not depend on every board being healthy: cut
+        # each board on its own, so a missing or flaky one cannot stop the
+        # cut from reaching the rest.
         with self.lock:
             for a in self.addrs:
-                self.bus.write_byte_data(a, ALL_OFF_H, 0x10)
+                try:
+                    self.bus.write_byte_data(a, ALL_OFF_H, 0x10)
+                except OSError as exc:
+                    print(f'ALL OFF: board 0x{a:02x} did not answer ({exc})')
             self.last_us.clear()
             self.target_us.clear()
             self.armed = False
             self.active = None
 
 
-def find_bus(addrs, forced=None):
-    """Scan /dev/i2c-* for the bus where EVERY board in the map answers."""
+def present_boards(addrs, forced=None):
+    """Find the bus and which of the map's boards answer on it.
+
+    Returns (bus_number, present_addresses). A bench with one board
+    unplugged still gets a workbench for the boards that are there; the
+    missing board's joints are simply left off the page.
+    """
     from smbus2 import SMBus
     candidates = ([forced] if forced is not None else
                   sorted(int(p.rsplit('-', 1)[1]) for p in glob.glob('/dev/i2c-*')))
     for n in candidates:
+        found = []
         try:
             with SMBus(n) as b:
                 for a in addrs:
-                    b.read_byte_data(a, MODE1)
-            return n
+                    try:
+                        b.read_byte_data(a, MODE1)
+                        found.append(a)
+                    except OSError:
+                        pass
         except OSError:
             continue
+        if found:
+            return n, found
     raise SystemExit(
-        'No bus has every board of the map: ' + ', '.join(hex(a) for a in addrs)
+        'No board of the map answers on any bus: ' + ', '.join(hex(a) for a in addrs)
         + '. Check wiring, address bridges, and that your user can read '
         '/dev/i2c-* (or use sudo).')
 
@@ -365,10 +382,15 @@ def main():
 
     rows = joint_rows()
     addrs = sorted({r['addr'] for r in rows})
-    bus_num = find_bus(addrs, args.bus)
+    bus_num, present = present_boards(addrs, args.bus)
+    missing = [a for a in addrs if a not in present]
+    if missing:
+        print('WARNING: boards not answering, their joints are left out: '
+              + ', '.join(hex(a) for a in missing))
+    rows = [r for r in rows if r['addr'] in present]
     fleet = Fleet(bus_num, rows)
     cal = Cal()
-    print(f'Boards {", ".join(hex(a) for a in addrs)} on /dev/i2c-{bus_num}: '
+    print(f'Boards {", ".join(hex(a) for a in present)} on /dev/i2c-{bus_num}: '
           f'50 Hz set, ALL OFF, DISARMED. {len(rows)} joints from SERVO_MAP.')
     print(f'Open http://<this-host>:{args.port}  (calibration -> {CAL_FILE})')
     server = ThreadingHTTPServer(('0.0.0.0', args.port), make_handler(fleet, cal))
