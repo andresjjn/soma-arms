@@ -73,27 +73,30 @@ class TestSequences:
             assert pose in POSES, f'{seq}: unknown pose {pose}'
             assert dwell > 0.0, f'{seq}: non-positive dwell after {pose}'
 
-    def test_demo_starts_and_ends_at_home(self):
-        steps = SEQUENCES['demo']
-        assert steps[0][0] == 'home'
-        assert steps[-1][0] == 'home'
+    @pytest.mark.parametrize('seq', sorted(SEQUENCES))
+    def test_every_sequence_starts_and_ends_at_home(self, seq):
+        steps = SEQUENCES[seq]
+        assert steps[0][0] == 'home', seq
+        assert steps[-1][0] == 'home', seq
 
-    def test_demo_dwells_cover_the_travel_time(self):
+    @pytest.mark.parametrize('seq', sorted(SEQUENCES))
+    def test_every_dwell_covers_the_travel_time(self, seq):
         """Every dwell must outlast the worst-case minimum-jerk travel."""
         current = dict(HOME)
-        for pose, dwell in SEQUENCES['demo']:
+        for pose, dwell in SEQUENCES[seq]:
             targets = pose_targets(pose)
             assert dwell >= settle_time_s(targets, current), (
-                f'demo: dwell {dwell}s after {pose} shorter than the ramp')
+                f'{seq}: dwell {dwell}s after {pose} shorter than the ramp')
             current.update(targets)
 
-    def test_demo_moves_gently(self):
-        """No step of the demo asks any joint to jump more than 1 rad."""
+    @pytest.mark.parametrize('seq', sorted(SEQUENCES))
+    def test_every_sequence_moves_gently(self, seq):
+        """No step of any sequence asks a joint to jump more than 1 rad."""
         current = dict(HOME)
-        for pose, _ in SEQUENCES['demo']:
+        for pose, _ in SEQUENCES[seq]:
             for name, value in pose_targets(pose).items():
                 assert abs(value - current[name]) <= 1.0, (
-                    f'demo: {pose} moves {name} too far in one step')
+                    f'{seq}: {pose} moves {name} too far in one step')
                 current[name] = value
 
 

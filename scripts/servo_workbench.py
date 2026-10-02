@@ -46,6 +46,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'soma_driver'))
+from soma_driver.primitives import (  # noqa: E402
+    HOME, SEQUENCES, pose_targets, settle_time_s)
 from soma_driver.servo_map import SERVO_MAP  # noqa: E402
 
 MODE1, PRESCALE, LED0, ALL_OFF_H = 0x00, 0xFE, 0x06, 0xFD
@@ -111,6 +113,39 @@ def group_targets(rows, cal_data, value, cap, arms):
     return out
 
 
+def output_key(spec):
+    return f'{spec.address:02x}:{spec.channel}'
+
+
+def plan_sequence(name):
+    """Turn a primitives SEQUENCE into timed pulse steps. Pure.
+
+    Same source of truth as the ROS driver (soma_driver/primitives.py):
+    poses in radians, converted through SERVO_MAP (clamped), each step's
+    move time is the driver's worst-case minimum-jerk travel at the joint
+    rate cap, and the step lasts max(dwell, move). Joints a pose omits keep
+    their previous target, exactly as on the driver.
+    """
+    current = dict(HOME)
+    steps = []
+    for pose, dwell in SEQUENCES[name]:
+        targets = pose_targets(pose)
+        move = settle_time_s(targets, current)
+        current.update(targets)
+        steps.append({
+            'pose': pose, 'dwell': dwell, 'move_s': move,
+            'us': {output_key(SERVO_MAP[j]): SERVO_MAP[j].command_to_us(v)
+                   for j, v in targets.items()},
+        })
+    return steps
+
+
+def min_jerk(t):
+    """Normalized minimum-jerk position, t in [0, 1]."""
+    t = max(0.0, min(1.0, t))
+    return t * t * t * (10 - 15 * t + 6 * t * t)
+
+
 class Fleet:
     """Every PCA9685 in the map on one bus, with the safety rules baked in."""
 
@@ -126,6 +161,7 @@ class Fleet:
         self.target_us = {}                # key -> where the slider wants it
         self.lock = threading.Lock()
         self.fault = None                  # set when a board reset under us
+        self.player = None                 # sequence player status
         self.init_boards()
         self.all_off()
         threading.Thread(target=self._ramp_loop, daemon=True).start()
@@ -229,6 +265,87 @@ class Fleet:
             self.active = None
             return f'group: {len(targets)} joints ramping'
 
+    # ---- sequence player -------------------------------------------------
+    def play(self, name, step_mode):
+        with self.lock:
+            if not self.armed:
+                return 'refused: DISARMED'
+            if getattr(self, 'raw', False):
+                return 'refused: no sequences in raw test mode.'
+            if self.player and self.player.get('running'):
+                return 'refused: a sequence is already playing.'
+            try:
+                steps = plan_sequence(name)
+            except KeyError:
+                return f'refused: unknown sequence {name}'
+            missing = {k for st in steps for k in st['us']} - set(self.rows)
+            if missing:
+                return f'refused: sequence needs outputs not on the bus: {sorted(missing)}'
+            self.active = None
+            self.player = {'name': name, 'running': True, 'step': 0,
+                           'of': len(steps), 'pose': None, 'step_mode': step_mode,
+                           'waiting': False}
+            self._next = threading.Event()
+            self._stop = threading.Event()
+        threading.Thread(target=self._play, args=(steps,), daemon=True).start()
+        return f'playing {name} ({len(steps)} steps{", step by step" if step_mode else ""})'
+
+    def player_next(self):
+        if self.player and self.player.get('waiting'):
+            self._next.set()
+            return 'next step'
+        return 'refused: the player is not waiting.'
+
+    def player_stop(self):
+        if self.player and self.player.get('running'):
+            self._stop.set()
+            self._next.set()
+            return 'sequence stopped: every joint holds where it is.'
+        return 'nothing is playing.'
+
+    def _play(self, steps):
+        try:
+            for i, st in enumerate(steps):
+                with self.lock:
+                    if not self.armed or self._stop.is_set():
+                        return
+                    self.player.update(step=i + 1, pose=st['pose'], waiting=False)
+                    start = {}
+                    for key in st['us']:
+                        if key not in self.last_us:
+                            # first pulse: the hanging zero, never a far target
+                            zero = self.rows[key]['zero_us']
+                            self._write_us(key, zero)
+                            self.last_us[key] = zero
+                        start[key] = self.last_us[key]
+                t0, move = time.monotonic(), max(st['move_s'], TICK_S)
+                while True:
+                    tau = (time.monotonic() - t0) / move
+                    with self.lock:
+                        if not self.armed or self._stop.is_set():
+                            return
+                        k = min_jerk(tau)
+                        for key, goal in st['us'].items():
+                            us = start[key] + k * (goal - start[key])
+                            self._write_us(key, us)
+                            self.last_us[key] = us
+                            self.target_us[key] = us
+                    if tau >= 1.0:
+                        break
+                    time.sleep(TICK_S)
+                rest = max(st['dwell'], st['move_s']) - (time.monotonic() - t0)
+                if self._stop.wait(max(0.0, rest)):
+                    return
+                if self.player['step_mode'] and i + 1 < len(steps):
+                    self.player['waiting'] = True
+                    self._next.wait()
+                    self._next.clear()
+                    if self._stop.is_set():
+                        return
+        finally:
+            if self.player:
+                self.player.update(running=False, waiting=False)
+
     def release(self, key):
         with self.lock:
             r = self.rows[key]
@@ -238,6 +355,9 @@ class Fleet:
             self.target_us.pop(key, None)
 
     def all_off(self):
+        if getattr(self, '_stop', None) is not None:
+            self._stop.set()
+            self._next.set()
         # A kill switch must not depend on every board being healthy: cut
         # each board on its own, so a missing or flaky one cannot stop the
         # cut from reaching the rest.
@@ -376,6 +496,19 @@ input[type=range]{width:100%}
   <button onclick="msl.value=0;mshow();msend()">all to ZERO</button>
  </div>
 </section>
+<section class="master" aria-label="Sequences">
+ <h2>Sequences</h2>
+ <p>Played exactly as the ROS driver would: poses from primitives.py, minimum-jerk at the 2.5 rad/s cap.
+ Use step by step the first time and check every direction before the next click.</p>
+ <div class="mctl">
+  <select id="seq" aria-label="Sequence"></select>
+  <button id="sstep" onclick="play(true)">Step by step</button>
+  <button id="splay" onclick="play(false)" style="background:var(--go)">Play</button>
+  <button id="snext" onclick="api({action:'next'})" style="background:#285e8e">Next step</button>
+  <button id="sstop" onclick="api({action:'stop'})" style="background:var(--stop)">Stop</button>
+  <span id="sstat" style="font-family:ui-monospace,monospace;color:var(--muted)"></span>
+ </div>
+</section>
 <div class="arms">
  <section class="arm right"><h2>Right arm <small>board 0x40 · ch15-10</small></h2><div id="list-right"></div></section>
  <section class="arm left"><h2>Left arm <small>board 0x43 · ch9-4</small></h2><div id="list-left"></div></section>
@@ -441,10 +574,18 @@ function update(){
 async function api(body){const r=await fetch('/api',{method:'POST',body:JSON.stringify(body)});
  const j=await r.json();S=j.state;
  if(body.action!=='state'&&j.msg)document.getElementById('msg').textContent=j.msg;
- if(!built)build();update();}
+ if(!built)build();update();updateSeq();}
 function setUs(k,v){const sl=document.getElementById('sl'+k);sl.value=v;
  const s=S.servos.find(x=>x.key===k);show(k,v,s.zero_us);api({action:'set',key:k,us:v});}
 function nudge(k,d){setUs(k,+document.getElementById('sl'+k).value+d);}
+let seqBuilt=false;
+function play(step){api({action:'play',name:document.getElementById('seq').value,step_mode:step});}
+function updateSeq(){
+ if(!seqBuilt&&S.sequences){const sel=document.getElementById('seq');
+  for(const n of S.sequences){const o=document.createElement('option');o.textContent=n;sel.appendChild(o);}seqBuilt=true;}
+ const P=S.player,st=document.getElementById('sstat');
+ st.textContent=P?(P.running?`${P.name}: step ${P.step}/${P.of} (${P.pose})${P.waiting?' · waiting for Next':''}`:`${P.name}: finished`):'';
+ document.getElementById('snext').disabled=!(P&&P.waiting);}
 function toggleArm(){api({action:S.armed?'disarm':'arm'})}
 api({action:'state'});setInterval(()=>api({action:'state'}),1000);
 </script></body></html>"""
@@ -464,7 +605,8 @@ def make_handler(fleet, cal):
                                'us': round(fleet.last_us.get(key, 0)) or None,
                                'cal': c or None})
             return {'armed': fleet.armed, 'active': fleet.active,
-                    'fault': fleet.fault, 'servos': servos}
+                    'fault': fleet.fault, 'player': fleet.player,
+                    'sequences': sorted(SEQUENCES), 'servos': servos}
 
         def _send(self, code, body, ctype='application/json'):
             data = body.encode()
@@ -499,11 +641,13 @@ def make_handler(fleet, cal):
                 fleet.all_off()
                 msg = 'ALL OFF: every output of every board released, disarmed.'
             elif act == 'select':
+                fleet.player_stop()
                 fleet.active = key
                 msg = f'{fleet.rows[key]["name"]} (board 0x{fleet.rows[key]["addr"]:02x} ch{fleet.rows[key]["ch"]}) is now the active servo.'
             elif act == 'set':
                 msg = f'{key}: {fleet.command(key, req.get("us", fleet.rows[key]["zero_us"]))}'
             elif act == 'group':
+                fleet.player_stop()
                 if getattr(fleet, 'raw', False):
                     msg = 'refused: no master slider in raw test mode.'
                 else:
@@ -512,6 +656,12 @@ def make_handler(fleet, cal):
                                       float(req.get('cap', 0.25)),
                                       set(req.get('arms', [])))
                     msg = fleet.group(t) if t else 'refused: no arm selected.'
+            elif act == 'play':
+                msg = fleet.play(req.get('name', ''), bool(req.get('step_mode')))
+            elif act == 'next':
+                msg = fleet.player_next()
+            elif act == 'stop':
+                msg = fleet.player_stop()
             elif act == 'release':
                 fleet.release(key)
                 msg = f'{key} released (signal cut).'

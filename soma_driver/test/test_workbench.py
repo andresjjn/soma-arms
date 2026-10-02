@@ -84,3 +84,39 @@ class TestMasterSlider:
         from servo_workbench import group_targets
         t = group_targets(self.ROWS, {}, 1.0, 1.0, {'right'})
         assert t['40:15'] == (850, 2340)
+
+
+class TestSequencePlayer:
+    """plan_sequence: the workbench plays primitives.py exactly as planned."""
+
+    def test_min_jerk_endpoints_and_midpoint(self):
+        from servo_workbench import min_jerk
+        assert min_jerk(0.0) == 0.0 and min_jerk(1.0) == 1.0
+        assert min_jerk(0.5) == 0.5
+        assert min_jerk(-1.0) == 0.0 and min_jerk(2.0) == 1.0
+
+    def test_every_sequence_plans_onto_real_outputs(self):
+        from servo_workbench import output_key, plan_sequence
+        from soma_driver.primitives import SEQUENCES
+        keys = {output_key(s) for s in SERVO_MAP.values()}
+        for name in SEQUENCES:
+            for st in plan_sequence(name):
+                assert set(st['us']) <= keys, name
+                assert all(500 <= us <= 2500 for us in st['us'].values()), name
+
+    def test_home_step_lands_on_every_calibrated_zero(self):
+        from servo_workbench import output_key, plan_sequence
+        home = plan_sequence('demo')[0]
+        assert home['pose'] == 'home'
+        for name, spec in SERVO_MAP.items():
+            key = output_key(spec)
+            if key in home['us']:
+                assert home['us'][key] == spec.command_to_us(spec.clamp(0.0))
+
+    def test_move_time_matches_the_driver_settle_time(self):
+        from servo_workbench import plan_sequence
+        from soma_driver.primitives import HOME, SEQUENCES, pose_targets, settle_time_s
+        current = dict(HOME)
+        for st, (pose, _) in zip(plan_sequence('demo'), SEQUENCES['demo']):
+            assert st['move_s'] == settle_time_s(pose_targets(pose), current)
+            current.update(pose_targets(pose))
