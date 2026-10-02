@@ -87,6 +87,30 @@ def raw_rows(addrs):
             for a in sorted(addrs) for ch in range(16)]
 
 
+def group_targets(rows, cal_data, value, cap, arms):
+    """Master slider: one value in [-1, 1] drives every included joint.
+
+    -1 walks each joint toward ITS captured MIN, +1 toward ITS captured MAX,
+    0 is its zero; every joint uses its own measurements, so 50 % is half of
+    that joint's own travel. |value| is capped (default 25 % in the page):
+    twelve servos at full travel at once will collide (both yaws can swing
+    about 180 deg inward). Falls back to the map zero and band when a
+    capture is missing. Pure, so the suite can pin it.
+    """
+    v = max(-cap, min(cap, value))
+    out = {}
+    for r in rows:
+        if r['name'].split('_')[0] not in arms:
+            continue
+        c = cal_data.get(str(r['ch']), {})
+        zero = c.get('zero', r['zero_us'])
+        lo = c.get('min', r['band'][0])
+        hi = c.get('max', r['band'][1])
+        us = zero + (v * (hi - zero) if v >= 0 else -v * (lo - zero))
+        out[r['key']] = (zero, max(MIN_US, min(MAX_US, round(us))))
+    return out
+
+
 class Fleet:
     """Every PCA9685 in the map on one bus, with the safety rules baked in."""
 
@@ -190,6 +214,21 @@ class Fleet:
             self.target_us[key] = us
             return f'target {us:.0f} us'
 
+    def group(self, targets):
+        """Set many targets at once; the 50 Hz ramp moves them together."""
+        with self.lock:
+            if not self.armed:
+                return 'refused: DISARMED'
+            for key, (zero, us) in targets.items():
+                if key not in self.last_us:
+                    # first pulse: snap to the zero (the hanging pose),
+                    # never straight to a far target
+                    self._write_us(key, zero)
+                    self.last_us[key] = zero
+                self.target_us[key] = us
+            self.active = None
+            return f'group: {len(targets)} joints ramping'
+
     def release(self, key):
         with self.lock:
             r = self.rows[key]
@@ -254,7 +293,10 @@ class Cal:
     def mark(self, row, kind, us):
         # Keyed by channel (unique across both boards in the current map),
         # the format scripts/apply_calibration.py already reads.
-        entry = self.data.setdefault(str(row['ch']), {'name': row['name']})
+        entry = self.data.setdefault(str(row['ch']), {})
+        # Always refresh the label: a name kept from the first capture went
+        # stale on 2026-10-01 when the map changed under existing entries.
+        entry['name'] = row['name']
         entry['address'] = hex(row['addr'])
         entry[kind] = round(us)
         entry['date'] = time.strftime('%Y-%m-%d')
@@ -268,62 +310,109 @@ class Cal:
 PAGE = """<!DOCTYPE html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SOMA servo workbench</title><style>
-:root{--bg:#0f1113;--panel:#171a1d;--line:#262a2e;--ink:#e8eaec;--muted:#8b949e;
---go:#2f855a;--stop:#c53030;--accent:#3b82d8;--warn:#d69e2e}
+:root{--bg:#0f1113;--panel:#171a1d;--card:#14171a;--line:#262a2e;--ink:#e8eaec;--muted:#8b949e;
+--go:#2f855a;--stop:#c53030;--accent:#3b82d8;--warn:#d69e2e;--right:#3b82d8;--left:#c2793a}
+*{box-sizing:border-box}
 body{font-family:system-ui,sans-serif;margin:0;background:var(--bg);color:var(--ink)}
 header{display:flex;gap:.6rem;align-items:center;padding:.6rem 1rem;background:var(--panel);
-position:sticky;top:0;z-index:2;border-bottom:1px solid var(--line)}
+position:sticky;top:0;z-index:3;border-bottom:1px solid var(--line)}
 h1{font-size:1rem;margin:0;flex:1}
 button{border:0;border-radius:8px;padding:.5rem .8rem;font-weight:700;cursor:pointer;color:#fff}
-button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 #arm{background:var(--go)}#arm.on{background:var(--stop)}
 #alloff{background:var(--stop);font-size:1rem;padding:.6rem 1.1rem}
 #msg{padding:.45rem 1rem;color:var(--warn);min-height:1.2rem;font-size:.85rem}
-h2{font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
-margin:1rem 1rem .3rem}
-.servo{padding:.65rem 1rem;border-bottom:1px solid var(--line);display:grid;
-grid-template-columns:minmax(12rem,auto) 1fr 9rem;gap:.35rem .8rem;align-items:center;opacity:.5}
+.master{margin:.4rem 1rem 1rem;padding:1rem 1.1rem;border:1px solid #3a3f45;border-radius:12px;
+background:linear-gradient(0deg,#191c1f,#191c1f)}
+.master h2{margin:0 0 .2rem;font-size:.95rem}
+.master p{margin:0 0 .8rem;color:var(--muted);font-size:.8rem}
+.mrow{display:grid;grid-template-columns:4.5rem 1fr 4.5rem;gap:.6rem;align-items:center}
+.mrow .end{font-size:.75rem;color:var(--muted)}.mrow .end:last-child{text-align:right}
+#mval{font-family:ui-monospace,monospace;font-size:1.2rem;text-align:center;margin:.3rem 0}
+.mctl{display:flex;flex-wrap:wrap;gap:1rem;align-items:center;margin-top:.7rem;font-size:.85rem}
+.mctl label{display:flex;gap:.35rem;align-items:center;cursor:pointer}
+.mctl button{background:#2b3036;padding:.35rem .7rem}
+#mgo{background:var(--go)}
+.arms{display:grid;grid-template-columns:1fr 1fr;gap:1rem;padding:0 1rem 2rem}
+.arm{border:1px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden}
+.arm>h2{margin:0;padding:.6rem .9rem;font-size:.9rem;display:flex;justify-content:space-between}
+.arm.right>h2{border-bottom:3px solid var(--right)}.arm.left>h2{border-bottom:3px solid var(--left)}
+.arm>h2 small{color:var(--muted);font-weight:400}
+.servo{padding:.6rem .9rem;border-bottom:1px solid var(--line);display:grid;
+grid-template-columns:1fr 7.5rem;gap:.3rem .7rem;align-items:center;opacity:.55}
+.servo:last-child{border-bottom:0}
 .servo.active{opacity:1;background:#13201a;box-shadow:inset 3px 0 0 var(--go)}
+.servo.grp{opacity:1}
 .nm b{font-family:ui-monospace,monospace;color:var(--accent)}
-.nm small{display:block;color:var(--muted);font-size:.75rem}
+.nm small{display:block;color:var(--muted);font-size:.72rem}
 .rd{font-family:ui-monospace,monospace;text-align:right;font-variant-numeric:tabular-nums}
-.rd .us{font-size:1.05rem}.rd .deg{display:block;color:var(--muted);font-size:.8rem}
+.rd .us{font-size:1rem}.rd .deg{display:block;color:var(--muted);font-size:.75rem}
+.servo input[type=range]{grid-column:1/3;width:100%}
 input[type=range]{width:100%}
-.row2{grid-column:1/4;display:flex;gap:.35rem;flex-wrap:wrap}
-.row2 button{background:#2b3036;padding:.32rem .55rem;font-weight:600}
+.row2{grid-column:1/3;display:flex;gap:.3rem;flex-wrap:wrap}
+.row2 button{background:#2b3036;padding:.3rem .5rem;font-weight:600;font-size:.8rem}
 .row2 .sel{background:var(--go)}.row2 .zero{background:#285e8e}.row2 .mark{background:#1c4587}
-.cal{grid-column:1/4;font-family:ui-monospace,monospace;font-size:.75rem;color:#9ad1a5}
-@media (max-width:640px){.servo{grid-template-columns:1fr 7rem}.servo input{grid-column:1/3}}
+.cal{grid-column:1/3;font-family:ui-monospace,monospace;font-size:.72rem;color:#9ad1a5}
+@media (max-width:900px){.arms{grid-template-columns:1fr}}
 </style></head><body>
 <header><h1>SOMA servo workbench</h1>
 <button id="arm" onclick="toggleArm()">ARM</button>
 <button id="alloff" onclick="api({action:'all_off'})">ALL OFF</button></header>
-<div id="msg">DISARMED. Arm, select ONE joint, press "go ZERO" first, then move it.</div>
-<div id="list"></div>
+<div id="msg">DISARMED. Arm, then use the master slider or select ONE joint.</div>
+<section class="master" aria-label="Master slider">
+ <h2>Master: every joint at once</h2>
+ <p>Left walks each joint toward its own captured MIN, right toward its own MAX, center is zero.
+ Ramped at 400 us/s. Start small: at full travel the arms collide.</p>
+ <div id="mval">0 %</div>
+ <div class="mrow"><span class="end">MIN</span>
+  <input type="range" id="msl" min="-100" max="100" step="5" value="0" aria-label="Master slider">
+  <span class="end">MAX</span></div>
+ <div class="mctl">
+  <label><input type="checkbox" id="mr" checked> right arm</label>
+  <label><input type="checkbox" id="ml" checked> left arm</label>
+  <label>amplitude cap
+   <select id="mcap"><option value="0.1">10 %</option><option value="0.25" selected>25 %</option>
+   <option value="0.5">50 %</option><option value="0.75">75 %</option><option value="1">100 %</option></select></label>
+  <button onclick="msl.value=0;mshow();msend()">all to ZERO</button>
+ </div>
+</section>
+<div class="arms">
+ <section class="arm right"><h2>Right arm <small>board 0x40 · ch15-10</small></h2><div id="list-right"></div></section>
+ <section class="arm left"><h2>Left arm <small>board 0x43 · ch9-4</small></h2><div id="list-left"></div></section>
+</div>
 <script>
 let S={armed:false,active:null,servos:[]};
-let built=false,dragging=null,pending={},timers={};
+let built=false,dragging=null,pending={},timers={},mtimer=null;
+const msl=document.getElementById('msl');
 const deg=(us,z)=>((us-z)*0.09).toFixed(1);
+function cap(){return +document.getElementById('mcap').value}
+function mshow(){const v=Math.max(-cap()*100,Math.min(cap()*100,+msl.value));
+ document.getElementById('mval').textContent=(v>0?'+':'')+v+' %'+(Math.abs(+msl.value)>cap()*100?'  (capped)':'');}
+function msend(){const arms=[];if(document.getElementById('mr').checked)arms.push('right');
+ if(document.getElementById('ml').checked)arms.push('left');
+ api({action:'group',value:+msl.value/100,cap:cap(),arms:arms});}
+msl.addEventListener('input',()=>{mshow();if(!mtimer)mtimer=setTimeout(()=>{mtimer=null;msend();},150);});
+msl.addEventListener('pointerup',msend);
+document.getElementById('mcap').addEventListener('change',()=>{mshow();msend();});
 function build(){
- const L=document.getElementById('list');L.innerHTML='';let board=null;
+ for(const side of ['right','left'])document.getElementById('list-'+side).innerHTML='';
  for(const s of S.servos){
-  if(s.addr!==board){board=s.addr;const h=document.createElement('h2');
-   h.textContent='board 0x'+s.addr.toString(16)+(board===0x40?'  (right arm)':'  (left arm)');L.appendChild(h);}
+  const side=s.name.startsWith('left')?'left':'right';
+  const L=document.getElementById('list-'+side);
   const k=s.key,d=document.createElement('div');d.id='sv'+k;d.className='servo';
-  d.innerHTML=`<div class="nm"><b>ch${s.ch}</b> ${s.name.replace('_joint','')}
-   <small>map zero ${s.zero_us} us · band ${s.band[0]}-${s.band[1]} us</small></div>
-  <input type="range" id="sl${k}" min="500" max="2500" step="5" value="${s.zero_us}"
-   aria-label="${s.name} pulse">
+  d.innerHTML=`<div class="nm"><b>ch${s.ch}</b> ${s.name.replace(side+'_arm_','').replace('_joint','')}
+   <small>zero ${s.zero_us} us · map band ${s.band[0]}-${s.band[1]}</small></div>
   <div class="rd"><span class="us" id="us${k}">off</span><span class="deg" id="dg${k}"></span></div>
+  <input type="range" id="sl${k}" min="500" max="2500" step="5" value="${s.zero_us}" aria-label="${s.name} pulse">
   <div class="row2">
    <button class="sel" onclick="api({action:'select',key:'${k}'})">select</button>
    <button class="zero" onclick="setUs('${k}',${s.zero_us})">go ZERO</button>
    <button onclick="nudge('${k}',-50)">-50</button><button onclick="nudge('${k}',-10)">-10</button>
    <button onclick="nudge('${k}',-5)">-5</button><button onclick="nudge('${k}',5)">+5</button>
    <button onclick="nudge('${k}',10)">+10</button><button onclick="nudge('${k}',50)">+50</button>
-   <button class="mark" onclick="api({action:'mark',key:'${k}',kind:'zero'})">set ZERO</button>
-   <button class="mark" onclick="api({action:'mark',key:'${k}',kind:'min'})">mark MIN</button>
-   <button class="mark" onclick="api({action:'mark',key:'${k}',kind:'max'})">mark MAX</button>
+   <button class="mark" onclick="api({action:'mark',key:'${k}',kind:'zero'})">ZERO</button>
+   <button class="mark" onclick="api({action:'mark',key:'${k}',kind:'min'})">MIN</button>
+   <button class="mark" onclick="api({action:'mark',key:'${k}',kind:'max'})">MAX</button>
    <button onclick="api({action:'release',key:'${k}'})">release</button>
   </div><div class="cal" id="cal${k}"></div>`;
   L.appendChild(d);
@@ -343,7 +432,7 @@ function update(){
  if(S.fault)document.getElementById('msg').textContent=S.fault;
  const a=document.getElementById('arm');a.textContent=S.armed?'DISARM':'ARM';a.className=S.armed?'on':'';
  for(const s of S.servos){const k=s.key,d=document.getElementById('sv'+k);if(!d)continue;
-  d.className='servo'+(k===S.active?' active':'');
+  d.className='servo'+(k===S.active?' active':(s.us&&!S.active?' grp':''));
   document.getElementById('cal'+k).textContent=s.cal?
    `captured: zero ${s.cal.zero??'-'} · min ${s.cal.min??'-'} · max ${s.cal.max??'-'}`:'';
   if(dragging!==k&&pending[k]==null&&s.us){document.getElementById('sl'+k).value=s.us;show(k,s.us,s.zero_us);}
@@ -357,7 +446,7 @@ function setUs(k,v){const sl=document.getElementById('sl'+k);sl.value=v;
  const s=S.servos.find(x=>x.key===k);show(k,v,s.zero_us);api({action:'set',key:k,us:v});}
 function nudge(k,d){setUs(k,+document.getElementById('sl'+k).value+d);}
 function toggleArm(){api({action:S.armed?'disarm':'arm'})}
-api({action:'state'});setInterval(()=>api({action:'state'}),3000);
+api({action:'state'});setInterval(()=>api({action:'state'}),1000);
 </script></body></html>"""
 
 
@@ -369,8 +458,11 @@ def make_handler(fleet, cal):
         def _state(self):
             servos = []
             for key, r in fleet.rows.items():
-                servos.append({**r, 'us': round(fleet.last_us.get(key, 0)) or None,
-                               'cal': cal.data.get(str(r['ch']))})
+                c = cal.data.get(str(r['ch'])) or {}
+                # go ZERO prefers today's captured zero over the map's
+                servos.append({**r, 'zero_us': c.get('zero', r['zero_us']),
+                               'us': round(fleet.last_us.get(key, 0)) or None,
+                               'cal': c or None})
             return {'armed': fleet.armed, 'active': fleet.active,
                     'fault': fleet.fault, 'servos': servos}
 
@@ -411,6 +503,15 @@ def make_handler(fleet, cal):
                 msg = f'{fleet.rows[key]["name"]} (board 0x{fleet.rows[key]["addr"]:02x} ch{fleet.rows[key]["ch"]}) is now the active servo.'
             elif act == 'set':
                 msg = f'{key}: {fleet.command(key, req.get("us", fleet.rows[key]["zero_us"]))}'
+            elif act == 'group':
+                if getattr(fleet, 'raw', False):
+                    msg = 'refused: no master slider in raw test mode.'
+                else:
+                    t = group_targets(list(fleet.rows.values()), cal.data,
+                                      float(req.get('value', 0.0)),
+                                      float(req.get('cap', 0.25)),
+                                      set(req.get('arms', [])))
+                    msg = fleet.group(t) if t else 'refused: no arm selected.'
             elif act == 'release':
                 fleet.release(key)
                 msg = f'{key} released (signal cut).'
