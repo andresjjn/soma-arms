@@ -78,6 +78,15 @@ def joint_rows(servo_map=SERVO_MAP):
     return rows
 
 
+def raw_rows(addrs):
+    """Every channel of every board, for testing outputs with a loose
+    spare servo. Starts at the 1500 us neutral; no joint, no calibration."""
+    return [{'key': f'{a:02x}:{ch}', 'addr': a, 'ch': ch,
+             'name': f'raw output (spare servo test)',
+             'zero_us': 1500, 'band': [MIN_US, MAX_US]}
+            for a in sorted(addrs) for ch in range(16)]
+
+
 class Fleet:
     """Every PCA9685 in the map on one bus, with the safety rules baked in."""
 
@@ -364,7 +373,9 @@ def make_handler(fleet, cal):
                 msg = f'{key} released (signal cut).'
             elif act == 'mark':
                 us = fleet.last_us.get(key)
-                if us is None:
+                if getattr(fleet, 'raw', False):
+                    msg = 'refused: raw test mode never writes calibration.'
+                elif us is None:
                     msg = 'refused: servo has no commanded pulse yet.'
                 else:
                     cal.mark(fleet.rows[key], req.get('kind'), us)
@@ -378,6 +389,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--bus', type=int, default=None, help='I2C bus number')
     ap.add_argument('--port', type=int, default=8080)
+    ap.add_argument('--raw', action='store_true',
+                    help='every channel of every board, for a loose spare '
+                         'servo; calibration capture disabled')
     args = ap.parse_args()
 
     rows = joint_rows()
@@ -387,11 +401,14 @@ def main():
     if missing:
         print('WARNING: boards not answering, their joints are left out: '
               + ', '.join(hex(a) for a in missing))
-    rows = [r for r in rows if r['addr'] in present]
+    rows = raw_rows(present) if args.raw else [
+        r for r in rows if r['addr'] in present]
     fleet = Fleet(bus_num, rows)
+    fleet.raw = args.raw
     cal = Cal()
     print(f'Boards {", ".join(hex(a) for a in present)} on /dev/i2c-{bus_num}: '
-          f'50 Hz set, ALL OFF, DISARMED. {len(rows)} joints from SERVO_MAP.')
+          f'50 Hz set, ALL OFF, DISARMED. {len(rows)} '
+          + ('raw outputs (spare servo test).' if args.raw else 'joints from SERVO_MAP.'))
     print(f'Open http://<this-host>:{args.port}  (calibration -> {CAL_FILE})')
     server = ThreadingHTTPServer(('0.0.0.0', args.port), make_handler(fleet, cal))
     try:
