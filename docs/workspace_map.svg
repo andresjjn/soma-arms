@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="356.0mm" height="340.0mm" viewBox="0 0 356.0 340.0">
+<style>.cut{fill:none;stroke:#d00;stroke-width:0.2}.ref{fill:none;stroke:#555;stroke-width:0.2;stroke-dasharray:2 1}.lane{stroke:#06c;stroke-width:0.6}.pocket{fill:none;stroke:#d00;stroke-width:0.2}.axis{stroke:#999;stroke-width:0.2;stroke-dasharray:1 1}text{font-family:sans-serif;font-size:4px;fill:#333}</style>
+<title>SOMA deck, 40 mm above the plate</title>
+<rect class="ref" id="plate" x="30.0" y="30.0" width="220.0" height="280.0"/>
+<rect class="ref" id="column" x="41.4" y="140.0" width="35.0" height="60.0"/>
+<rect class="ref" id="central_box" x="154.4" y="115.1" width="81.1" height="109.8"/>
+<line class="axis" id="disc_axis" x1="195.0" y1="0" x2="195.0" y2="340.0"/>
+<line class="lane" id="left_lane_0" x1="76.0" y1="107.7" x2="326.0" y2="107.7"/>
+<rect class="pocket" id="left_pocket_0" x="108.0" y="84.7" width="46.0" height="46.0"/>
+<rect class="pocket" id="left_pocket_1" x="178.0" y="84.7" width="46.0" height="46.0"/>
+<rect class="pocket" id="left_pocket_2" x="248.0" y="84.7" width="46.0" height="46.0"/>
+<text x="5.0" y="105.7">left lane, y = +62.3 mm</text>
+<line class="lane" id="right_lane_0" x1="73.0" y1="232.3" x2="315.0" y2="232.3"/>
+<rect class="pocket" id="right_pocket_0" x="101.0" y="209.3" width="46.0" height="46.0"/>
+<rect class="pocket" id="right_pocket_1" x="171.0" y="209.3" width="46.0" height="46.0"/>
+<rect class="pocket" id="right_pocket_2" x="241.0" y="209.3" width="46.0" height="46.0"/>
+<text x="5.0" y="230.3">right lane, y = -62.3 mm</text>
+<text x="2" y="338.0">x forward to the right, mm. signs: yaw+1 shoulder+1 elbow+1 wrist_pitch+1</text>
+</svg>
