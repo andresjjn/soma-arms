@@ -3,10 +3,17 @@
     ros2 run soma_driver soma_primitives list
     ros2 run soma_driver soma_primitives home
     ros2 run soma_driver soma_primitives demo
+    ros2 run soma_driver soma_primitives wave --step
     ros2 run soma_driver soma_primitives relax
 
 Publishes named poses (or sequences of them) to /soma/command and, for
 `relax`, disarms through /soma/arm once the arms have settled at home.
+
+Step mode (`--step`, sequences only) publishes one pose, waits for ENTER,
+and on `q` unwinds to home along the path already walked, one proven step
+at a time, never with a single jump. It is how a sequence meets the metal
+for the first time; the logic lives in player.py and is tested without
+ROS.
 
 This tool NEVER arms the driver and holds no safety logic of its own:
 the two gates (allow_real parameter + /soma/arm service) live in the
@@ -21,9 +28,8 @@ from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_srvs.srv import SetBool
 
-from .primitives import POSES, SEQUENCES, pose_targets, sequence_steps, settle_time_s
-
-SETTLE_MARGIN_S = 0.5
+from .player import SETTLE_MARGIN_S, parse_cli, play
+from .primitives import POSES, SEQUENCES, pose_targets, settle_time_s
 
 
 class PrimitiveRunner(Node):
@@ -34,27 +40,25 @@ class PrimitiveRunner(Node):
         # is seen by the driver's subscription.
         time.sleep(0.3)
 
-    def send_pose(self, name: str) -> None:
-        targets = pose_targets(name)
+    def _publish(self, pose: str, targets: dict[str, float]) -> None:
         msg = JointState()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.name = list(targets)
         msg.position = [float(v) for v in targets.values()]
         self.pub.publish(msg)
+
+    def send_pose(self, name: str) -> None:
+        targets = pose_targets(name)
+        self._publish(name, targets)
         wait = settle_time_s(targets) + SETTLE_MARGIN_S
         self.get_logger().info(f'pose {name}: commanded, settling {wait:.1f}s')
         time.sleep(wait)
 
-    def run_sequence(self, name: str) -> None:
-        for pose, dwell in sequence_steps(name):
-            targets = pose_targets(pose)
-            msg = JointState()
-            msg.header.stamp = self.get_clock().now().to_msg()
-            msg.name = list(targets)
-            msg.position = [float(v) for v in targets.values()]
-            self.pub.publish(msg)
-            self.get_logger().info(f'{name}: pose {pose}, dwell {dwell:.1f}s')
-            time.sleep(dwell)
+    def run_sequence(self, name: str, step: bool = False) -> bool:
+        """Play a sequence; False when a human unwound it in step mode."""
+        return play(name, self._publish, time.sleep,
+                    ask=input if step else None,
+                    log=self.get_logger().info)
 
     def relax(self) -> None:
         """Home, settle, then cut the signal: rest before silence."""
@@ -76,23 +80,26 @@ class PrimitiveRunner(Node):
 
 
 def main() -> None:
-    args = [a for a in sys.argv[1:] if not a.startswith('--ros-args')]
-    if not args or args[0] in ('-h', '--help', 'list'):
+    target, step = parse_cli(sys.argv[1:])
+    if target is None:
         print(__doc__)
         print('poses:     ' + ', '.join(sorted(POSES)))
         print('sequences: ' + ', '.join(sorted(SEQUENCES)))
         print('behaviors: relax')
+        print('flags:     --step (sequences only)')
         return
 
-    target = args[0]
     rclpy.init()
     node = PrimitiveRunner()
+    completed = True
     try:
         if target == 'relax':
             node.relax()
         elif target in SEQUENCES:
-            node.run_sequence(target)
+            completed = node.run_sequence(target, step=step)
         elif target in POSES:
+            if step:
+                print('--step applies to sequences only; sending the pose once')
             node.send_pose(target)
         else:
             print(f'unknown primitive: {target}')
@@ -102,6 +109,8 @@ def main() -> None:
     finally:
         node.destroy_node()
         rclpy.shutdown()
+    if not completed:
+        sys.exit(3)
 
 
 if __name__ == '__main__':
