@@ -81,7 +81,7 @@ is the honest number, and the smoke test asserts it.
 The `torso_lift_joint` limit in the URDF is **0.005 to 0.135**, not 0 to 0.140.
 The physical stroke is documented in the file right above the limit.
 
-Reason: MoveIt2 arrives at v0.3 and plans against URDF limits. With the
+Reason: a planner (MoveIt2 was the candidate at the time) plans against URDF limits. With the
 physical stroke in the URDF, a planner would happily aim at a mechanical stop
 and the driver would silently clamp, producing a permanent tracking error at
 exactly the position that wedged the actuator once already.

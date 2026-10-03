@@ -96,7 +96,7 @@ servo connectors, 16 AWG or thicker for V+.
 ## Repository layout
 
 ```
-soma_description/     URDF/xacro, SRDF, RViz, MoveIt kinematics
+soma_description/     URDF/xacro, SRDF, RViz (SRDF and kinematics.yaml are reference files, off the ladder)
   urdf/soma_arm.xacro       the 6DOF arm, one reusable macro
   urdf/soma_torso.xacro     bay + L16 lift + plate + 2 arms + camera
   urdf/soma_bench.urdf.xacro     the reference model
@@ -107,24 +107,27 @@ soma_driver/          PCA9685 driver
   soma_driver/pca9685_backend.py   mock/real backends + per-board fleet
   soma_driver/arm_controller_node.py  the ROS node
   soma_driver/primitives.py        named poses and sequences, pure and tested
-                                   (the surface the v0.4 agent will call)
-  soma_driver/primitives_cli.py    ros2 run soma_driver soma_primitives <name>
+                                   (the surface the v0.5 supervisor will call)
+  soma_driver/player.py            the sequence player and its step mode, pure
+  soma_driver/primitives_cli.py    ros2 run soma_driver soma_primitives <name> [--step]
   soma_driver/sign_check_cli.py    bench tool: verify joint axis signs (v0.2)
   soma_driver/ina3221.py           power monitor, read-only, no gates needed
   test/                            the safety test suite
-docs/                 hardware, wiring, safety, bench, migration
-scripts/              smoke_test.sh, check_model_driver_sync.py
+docs/                 plan, hardware, wiring, safety, bench, migration
+scripts/              smoke_test.sh, check_model_driver_sync.py,
+                      workspace_map.py (reach map and deck drawing),
+                      er2_probe.py (one pointing call to ER 2, key from the environment)
 ```
 
-Packages that arrive with their milestone, and not before:
-`soma_moveit_config` (v0.3), `soma_agent` (v0.4, the Gemini Robotics-ER 2
-orchestration layer), `soma_operator` (v1.0). Mimicry teleop is post-1.0
-backlog.
+Packages that arrive with their milestone, and not before: `soma_agent`
+(v0.5, the Gemini Robotics ER 2 supervisor) and `soma_operator` (v1.0). No
+MoveIt package and no learning track exist on the ladder (removed
+2026-10-03, see docs/plan.md section 8). Mimicry teleop is post-1.0 backlog.
 
 ### The cloud reasoner never touches the trigger
 
-From v0.4 on, an external model (Gemini Robotics-ER 2) points, plans and
-verifies. It does so exclusively by calling SOMA primitives that sit BEHIND
+From v0.5 on, an external model (Gemini Robotics ER 2) points, verifies
+and reads. It does so exclusively by calling SOMA primitives that sit BEHIND
 the two arming gates. No API response, function call or agent step may arm
 the driver, widen a limit, or bypass the ramp. The reasoner proposes, the
 armed driver disposes. If a design makes the cloud a safety dependency, the
@@ -155,8 +158,9 @@ you if you forgot.
 ## The tests are the specification
 
 24 tests came over from the bench driver, and the suite has grown since
-(151 passing plus 1 skipped as of 2026-08-12; the skipped one needs `rclpy`
-and runs in the ROS job of CI). They encode every hardware contract. If a
+(253 passing plus 7 skipped as of 2026-10-03 on a machine without ROS or
+the mujoco wheel; the skipped ones need `rclpy`, which the ROS job of CI
+has, or mujoco, which the unit job installs). They encode every hardware contract. If a
 change breaks one, the change is wrong until proven otherwise. Never edit a
 test to make a change pass without saying so explicitly and explaining why
 the hardware fact changed.
@@ -179,7 +183,8 @@ bash scripts/smoke_test.sh
 ```
 
 Build, unit tests, all three xacro models through `check_urdf`, and an end to
-end run where the mock driver raises the torso and TF confirms 130 mm.
+end run where the mock driver bends the left elbow and TF confirms the
+fingertip rising 311 mm.
 
 When adding a safety behaviour, add the test with it. A rule with no test is a
 rule that will be refactored away by someone in a hurry.
@@ -187,9 +192,10 @@ rule that will be refactored away by someone in a hurry.
 ## Roadmap discipline
 
 Each version is a git tag, a video in the README and a short. Do not skip
-ahead: v0.2 does not start until v0.1 is tagged with its calibrated URDF, and
-calibration needs calipers on real parts, which is not something an agent can
-do. The roadmap lives in the README.
+ahead: v0.3 does not start until v0.2 is tagged with its sign check and its
+wave on video, and that needs a human at the bench, which is not something
+an agent can do. Versions are gates, never dates. The roadmap lives in the
+README; the engineering behind it in docs/plan.md.
 
 ## Waver ecosystem
 

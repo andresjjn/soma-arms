@@ -1,7 +1,9 @@
 <?xml version="1.0"?>
 <!--
-  SRDF for SOMA (MoveIt2, milestone v0.3).
-  Defines what a "arm" means to the planner: kinematic chains, end
+  SRDF for SOMA, a reference file for a future MoveIt2 setup. Off the
+  roadmap since 2026-10-03 (the ladder uses a planar analytic IK) and
+  not kept in sync with soma_bench.urdf.xacro since then.
+  Defines what an "arm" means to a planner: kinematic chains, end
   effectors, named poses, and which link pairs never need a collision
   check. Written by hand; the MoveIt Setup Assistant can refine it.
 

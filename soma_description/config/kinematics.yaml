@@ -1,7 +1,7 @@
-# IK solver per planning group (MoveIt2, milestone v0.3).
-# Starting on KDL because it ships with MoveIt. TRAC-IK is the candidate
-# upgrade: better behaved near singularities, and it is a one line change
-# in this same file.
+# IK solver per planning group for a future MoveIt2 setup. Kept as a
+# reference file, off the roadmap since 2026-10-03: the arms are planar
+# chains and the ladder uses the analytic IK of scripts/workspace_map.py.
+# KDL because it ships with MoveIt; TRAC-IK would be a one line change.
 left_arm:
   kinematics_solver: kdl_kinematics_plugin/KDLKinematicsPlugin
   kinematics_solver_search_resolution: 0.005

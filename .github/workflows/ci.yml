@@ -21,7 +21,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install pytest (mujoco and xacro feed the L1 sim oracle)
+      - name: Install pytest (mujoco and xacro feed the sim oracle test)
         run: python -m pip install --upgrade pip pytest pyyaml mujoco xacro
 
       - name: Run the driver test suite

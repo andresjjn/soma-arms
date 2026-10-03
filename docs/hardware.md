@@ -23,7 +23,7 @@ Two kinds of numbers appear below and they are never mixed:
 | 1 | UBEC 6 V, 8 to 10 A | the 6 V servo rail. A **second one is planned**, one per arm, and is not fitted yet |
 | 1 | LiPo 2S, with switch and fuse | current bench supply. It feeds the UBEC, never the servos |
 | 1 | Raspberry Pi 5 | runs ROS 2 Humble in Docker |
-| 1 | Luxonis OAK-D Lite | head camera, on-camera pose estimation for v0.5 |
+| 1 | Luxonis OAK-D Lite | the eyes; from v0.3 fixed on the bench column looking down at the deck |
 
 ---
 
@@ -252,10 +252,11 @@ Diagnostic that works: watch `i2cdetect` in a loop and tap the cables. If
 `smbus2` is available natively on the Pi, outside Docker, which is what the
 bare metal bring-up scripts use.
 
-**Luxonis OAK-D Lite.** 91 x 28 x 17.5 mm, 61 g, mounted as the head on the
-torso plate so it rises with the arms. It carries its own VPU, which is the
-whole point: from v0.5 the BlazePose pose estimation runs **on the camera**,
-not on the Pi, so the Pi keeps its cycles for control.
+**Luxonis OAK-D Lite.** 91 x 28 x 17.5 mm, 61 g. On the hanging bench it
+is fixed to the column looking down at the deck (v0.3), at least 35 cm from
+the work area; on the printed torso it becomes the head. It carries its own
+VPU: on-camera inference is available, and the depth it produces is what
+turns a 2D point from the supervisor into a deck coordinate.
 
 ---
 

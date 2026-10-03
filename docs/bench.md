@@ -22,7 +22,8 @@ safety rules. The ROS node tests skip automatically when `rclpy` is missing.
 ## 2. Full validation, in ROS 2 Humble
 
 Build, unit tests, all three xacro models through `check_urdf`, and an end to
-end run where the mock driver raises the torso while TF confirms the travel:
+end run where the mock driver bends the left elbow while TF confirms the
+fingertip rising 311 mm:
 
 ```bash
 bash scripts/smoke_test.sh

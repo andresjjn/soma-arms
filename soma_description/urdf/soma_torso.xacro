@@ -120,8 +120,8 @@
     </link>
 
     <!-- OAK-D Lite, the head. Rides up with the torso and looks forward.
-         This is the camera that runs BlazePose on its own VPU for the
-         vision teleop milestone (v0.5). -->
+         On the hanging bench the same camera is fixed to the column
+         instead (v0.3); mimicry teleop is post-1.0 backlog. -->
     <joint name="oak_joint" type="fixed">
       <parent link="torso_plate_link"/>
       <child link="oak_link"/>

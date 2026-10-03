@@ -267,7 +267,7 @@
       <xacro:box_inertia m="0.03" x="${finger_len}" y="0.01" z="0.008"/>
     </link>
 
-    <!-- tool frame (gripper tip, the IK target for MoveIt2) -->
+    <!-- tool frame (gripper tip, the IK target) -->
     <joint name="${prefix}tool0_joint" type="fixed">
       <parent link="${prefix}gripper_base_link"/>
       <child link="${prefix}tool0"/>

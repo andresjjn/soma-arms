@@ -4,20 +4,18 @@ How this robot gets built, in order, with what hardware, and what has to be
 true before each step counts as done. The README holds the short roadmap
 table; this file holds the engineering behind it.
 
-Two tracks run in parallel and share one model and one driver:
+Versions are gates, not dates: a version is done when its acceptance test
+passes on the bench, filmed, and the tag is pushed. Nothing is planned by
+the calendar. This is a hobby bench with evenings, and a plan with dates on
+it was already proven wrong once (the 2026-08 estimates).
 
-- **Demo track**: calibrated model, real driver, eye-hand, then a bimanual
-  pick and place directed in natural language by Gemini Robotics-ER 2.
-  This is what ships publicly and what closes the project at v1.0.
-- **Learning track**: the same robot in MuJoCo, system identified against
-  the real arm, used to train policies that transfer back. This is the
-  deeper work, it feeds a write-up, and it is why every model decision
-  below is made "RL ready" instead of "good enough for RViz".
+One track. The learning track (MuJoCo and MJX, system identification, RL
+policies) that this file carried until 2026-10-03 is gone; see section 8
+for why and for what stays in the repository.
 
-The tracks are deliberately coupled at exactly one place: **the model**.
-One `dimensions.yaml` produces the URDF that RViz, MoveIt, MuJoCo and the
-driver all agree on. If they ever disagree, the model is wrong, not the
-robot.
+The project ends at v1.0: a two-station tending cell that runs for six to
+seven hours doing the job of an operator, with a public cycle counter that
+a reasoning model verifies from the camera. Then the arms move on.
 
 ---
 
@@ -25,304 +23,271 @@ robot.
 
 | Device | Role | Why it and not something else |
 |---|---|---|
-| 2 x 6DOF aluminum arm, 12 x MG996R | The robot | Already built and wired |
-| Actuonix L16-140-63-6-R | Torso lift, one prismatic DOF | Self locking, so it holds with no power |
-| PCA9685 at `0x40` | 13 PWM channels on one I2C bus | One bus, no motor drivers needed |
-| UBEC 6 V (a second one planned) | Servo rail | The only thing between a 2S LiPo and twelve dead servos |
-| **Jetson Orin Nano Super 8 GB** | Robot brain: ROS 2, driver, OAK pipeline, ER 2 client, policy inference | 67 TOPS at the edge. Runs the deployed policy, never trains it |
-| **OAK-D Lite** | Eyes: RGB, stereo depth, on-VPU inference | Depth is what turns a 2D point from ER 2 into an XYZ the arm can reach |
-| **MacBook Pro M3 Pro 18 GB** | Development and **RL training** | MJX runs on Apple Silicon through XLA. This is the training box |
-| Raspberry Pi 5 | Waver rover, separate project | Not part of SOMA. SOMA is integrated into Waver after v1.0 |
-| Cardboard cubes, 10 cm faces, ArUco ids 7 to 10 | Manipulation targets and ground truth pose | Light enough for a 330 g payload, and their pose is measurable to the millimeter |
+| 2 x 6DOF aluminum arm, 12 x MG996R | The robot | Already built, wired and calibrated (2026-10-01) |
+| Actuonix L16-140-63-6-R | Torso lift, one prismatic DOF | Off the bench until the printed torso; self locking, so it holds with no power |
+| 2 x PCA9685 (`0x40` right arm and L16, `0x43` left arm) | 13 PWM channels on one I2C bus | One bus, no motor drivers needed; channels 0 to 2 of `0x40` are free (the status lamp of v0.4 goes there) |
+| 2 x UBEC 6 V, from the ATX bench supply | Servo rails, one per arm | The only thing between the supply and twelve dead servos; the Jetson runs on its own adapter after the inrush incident of 2026-09-01 |
+| **Jetson Orin Nano Super 8 GB** | Robot brain: ROS 2, driver, OAK pipeline, ER 2 client, the cell controller | It is the computer the bench already runs on (JetPack 7.2, bus `i2c-7`) |
+| **OAK-D Lite** | Eyes: RGB, stereo depth, fixed on the column looking down at the deck | Depth and a fixed pose are what turn a 2D point from ER 2 into a deck coordinate the arm can reach |
+| MacBook Pro M3 Pro | Development, RViz, docs, CI watching | Not in the loop |
+| Laser-cut wooden deck with two lanes and six pockets | The cell | Pockets fix where parts can be, which is what a planar arm needs (section 2) |
+| Wooden blocks, about 40 mm, under 50 g, laser-engraved id | The parts | Light for a 330 g payload, square for a scissor gripper, readable by the model |
 
 **Compute topology, and the rule that holds it together:**
 
 ```
-MacBook M3 Pro           Jetson Orin Nano              PCA9685 -> 13 actuators
-  MuJoCo + MJX             ROS 2 Humble                       ^
-  train policies    --->   soma_driver  (armed) ---------------
-  export weights           soma_agent   (ER 2 client)
-                           depthai pipeline <--- OAK-D Lite
-                                  |
-                                  v
-                        Gemini Robotics-ER 2 (cloud, reasoning only)
+Jetson Orin Nano                       PCA9685 x2 -> 13 actuators
+  ROS 2 Humble                                 ^
+  soma_driver  (armed by a human) --------------
+  soma_agent   (ER 2 client, v0.5)
+  depthai pipeline <--- OAK-D Lite
+         |
+         v
+Gemini Robotics ER 2 (cloud, reasoning only)
 ```
 
 Latency decides the split. Anything inside the control loop runs on the
-Jetson. Anything that thinks in seconds (task planning, cycle
-verification) may live in the cloud. Anything that needs a GPU for days
-(training) runs on the Mac. **The cloud is never in the safety path**, and
-no remote response can arm the driver.
+Jetson. Anything that thinks in seconds (what is where, did the cycle
+succeed, what does the part say) may live in the cloud. **The cloud is
+never in the safety path**, and no remote response can arm the driver.
 
 ---
 
-## 2. What "RL ready URDF" actually means
+## 2. The cell: what these arms can physically do
 
-A model that looks right in RViz is not a model you can learn in. Seven
-concrete requirements, each with the artifact that satisfies it:
+Both arms hang from the central box with their four big joints (yaw,
+shoulder, elbow, wrist pitch) on parallel horizontal axes. Each arm is a
+planar 4R chain in its own vertical plane, 62.3 mm outboard of the bench
+centerline (`mount_ly / 2 + disc_h`), so the two planes are **124.6 mm
+apart**. The fingertip center sits on the roll axis and never leaves its
+plane, for any joint configuration. Three consequences, none negotiable:
 
-| # | Requirement | How SOMA satisfies it | Phase |
+- Each arm works a **lane**: a strip of the deck under its plane. A part
+  that is not in the lane cannot be reached, and a part that falls out of
+  the lane stays out until a human moves it.
+- The arms cannot hand anything to each other and cannot sort into bins
+  that are not in their own lane. "Bimanual" on this bench means two
+  independent single-lane cells side by side.
+- A conveyor, a ramp or a rotary table would only matter as a way to
+  bring parts INTO a lane. None is needed for the task of section 3.
+
+`scripts/workspace_map.py` computes the reachable part of each lane from
+the measured dimensions and the measured joint limits, with the gripper
+vertical (or within a chosen tilt). Fingertip height is deck height plus
+20 mm (the grasp point on a 40 mm block). Numbers of 2026-10-03, URDF sign
+hypothesis, 0.1 rad kept inside every limit:
+
+| deck (mm) | fingertip height (mm) | left lane x (mm, + forward) | right lane x (mm, + forward) |
 |---|---|---|---|
-| 1 | **Kinematics measured, not guessed** | `dimensions.yaml` with `status: measured` on every arm entry, caliper session, sync test against the xacro | v0.1 |
-| 2 | **Real joint limits per servo** | Zeros and mechanical min/max captured with `servo_workbench.py`, written back to the URDF and to `SERVO_MAP` | v0.1 |
-| 3 | **Mass, center of mass and inertia** | Each subassembly weighed on a kitchen scale; inertias recomputed from primitives with real masses, not from guessed ones | v0.1 |
-| 4 | **An actuator model that matches the hardware** | MG996R is a **position controlled** RC servo with an internal loop. The sim actuator must be a saturated position servo (`kp`, `forcerange`, `armature`, `damping`, `frictionloss`), never a torque source. See section 4 | v0.5 |
-| 5 | **Cheap collision geometry** | Collisions stay primitives (boxes, cylinders). No mesh collisions. Thousands of parallel envs cannot afford mesh contacts | already true |
-| 6 | **Parameterization for domain randomization** | Every physical quantity comes from `dimensions.yaml`, so a randomizer can perturb masses, friction, gains and latencies without editing XML by hand | v0.5 |
-| 7 | **One source of truth across sim, planner and hardware** | `check_model_driver_sync.py` and `test_dimensions_sync.py` in CI, extended to cover the MJCF export | v0.5 |
+| 0 | 20 | [-66, +71] | [-69, +71] |
+| 40 | 60 | [-119, +131] | [-122, +120] |
+| 60 | 80 | [-133, +149] | [-137, -20], [+66, +123] |
+| 80 | 100 | [-143, -57], [+81, +162] | [-147, -32], [+105, +111] |
 
-Points 1 to 3 are what the caliper session buys. Point 4 is what most
-hobby RL projects get wrong and why their policies never transfer.
+With the tool allowed to tilt up to 15 degrees from vertical:
 
-### Model pipeline
+| deck (mm) | fingertip height (mm) | left lane x (mm, + forward) | right lane x (mm, + forward) |
+|---|---|---|---|
+| 0 | 20 | [-92, +96] | [-95, +96] |
+| 40 | 60 | [-153, +165] | [-156, +164] |
+| 60 | 80 | [-169, +184] | [-172, +180] |
 
-```
-dimensions.yaml  (measured values, with provenance)
-      |
-      v
-  *.xacro  ------> URDF  ------> RViz / MoveIt / ros2_control  (demo track)
-      |                 \
-      |                  ------> MJCF  ------> MuJoCo + MJX     (learning track)
-      v
- SERVO_MAP (soma_driver)  ------> PCA9685 -> real arms
-```
+What the table says, honestly:
 
-The URDF to MJCF step is not automatic and must be scripted and versioned
-(`scripts/urdf_to_mjcf.py`), because three things need hand authoring on
-the MuJoCo side:
+- Reach is short and it is **not monotonic in deck height**. At plate
+  level the arm is fully stretched (fingertips 5.7 mm above the plate at
+  home) and the lane is a 140 mm band around the axis. It widens up to
+  about 60 mm of fingertip height, then a hole opens under the disc axis
+  and the front run of the right arm shrinks, because the right wrist
+  pitch may lean only 22 degrees forward (+0.4869 rad, measured) while the
+  left one leans 74 degrees (+1.2959 rad).
+- **Design choice: deck top 40 mm above the plate**, pockets at about
+  -70, 0 and +70 mm along each lane (46 mm pockets for 40 mm parts at a
+  70 mm pitch), tool tilt allowed up to 15 degrees for the picks.
+- The plate ends 55 mm in front of the disc axis (`plate_x_back`, still an
+  estimate). The deck overhangs it to the front, so the deck is a box that
+  stands on the table around the plate, not a tray on the plate.
+- The rear pocket sits beside the column: lane at 62.3 mm, column at 30 mm
+  from the centerline, gripper 45 mm wide, about 10 mm of clearance. The
+  first fit check happens with the deck in cardboard before the laser.
+- The whole map rests on sign hypotheses. Only the yaw direction is
+  verified on the metal (2026-10-01: negative = forward). Shoulder, elbow
+  and wrist pitch are URDF guesses until the v0.2 sign check; the map is
+  redone that evening with `--flip <joint>` where the metal disagrees.
 
-- **Actuators**: URDF has no notion of an RC servo. The MJCF gets one
-  `<position>` actuator per joint with identified gains.
-- **The geared gripper**: URDF `<mimic>` does not survive conversion.
-  MJCF expresses it as an `<equality joint>` constraint.
-- **Sensors and sites**: the tool frame, the camera site, and the contact
-  sensors the reward needs.
-
----
-
-## 3. Simulation stack, decided by the hardware we own
-
-| Option | Verdict | Reason |
-|---|---|---|
-| **MuJoCo + MJX** | **Primary, for learning** | MJX compiles through XLA and runs on Apple Silicon GPUs. MuJoCo Playground exists exactly for arm sim to real. Contact model is the best available for grasping |
-| Gazebo + ros2_control | Secondary, optional | Useful to rehearse the ROS pipeline (MoveIt trajectories, controllers) without hardware. `soma_bench_sim.urdf.xacro` already carries the plumbing. Not used for RL: too slow for parallel envs |
-| Isaac Sim / Isaac Lab | **Ruled out for now** | Requires x86 plus RTX. Isaac Sim is not supported on Jetson at all. Revisit only if a rented cloud GPU becomes worth it for a final large training run |
-
-Honest consequence: an M3 Pro is not an RTX 4090. Expect thousands of
-parallel environments, not tens of thousands, and expect a reach policy to
-train in hours rather than minutes. That is fine for the tasks in section
-5, and it keeps the entire project on hardware already owned.
+Torque, measured and estimated: an MG996R delivers about 10 kg.cm, not the
+25 the frame was sold for; a hanging arm weighs about 0.7 kg (estimate,
+never weighed). The base servo is near stall with the whole arm
+horizontal. Stations stay close to the vertical, holds are short, parts are
+light, and a shoulder is never parked at the gravitational zero, where the
+backlash limit cycle of 2026-10-01 lives.
 
 ---
 
-## 4. The actuator model, which is where sim to real is won or lost
+## 3. The task: a two-station tending cell
 
-An MG996R takes a pulse width and closes its own position loop internally.
-It is not a torque source. Modeling it as one produces policies that look
-brilliant in sim and thrash the real arm.
+Each arm tends its own lane with three pockets: INPUT, MACHINE (a fixture
+with a status lamp) and OUTPUT. One cycle:
 
-The sim actuator is a **saturated PD position servo** whose parameters are
-identified from the real hardware:
+1. The supervisor (ER 2, from v0.5) looks at the deck and points at the
+   part in INPUT and at the empty MACHINE pocket. Before v0.5 the
+   positions are the deck geometry and nothing looks.
+2. The arm picks the part from INPUT and loads it into MACHINE.
+3. The lamp goes on: the "machine cycle", a few seconds.
+4. The arm unloads the part into OUTPUT.
+5. The supervisor verifies the end state from the camera and reads the id
+   engraved on the part. The counter increments only on a verified cycle;
+   anything else is logged as a failure, with the frame.
 
-| Parameter | Meaning | How it gets identified |
-|---|---|---|
-| `kp`, `kv` | Stiffness of the internal loop | Step response: command a 20 degree step, film at 240 fps, fit the rise time and overshoot |
-| `forcerange` | Stall torque ceiling, about 0.98 N.m at 6 V | Datasheet, then verified with a lever and a scale |
-| `armature` | Reflected gearbox inertia | Fit from the same step response. Non zero armature is what stops a geared servo from behaving like a free joint |
-| `damping`, `frictionloss` | Losses in the gear train | Fit from decay of a small oscillation |
-| Rate limit | 2.5 rad/s, imposed by the driver by project rule | Applied in sim too, so the policy never learns motions the driver will refuse |
-| **Latency** | Command to motion delay: ROS tick plus I2C plus servo | Measured with a high speed video against a logged timestamp. Injected in sim as an action delay buffer |
-| **Backlash** | Aluminum joints plus 25T spline slop, easily a degree | Measured per joint by hand at the tool tip. Randomized in sim, never assumed zero |
+When INPUT is empty the roles of INPUT and OUTPUT swap, so the same parts
+flow back and the cell runs with nobody at the bench. The two arms work
+interleaved: one moves while the other holds or waits, so no supply rail
+sees both arms accelerating at once and the video always has something
+moving.
 
-The last two are the ones hobby projects skip, and they are the two that
-break transfer on this class of hardware.
+Why this task and not another:
 
-**Domain randomization list** (applied at env reset): link masses +/- 15 %,
-`kp` +/- 20 %, friction and damping +/- 30 %, latency 0 to 60 ms,
-backlash 0 to 1.5 degrees, camera extrinsics +/- 5 mm and 1 degree, target
-object mass and friction, and lighting when pixels are used.
+- It is the one job that respects section 2: one lane, no lateral
+  correction, no handoff, stations near the vertical.
+- It needs no mechanism that can fail in seven hours, and it resets
+  itself.
+- It gives the reasoning model a real, visible job (perceive, verify,
+  read, recover) without putting the cloud in the safety path.
+- It is, literally, machine tending: the most common job of a cobot.
 
-**No force feedback and no joint encoders.** The real robot cannot measure
-what it is doing. Every policy must therefore be robust to open loop
-execution, and the observation space in section 5 reflects that honestly.
-
----
-
-## 5. The learning track, task by task
-
-Tasks are ordered so each one validates a piece of the pipeline before the
-next depends on it.
-
-### L1. Model and system identification (unblocks everything)
-
-Deliverable: `soma_description/mjcf/soma_arm.xml` plus
-`scripts/urdf_to_mjcf.py`, plus an identification report comparing sim and
-real step responses.
-
-Acceptance: for a commanded 30 degree step on the shoulder, sim and real
-agree on rise time within 15 % and on final position within 2 degrees.
-Until that holds, no policy trained in this sim means anything.
-
-### L2. Reach (the pipeline test)
-
-- **Observation**: joint positions (commanded, since there are no
-  encoders), previous action, target XYZ in the arm base frame.
-- **Action**: joint position deltas for 5 joints, clipped to the driver
-  rate limit.
-- **Reward**: negative distance from tool0 to target, action smoothness
-  penalty, self collision penalty, plus a bonus inside 2 cm.
-- **Why first**: it exercises the whole chain (MJCF, randomization,
-  training on the Mac, export, inference on the Jetson, driver, real arm)
-  on a task where failure costs nothing.
-- **Acceptance**: policy trained only in sim reaches a real target within
-  3 cm, ten times out of ten, without touching anything it should not.
-
-### L3. Grasp and place a cube (the real task)
-
-- **Observation**: L2 plus cube pose (from ArUco during training and
-  evaluation, so ground truth is available), and gripper state.
-- **Action**: L2 plus gripper command.
-- **Reward**: staged. Approach, then contact with both fingers, then lift
-  above a height threshold, then place inside the box footprint, with
-  penalties for dropping and for pressing into the table.
-- **Honest expectation**: contact rich grasping with no force sensing and
-  about 330 g of payload is genuinely hard. Plan for a **residual policy**
-  on top of a scripted approach primitive, rather than pure end to end.
-  That is also the more interesting result to write up.
-
-### L4. Bimanual handoff (stretch, only if L3 lands)
-
-One arm picks, both arms meet at a fixed pose, the other receives. This is
-the task that justifies two arms and the one nobody expects from a home
-built robot.
-
-### L5. Write-up
-
-Sim to real transfer of position controlled hobby servos, with measured
-backlash and latency, on a sub 400 g payload arm. The negative results are
-publishable too, and the Alpha 1S thesis already established the format.
+Failure handling that the video has to show at least once: a part dropped
+inside the lane is re-localized by the supervisor and picked again; a part
+outside the lane is reported, the pocket is marked empty and the cell goes
+on with the remaining parts. The cell never stops on its own for a
+perception error; it stops for a power or driver fault.
 
 ---
 
-## 6. The demo track, phase by phase
+## 4. The demo track, version by version
 
-Each phase ends with a git tag, a short video, and CI green.
+Each version ends with a git tag, a short video, and CI green. Every
+"FILM BEFORE" is a one-way door (section 10.2).
 
-### v0.1 Calibrated model
+### v0.1 Calibrated model, TAGGED 2026-08-10
 
-Blocked only by physical measurement, which is Andres and a caliper.
-
-1. Capture zeros and mechanical limits for the 13 actuators with
-   `scripts/servo_workbench.py`. Output: `servo_calibration.json`.
-2. **FILM BEFORE.** Re-center the horns: with the servo held at 1500 us,
-   unbolt the horn and re-spline it so the mechanical zero of each joint
-   matches the electrical center. The 25T spline gives 14.4 degree steps;
-   whatever is left over becomes a software offset. This step permanently
-   changes how every joint rests, so the current pose is unrepeatable
-   afterwards. See section 11.
-3. **FILM BEFORE.** Caliper the 14 arm dimensions into `dimensions.yaml`,
-   status `measured`. This closes the gap between a visibly wrong model and
-   the metal, which is the entire point of v0.1 and only exists until it is
-   measured.
-4. Weigh each subassembly, recompute inertias, re-verify the lifted mass
-   budget (4 kg rule) against real numbers.
-5. Fold the measured zeros and ranges into `SERVO_MAP` as per joint
-   offsets and limits, with tests.
-
-**Acceptance**: RViz pose matches a photograph of the real arm in the same
-pose, `check_model_driver_sync.py` passes, CI green, tag `v0.1`.
+Caliper session of 2026-08-05, the real hanging bench modeled, FK matched
+the photos (fingertips 5.7 mm above the plate). The servo calibration was
+re-captured on 2026-10-01 after the harness rebuild; `SERVO_MAP` and the
+URDF carry it.
 
 ### v0.2 Real driver
 
-The code already exists and is tested. This phase is the hardware run.
+The code exists and is tested (mock fleet, two arming gates, minimum-jerk
+ramp, board-reset watchdog). This phase is the hardware run.
 
-1. Bring-up order from `docs/wiring.md`, arms compact and resting.
-2. `allow_real:=true`, then an explicit `/soma/arm` call, then a single
-   joint moved through `/soma/command`.
-3. Add motion primitives to the driver: `go_pose(joint targets)`,
-   `open_gripper()`, `close_gripper()`, `home()`, `relax()`. These become
-   the functions the ER agent is allowed to call in v0.4.
-4. A `demo_pose_sequence.py` that plays a safe choreography, which is also
-   the video for this tag.
+1. Bring-up order from `docs/wiring.md`, arms compact and resting, the
+   Jetson on its own adapter.
+2. `allow_real:=true`, then an explicit `/soma/arm` call by Andres, then
+   `soma_sign_check` on the right arm, joint by joint. Flip in the xacro
+   (and its mirror) whatever the metal contradicts; rerun
+   `scripts/workspace_map.py` with the same flips.
+3. `ros2 run soma_driver soma_primitives wave --step`, then without
+   `--step`, filmed. The wave raises the right arm with the base, waves
+   the forearm three times with the hand opening on every out-swing, and
+   comes back the way it went. Step mode walks it one pose at a time and
+   unwinds along the proven path if anything looks wrong.
+4. Sign check of the left arm. Shoulder preload (band or spring, one
+   direction, only what beats the backlash) and the "microseconds from zero
+   where the oscillation stops" measurement, which sizes the rest pose.
+5. Weigh one arm when it is off the rig, if it ever is. Until then 0.7 kg
+   stays labeled an estimate.
 
-**Acceptance**: both arms execute a scripted sequence end to end under the
-ramp, with the emergency switch never needed. Tag `v0.2`.
+**Acceptance**: all 12 joints sign-checked through the ROS driver, the
+wave played end to end under the ramp with the emergency switch never
+needed, filmed. Tag `v0.2`.
 
-### v0.3 Eye-hand (the hard one)
+### v0.3 Cell geometry and eye-deck calibration
 
-This is the phase that makes everything after it possible.
+1. **FILM BEFORE.** The deck: lanes and pocket positions from the
+   workspace map with the verified signs, mocked in cardboard first (fit
+   beside the column, reach of every pocket by hand with the driver), then
+   laser cut. `docs/workspace_map.svg` is the drawing the cutter starts
+   from; pocket size follows the parts actually bought.
+2. **FILM BEFORE.** The camera fixed to the column (a short mast if the
+   35 cm minimum to the deck needs it), looking down at both lanes.
+   Extrinsics die every time something shifts, so this is bolts, not tape.
+3. Pixel to deck: a homography from four markers on the deck, stored in
+   `dimensions.yaml` with provenance and date, published as a static TF.
+   Depth from the OAK stays available for part height, not for the plane.
+4. Planar IK from `scripts/workspace_map.py` promoted into the driver as a
+   module with tests: fingertip (x, z) plus tool angle in, four joint
+   targets out, limits respected, the yaw chosen for the least bend.
+5. **Acceptance, deliberately brutal**: click a pocket in the camera image
+   and the gripper touches its center within 5 mm, ten pockets out of ten,
+   repeated after a power cycle to prove the calibration persists.
 
-1. **Rigid rig. FILM BEFORE.** Both arms bolted to one board at a measured
-   separation, OAK-D on a fixed mast looking down at the work area. New
-   model `soma_rig.urdf.xacro` describing exactly that geometry. Without a
-   rigid rig, extrinsics die every time something shifts. This also ends
-   the era of loose arms on a table, so the provisional bench has to be
-   photographed before the first bolt goes in.
-2. **Deprojection**: pixel plus depth to XYZ in the camera frame, using
-   the factory intrinsics from `device.readCalibration()`.
-3. **Extrinsics camera to arm base**: an ArUco marker on the gripper,
-   moved to N known joint configurations; solve the transform. Store it in
-   `dimensions.yaml` with provenance, publish it as a static TF.
-4. **IK**: MoveIt with the existing SRDF, KDL first, TRAC-IK if KDL
-   struggles near singularities.
-5. **Acceptance, and it is deliberately brutal**: click a point in the
-   camera image and the tool tip touches that point within 1 cm, from ten
-   different points across the work area. Repeat after a power cycle to
-   prove the calibration persists.
+Tag `v0.3`. Video: the click to touch loop.
 
-Tag `v0.3`. Video: the click to touch loop. That alone is a good short.
+### v0.4 Scripted tending cycle, no cloud
 
-### v0.4 Language directed manipulation
+1. Pick and place between pockets as driver primitives: approach from
+   above, descend, close at the calibrated contact angle (foam pads on the
+   fingers, never a stall), lift, move, descend, open, retreat.
+2. The cycle of section 3 as a script, with the lamp on a free channel of
+   board `0x40` (channels 0 to 2) as the machine signal.
+3. 30 consecutive cycles per arm without a drop, both arms interleaved.
+4. **Soak test: one hour continuous**, servo case temperatures measured
+   every ten minutes (IR thermometer), rail current if the INA3221 is back
+   on the bus, failures counted. If a servo passes 60 C the rest pose, the
+   dwell or the parts change before anything longer is attempted.
 
-1. `soma_agent` package: a client for `gemini-robotics-er-2-preview`.
-   Pointing queries return normalized `[y, x]` in a 0 to 1000 space with a
-   label; combine with depth to get XYZ, then reuse the v0.3 pipeline.
-2. Function calling: expose exactly the v0.2 primitives, nothing more. The
-   model plans, decomposes and calls them. **It cannot arm the driver,
-   change a limit, or bypass the ramp**, and there is a test asserting the
-   tool schema contains no such capability.
-3. Cycle verification: use the model's progress classification to decide
-   whether a cycle succeeded, and log it.
-4. Demo: both arms clearing the ArUco cubes into a box from a spoken or
-   typed instruction, with the plan visible on screen.
+**Acceptance**: 30 clean cycles and the one hour soak with its temperature
+log committed. Tag `v0.4`.
 
-Tag `v0.4`. This is the loud one.
+### v0.5 `soma_agent`: the supervisor
+
+1. `soma_agent` package: a client for `gemini-robotics-er-2-preview`
+   behind a thin adapter (`scripts/er2_probe.py` is its seed). Pointing
+   returns `[y, x]` in 0 to 1000; the homography of v0.3 turns it into a
+   deck coordinate; the IK of v0.3 turns that into joints.
+2. Function calling exposes exactly the v0.4 primitives and nothing more.
+   **It cannot arm the driver, change a limit, or bypass the ramp**, and a
+   test asserts the tool schema contains no such capability.
+3. Cycle verification: the model's success detection on the end-state
+   frame decides whether a cycle counts; the engraved id is read and
+   logged; a dropped part is re-localized by pointing.
+4. Fallback: with the API down or rate limited, the cell keeps cycling on
+   geometry alone and counts those cycles as unverified, visibly.
+5. Cost and latency log per call (tokens in, tokens out, thinking tokens,
+   seconds), because the price doubles on 2027-01-01 and the preview can be
+   retired without notice.
+
+**Acceptance**: 50 verified cycles with one induced fault (a part knocked
+over inside the lane) recovered without a human. Tag `v0.5`.
 
 ### v1.0 The operator
 
-Two hours of continuous cycles, a public counter verified by the model,
-thermal and current behavior logged, failures counted honestly. Then the
-project closes and the arms move to Waver. Anything missing becomes an
-issue, not a reason to keep it open.
+Six to seven hours of continuous cycles, both arms, a public counter
+verified by the supervisor, timestamp on screen, the video unedited,
+thermal and failure numbers logged and published as they are. Then the
+project closes and the arms move to the mobile platform. Anything missing
+becomes an issue, not a reason to keep it open.
 
 ---
 
-## 7. Sequencing, and what unblocks what
+## 5. Sequencing, and what unblocks what
 
 ```
-v0.1 calibrated model ──► v0.2 driver ──► v0.3 eye-hand ──► v0.4 ER 2 ──► v1.0
-        │                                      ▲
-        │                                      │
-        └──► L1 MJCF + system ID ──► L2 reach ─┘ (policy runs on the same rig)
-                                        │
-                                        └──► L3 grasp ──► L4 bimanual ──► L5 write-up
+v0.1 model ──► v0.2 driver ──► v0.3 cell + eye-deck ──► v0.4 cycle + soak ──► v0.5 agent ──► v1.0
+                  │                 ▲
+                  └── signs ────────┘  (the deck is cut only with verified signs)
 ```
 
-- The rigid rig (a board, bolts and a mast) can be built any evening and
-  is a hard prerequisite for both v0.3 and any policy evaluation on real
-  hardware. Build it early.
-- L1 needs only v0.1 (a measured model) plus a couple of step response
-  videos, so the learning track can start while the demo track is doing
-  hardware runs.
-- L2 evaluation on the real robot needs v0.2 and the rig, not v0.3.
-
-Rough effort, in evening sessions of two to three hours: v0.1 two to
-three, v0.2 one to two, rig one, v0.3 four to six, v0.4 three to four,
-L1 two to three, L2 three to five, L3 open ended.
+- The workspace map, the deck drawing and the probe of the API cost
+  nothing on the bench and are done.
+- The API key, billing and the Developer Program credit are a one-evening
+  admin task that gates v0.5 only; the first real pointing call on a frame
+  of the bench can happen any time after v0.3 fixes the camera.
+- Parts (six wooden blocks) and the lamp can be bought now.
 
 ---
 
-## 8. Invariants that survive every phase
+## 6. Invariants that survive every phase
 
 These do not bend for a demo, a deadline or an agent.
 
@@ -339,48 +304,70 @@ These do not bend for a demo, a deadline or an agent.
 
 ---
 
-## 9. Risks, named before they bite
+## 7. Risks, named before they bite
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| Payload is about 330 g at 30 cm | Limits every task | Light targets (cardboard cubes), compact poses, shoulder and base are the first servos to upgrade if needed |
-| No encoders, no force sensing | Open loop everything; policies cannot correct | Position based policies, generous randomization, vision as the only feedback |
-| Backlash in aluminum joints | Repeatability worse than the model suggests | Measure it, randomize it, and report the real repeatability number instead of hiding it |
-| MG996R clones vary unit to unit | One servo behaves unlike its twin | Per channel calibration already in the workflow; identify gains per joint, not per model |
-| Single UBEC shared by twelve servos | Brownouts under simultaneous load | Second UBEC planned, one per arm; sequence motions rather than moving everything at once |
-| ER 2 is a preview API | Interface may change | Keep the client behind a thin adapter with its own tests; the robot must work without it |
-| Cloud dependency in a demo | A network hiccup ruins the video | Cache plans, and keep a scripted fallback sequence for the recording |
-| Training time on an M3 Pro | Slow iteration | Start with state based tasks and small networks; consider a rented GPU only for a final run |
+| **MG996R endurance over seven hours** (gripper stall, limit cycle at the vertical, base near stall) | The run dies at hour two, on camera | Grip at the calibrated contact angle with foam pads, shoulders preloaded, rest pose off the vertical, stations near the vertical, the one hour soak of v0.4 as a gate with temperatures measured |
+| Payload is about 330 g at 30 cm | Limits every task | Parts under 50 g, compact poses, short holds |
+| Reach is a 240 mm lane per arm, under unverified signs | The deck is cut for the wrong geometry | Cut only after the sign check; cardboard mock first |
+| No encoders, no force sensing | Open loop everything | Pockets constrain the parts; vision verifies every cycle |
+| Backlash in aluminum joints | Repeatability of a few millimeters | Chamfered pockets, 6 mm of play, the real repeatability number reported |
+| ER 2 is a preview API | The id disappears mid-project | Model id is configuration; the adapter is thin; the cell runs without it |
+| Cloud dependency in a demo | A network hiccup ruins the run | Unverified cycles continue and are counted as such; retries with backoff |
 | Scope creep past v1.0 | The project never closes | The closure rule is in the README and in CLAUDE.md: at v1.0 it ends |
 
 ---
 
-## 10. Immediate next actions
+## 8. Out of scope, and why
 
-1. Finish zeros and mechanical limits with the workbench (in progress).
-2. **FILM BEFORE**, then re-center the horns at 1500 us, one servo at a
-   time.
-3. **FILM BEFORE**, then the caliper session when the tool arrives, fill
-   `dimensions.yaml`, tag `v0.1`.
-4. **FILM BEFORE**, then build the rigid rig (board, bolts, camera mast)
-   and measure the arm separation for `soma_rig.urdf.xacro`.
-5. Record the step response videos for L1 while the arms are already
-   powered and instrumented. These double as capture material.
+- **The learning track** (RL-ready URDF, MJCF export, actuator
+  identification, L1 to L5) was removed on 2026-10-03. It competed for the
+  same evenings as the demo and it was not needed for any gate above. What
+  stays: `sim/pendulum_oracle.xml` and `test_sim_oracle.py`, a cheap check
+  that the MuJoCo wheel CI installs still agrees with pencil-and-paper
+  physics; and the inertia values in the xacro, which cost nothing to keep.
+- **MoveIt** as the IK path. The chain is planar; a 20-line analytic IK
+  with the measured limits (section 2) replaces a planner, a broken SRDF
+  and a package that never existed. `srdf/soma.srdf` and
+  `config/kinematics.yaml` stay as reference files, off the ladder.
+- **Bimanual handoff.** Physically impossible on this bench: the planes
+  are 124.6 mm apart and no joint moves laterally.
+- **Vision teleop by mimicry (BlazePose).** Post-1.0 backlog, as before.
+- **Deferred past v1.0**: a rotary index table to move parts between the
+  two lanes (the honest way to get a flow between arms), and a gravity
+  ramp that returns parts to a pick point.
 
 ---
 
-## 11. Capture
+## 9. Immediate next actions
+
+1. Arming ritual, `soma_sign_check` on the right arm, then the wave with
+   `--step`, filmed. Tag `v0.2` once the left arm is checked too.
+2. Measure the shoulder oscillation threshold in microseconds; fit the
+   preload.
+3. Rerun `scripts/workspace_map.py` with the verified signs; cardboard
+   deck; order the laser cut.
+4. Buy six wooden blocks of about 40 mm and a lamp; engrave or mark the
+   ids.
+5. AI Studio auth key, billing, the Developer Program credit; run
+   `scripts/er2_probe.py` on one frame of the bench and write the latency
+   and token numbers into this file.
+
+---
+
+## 10. Capture
 
 Raw material is unrecoverable. Engineering that was not captured did not
 happen as far as anyone outside this bench is concerned, and every
-milestone in section 6 is supposed to ship with a video.
+milestone in section 4 is supposed to ship with a video.
 
 **This is not a new rule.** A capture rule already existed in the rover
 project and produced exactly one tracked image in eight months. A rule
 fails when it has no defined moment, no defined destination and no cost
 ceiling. This section supplies all three.
 
-### 11.1 The session checklist
+### 10.1 The session checklist
 
 Four items. Three minutes total. If it takes longer, the checklist is
 wrong, not the engineer.
@@ -409,23 +396,20 @@ Rules that keep this survivable:
 - The two "before" shots happen while the rail is still off, which is the
   only window a tired person actually has.
 
-### 11.2 One-way doors
+### 10.2 One-way doors
 
 A step that cannot be undone does not feel different at 11pm, so it gets
-marked in the plan itself. Every step tagged **FILM BEFORE** in sections 6
-and 10 destroys a state that can never be filmed again:
+marked in the plan itself. Every step tagged **FILM BEFORE** in section 4
+destroys a state that can never be filmed again:
 
 | Step | Where | What it destroys |
 |---|---|---|
-| Re-center the horns at 1500 us | v0.1 step 2 | The current resting angle of all twelve joints |
-| Caliper session | v0.1 step 3 | The visibly wrong twin, 16 of 30 dimensions still guessed |
-| Build the rigid rig | v0.3 step 1 | The era of loose arms on a table |
-| Definitive harness (JST, 16 AWG) | `docs/wiring.md` | The provisional dupont wiring, and the broken jumper next to it |
-| Fit the second UBEC | `docs/hardware.md` 7 | The single-rail configuration the docs call a known weak point |
+| First joint moved through the ROS driver | v0.2 step 2 | The unproven signs, the arm that has only ever moved from a slider |
+| Cut the deck and fix the camera to the column | v0.3 steps 1 and 2 | The era of a bare plate under loose-hanging arms |
+| Definitive harness (JST, 16 AWG) | `docs/wiring.md` | The provisional wiring |
 | Diagnose the left wrist | open issue | An unresolved fault, on camera, undiagnosed |
-| First `git tag` | v0.1 | `git tag -l` returning nothing: day zero, unrepeatable |
 
-### 11.3 Incidents carry a capture
+### 10.3 Incidents carry a capture
 
 `docs/safety.md` keeps an incident log where every row pairs a failure with
 the change it forced, and it closes with "an incident with no change is an
