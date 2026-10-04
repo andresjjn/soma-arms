@@ -138,6 +138,9 @@ Being honest about this matters more than the list above.
 | 2026-07-22 | I2C dropped four times with `OSError 121`, the last unrecoverable after 20 retries. Cause: a dupont jumper broken inside its insulation | `retry_i2c` (3 attempts, 5 ms) as a net, and new short cables as the actual fix. JST with lock specified for the permanent harness |
 | 2026-07-22 | "Ghost" servos twitching at power-up | traced to loose connectors. Silicone retainers specified, and the compact resting pose rule |
 | 2026-07-22 | Channel 0 suspected during the L16 fault, never cleared | L16 moved to channel 3, channel 0 left out of service |
+| 2026-09-01 | Hot plugging the servo branch on the shared ATX sank the 12 V rail and hard-shut the Jetson (inrush of two UBECs plus twelve servos; the supply is the common root of the star) | power domains split: the Jetson on its own adapter, the ATX for servos only; nothing is ever hot plugged onto the servo rail |
+| 2026-10-01 | The harness was reported as "channels 1 to 12" and the map followed it: a dead right arm, a left arm driven by neighbouring joints' pulses. The boards have no silkscreen and the header was counted from the wrong end | map restored to the proven layout (15 to 10 on `0x40`, 9 to 4 on `0x43`); rule in `docs/wiring.md`: a channel number is proven by moving a servo, never by counting pins |
+| 2026-10-01 | A 3.3 V logic glitch put both PCA9685 back to power-on defaults (asleep, 200 Hz) while software believed it was driving pulses | the driver re-checks MODE1 and PRESCALE while armed and disarms on a reset; arming re-runs the init (`test_board_reset.py`) |
 
 New incidents belong in this table, with the change that came out of them. An
 incident with no change is an incident that will happen again. Note that two

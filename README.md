@@ -149,6 +149,7 @@ docker/             headless ROS 2 Humble image for building and validating
 | Document | What it covers |
 |---|---|
 | **[docs/plan.md](docs/plan.md)** | **the master plan: hardware roles, what the planar arms can reach, the tending cell, the version ladder and the acceptance gate of every version** |
+| [docs/log.md](docs/log.md) | the bench and decision log, one entry per session, measured facts first |
 | [docs/hardware.md](docs/hardware.md) | every part, its datasheet numbers, and the measured values that override them |
 | [docs/wiring.md](docs/wiring.md) | the verified channel map, power chain, connectors, bring-up order |
 | [docs/safety.md](docs/safety.md) | the rules, how each is enforced in code, and the incident log |

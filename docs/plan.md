@@ -381,7 +381,7 @@ AT SESSION CLOSE, before anything is put away:
   [ ] 1 clip, 20 s vertical: the most surprising thing that happened today.
       If nothing surprised you, film what failed. If nothing failed, film
       the terminal showing the number that changed.
-  [ ] 1 line appended to the logbook:
+  [ ] 1 line appended to the log (docs/log.md):
       capture: <folder>/<file> - <what it shows>
 ```
 

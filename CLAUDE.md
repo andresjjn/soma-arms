@@ -113,7 +113,7 @@ soma_driver/          PCA9685 driver
   soma_driver/sign_check_cli.py    bench tool: verify joint axis signs (v0.2)
   soma_driver/ina3221.py           power monitor, read-only, no gates needed
   test/                            the safety test suite
-docs/                 plan, hardware, wiring, safety, bench, migration
+docs/                 plan, log, hardware, wiring, safety, bench, migration
 scripts/              smoke_test.sh, check_model_driver_sync.py,
                       workspace_map.py (reach map and deck drawing),
                       er2_probe.py (one pointing call to ER 2, key from the environment)
@@ -197,18 +197,24 @@ wave on video, and that needs a human at the bench, which is not something
 an agent can do. Versions are gates, never dates. The roadmap lives in the
 README; the engineering behind it in docs/plan.md.
 
-## Waver ecosystem
+## The log, and the Waver archive
 
-SOMA is independent code, but not independent history. The arms were brought
-up as part of a rover project, and the record of every hardware decision lives
-there. This section is context only: nothing in this repository depends on
-those files, and nothing from them should be copied in wholesale.
+The bench and decision log of this project is `docs/log.md`, in this
+repository, since 2026-10-03. Every bench session and every decision gets an
+entry there, and every incident a row in `docs/safety.md`. Nothing about
+SOMA is written into the Waver repository any more.
+
+SOMA is independent code, but not independent history: the arms were brought
+up as part of a rover project before this repository existed, and the record
+of July and August 2026 lives there. Those files are a closed archive, context
+only; nothing here depends on them and nothing from them is copied in
+wholesale.
 
 | File | What it holds |
 |---|---|
-| `Waver/HANDOFF_SOMA.md` | the handoff that defined this project: roadmap, inviolable rules, the exact `SERVO_MAP` table, node interfaces, the 24 tests, validated commands |
-| `Waver/cad/MEDIDAS.md` | the master log of hardware decisions and bench sessions. **Read this first for any question about history** |
-| `Waver/Manual de ensamble ^ DOF arm.pdf` | the arm kit manual. Page 1 is the parts list, page 28 is where the A to F joint labels come from |
+| `Waver/HANDOFF_SOMA.md` | the handoff that defined this project in July 2026: the original roadmap, inviolable rules, the first `SERVO_MAP`, node interfaces, the 24 tests |
+| `Waver/cad/MEDIDAS.md` | the hardware decisions and bench sessions up to 2026-10-03 (first power-up, caliper session, two-board bus, power plan, the September and October sessions now also summarized in `docs/log.md`) |
+| `Waver/Manual de ensamble ^ DOF arm.pdf` | the arm kit manual (a copy is in `docs/`). Page 1 is the parts list, page 28 is where the A to F joint labels come from |
 
 When SOMA reaches v1.0, the platform project drops its own copies of these
 packages and consumes SOMA as a dependency instead.
