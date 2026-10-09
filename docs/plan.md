@@ -112,8 +112,10 @@ What the table says, honestly:
   first fit check happens with the deck in cardboard before the laser.
 - The whole map rests on sign hypotheses. Only the yaw direction is
   verified on the metal (2026-10-01: negative = forward). Shoulder, elbow
-  and wrist pitch are URDF guesses until the v0.2 sign check; the map is
-  redone that evening with `--flip <joint>` where the metal disagrees.
+  and wrist pitch are URDF guesses until the v0.2 sign check. A joint
+  whose metal disagrees gets its `SERVO_MAP` row mirrored, and the map is
+  then rerun as is, with no `--flip`: it reads the corrected limits, and
+  its frame is the physical hug convention, not the URDF.
 
 Torque, measured and estimated: an MG996R delivers about 10 kg.cm, not the
 25 the frame was sold for; a hanging arm weighs about 0.7 kg (estimate,
@@ -183,9 +185,18 @@ ramp, board-reset watchdog). This phase is the hardware run.
 1. Bring-up order from `docs/wiring.md`, arms compact and resting, the
    Jetson on its own adapter.
 2. `allow_real:=true`, then an explicit `/soma/arm` call by Andres, then
-   `soma_sign_check` on the right arm, joint by joint. Flip in the xacro
-   (and its mirror) whatever the metal contradicts; rerun
-   `scripts/workspace_map.py` with the same flips.
+   `soma_sign_check` on the right arm, joint by joint
+   (`docs/session_v02.md` is the runbook). Metal that moves opposite to
+   the hug convention is a DRIVER fix: mirror that joint's `SERVO_MAP` row
+   and sync its xacro limits (the tool prints both), never an axis flip,
+   because every planar `<axis>` line serves both arms. RViz drawing a
+   joint the other way while the metal is right is a MODEL fix (the
+   joint's `<axis>` line) and needs no hardware to check. Then rerun
+   `scripts/workspace_map.py` WITHOUT `--flip`: after a driver fix the
+   command sign is the physical one again, and a model fix does not touch
+   the map at all. `--flip` is only a preview for an evening before a
+   driver fix lands. A mirrored right elbow or yaw sends the wave back to
+   design before it plays.
 3. `ros2 run soma_driver soma_primitives wave --step`, then without
    `--step`, filmed. The wave raises the right arm with the base, waves
    the forearm three times with the hand opening on every out-swing, and
@@ -298,7 +309,8 @@ These do not bend for a demo, a deadline or an agent.
    clamping on arrival, and auto release on the self locking joint.
 4. Every motion is ramped, in sim and on hardware, with the same numbers.
 5. The 6 V rail is energised only with the arms compact and resting, and
-   the switch on that rail is the real emergency stop.
+   the switch that feeds it (today the ATX rear switch) is the real
+   emergency stop.
 6. The cloud reasoner proposes; the armed driver disposes.
 7. A safety rule without a test is a rule that will be refactored away.
 

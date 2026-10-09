@@ -1,22 +1,47 @@
 # SOMA runtime on the Jetson Orin Nano (JetPack 7.2 has no ROS 2 Humble,
 # so the driver runs in a Humble container with the I2C bus passed through).
+# Run from the repo root on the Jetson (/home/jetson/soma-arms):
 #
 #   docker compose -f docker-compose.jetson.yml up -d      # MOCK, disarmed
 #   docker compose -f docker-compose.jetson.yml logs -f
+#   docker compose -f docker-compose.jetson.yml down
 #
 # The container boots the driver in MOCK and DISARMED, always. Going live
-# is the same two-gate ritual as everywhere else, from a shell inside:
+# is the two-gate ritual of docs/safety.md, and both gates are Andres's.
 #
-#   docker exec -it soma_driver bash -c "source /opt/ros/humble/setup.bash \
+# Gate 1, allow_real, is a launch parameter, so it is opened by RELAUNCH:
+#
+#   ALLOW_REAL=true docker compose -f docker-compose.jetson.yml up -d --force-recreate
+#
+# The driver still boots MOCK and DISARMED; its log now warns that the
+# arm service WILL energize the servos. Documented alternative, no
+# restart (it lasts until the process ends):
+#
+#   docker exec soma_driver bash -c "source /opt/ros/humble/setup.bash \
 #     && source /ros2_ws/install/setup.bash \
-#     && ros2 param set /soma_driver allow_real true"   # gate 1 is a LAUNCH
-#                                                       # param: prefer
-#                                                       # relaunching with
-#                                                       # allow_real:=true
-#   ros2 service call /soma/arm std_srvs/srv/SetBool "{data: true}"  # gate 2
+#     && ros2 param set /soma_driver allow_real true"
+#
+# Gate 2, the /soma/arm call, goes through docker exec:
+#
+#   docker exec soma_driver bash -c "source /opt/ros/humble/setup.bash \
+#     && source /ros2_ws/install/setup.bash \
+#     && ros2 service call /soma/arm std_srvs/srv/SetBool '{data: true}'"
+#
+# Gate 1 is closed again by a relaunch WITHOUT the variable, at the end
+# of every session:
+#
+#   docker compose -f docker-compose.jetson.yml up -d --force-recreate
+#
+# Two traps, both closed by that habit. restart: unless-stopped keeps a
+# container's configuration across reboots, so a container created with
+# ALLOW_REAL=true comes back after a power cycle with gate 1 still open.
+# And compose reads a .env file next to this one on its own: never put
+# ALLOW_REAL there, nor in a shell profile. Gate 1 is typed, every time,
+# spelled ALLOW_REAL=true; unset (or false) keeps it shut.
 #
 # Build-on-boot is a known tradeoff (same debt as the Waver stack, task
-# tracked there); acceptable while the workspace changes daily.
+# tracked there); acceptable while the workspace changes daily. It is
+# also why recreating the container is how new code reaches the driver.
 services:
   driver:
     build: ./docker
@@ -31,6 +56,6 @@ services:
       bash -c "source /opt/ros/humble/setup.bash &&
                cd /ros2_ws && colcon build --symlink-install &&
                source install/setup.bash &&
-               ros2 launch soma_driver driver.launch.py"
+               ros2 launch soma_driver driver.launch.py allow_real:=${ALLOW_REAL:-false}"
     mem_limit: 1g
     restart: unless-stopped

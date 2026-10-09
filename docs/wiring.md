@@ -46,31 +46,46 @@ no channel. `test_mimic_joints_have_no_channel` enforces that.
 
 ## Power
 
-Today, as validated on the bench:
+Today, as assembled on 2026-09-01 and in use since:
 
 ```
-  LiPo 2S ---> switch + fuse ---> UBEC 6 V ---> PCA9685 V+ terminal
-                                                  |
-                                                  +--> 12 arm servos
-                                                  +--> L16 lift
-  Raspberry Pi 5 (its own supply, shares GROUND only)
+  mains --> ATX supply (MaxiTech 300U, 10 A on +12 V)   <- rear switch = EMERGENCY STOP
+              P4 +12 V --> 10 A fuse --> XT60 --> Y splitter --+--> UBEC 6 V --> V+ block of 0x40 --> right arm (6 servos)
+                                                               +--> UBEC 6 V --> V+ block of 0x43 --> left arm (6 servos)
+
+  Jetson Orin Nano Super: its OWN wall adapter (since 2026-09-01)
+  PCA9685 logic (VCC 3.3 V) from the Jetson header, pin 1
+  Jetson and servo rails share GROUND and nothing else
+  INA3221 (0x41): off the bus since 2026-10-01
 ```
 
-Planned, and not fitted yet: a **second UBEC, one per arm**, so a stall on one
-arm cannot brown out the other. The L16 then hangs off whichever rail is less
-loaded.
+A star from the ATX, one UBEC per arm, separate returns, so a stall on
+one arm cannot brown out the other. The L16 is off this bench; when the
+torso returns it hangs off whichever rail is less loaded.
+
+Measured, 2026-09-01: the ATX gives 11.6 V with nothing connected,
+inside the ATX +-5 % band but below the 11.8 to 12.3 V we would have
+liked. Watch it under load; below 11.4 V sustained, a load fan on 5 V
+goes on. 6.00 V on both terminal blocks.
 
 Non negotiable:
 
-- **NEVER connect the LiPo directly to the servos.** A full 2S pack is 8.4 V
-  and the MG996R is rated to 7.2 V. The UBEC is the only thing preventing
-  twelve dead servos.
-- **The servo rail never comes from USB or from the Pi's 5 V pin.** Feed the
-  PCA9685 green V+ terminal block from the UBEC, with wire of **16 AWG or
-  thicker**, and a capacitor across V+.
-- **Energise V+ only with the arms in a compact pose, resting on something.**
-  MG996R clones twitch at power-up.
-- The Pi and the servos share **ground** and nothing else.
+- **The ATX rear switch is the emergency stop**, and it stays in reach
+  whenever V+ is up. It drops the 12 V, both UBECs and the 6 V rail and
+  leaves the Jetson running. Never stop the arms by pulling the XT60 under
+  load: see [safety.md](safety.md), "What the safety model does not cover".
+- **Nothing but a UBEC feeds a servo.** The MG996R is rated to 7.2 V: not
+  the 12 V side, not a battery straight on V+ (a full 2S LiPo, the July
+  bench supply, is 8.4 V). Feed each PCA9685 green V+ terminal block from
+  its UBEC with wire of **16 AWG or thicker**, and a capacitor across V+.
+- **The Jetson never shares the servo supply.** On 2026-09-01 hot plugging
+  the servo branch (the input capacitors of both UBECs plus twelve servos)
+  sank the shared 12 V and hard-shut the Jetson. Its own adapter since,
+  and **nothing is ever hot plugged onto the servo branch.**
+- **Energise V+ only with both arms hanging at rest**, nothing under or
+  around them: on this bench that IS the compact pose. MG996R clones
+  twitch at power-up.
+- The Jetson and the servos share **ground** and nothing else.
 
 ## Connectors, which is where the real failures came from
 
@@ -97,7 +112,7 @@ the fault is mechanical and no amount of retry logic will fix it.
 | | |
 |---|---|
 | Bus | Jetson Orin Nano, bus i2c-7, header pins 1 (3V3), 3 (SDA), 5 (SCL), 6 (GND). Pi era: bus 1 |
-| Addresses | `0x40` PCA9685 #1 (right arm + L16) · `0x43` PCA9685 #2 (A0+A1 bridged, left arm since 2026-08-12) · `0x41` INA3221 (A0 to VS) · `0x70` PCA all-call, always present |
+| Addresses | `0x40` PCA9685 #1 (right arm + L16) · `0x43` PCA9685 #2 (A0+A1 bridged, left arm since 2026-08-12) · `0x41` INA3221 (A0 to VS), **off the bus since 2026-10-01** · `0x70` PCA all-call, always present |
 | Frequency | 50 Hz, prescale 121 gives exactly 50.0 Hz |
 
 Address facts, verified live on 2026-08-11: the INA3221 A0 pin offers only
@@ -111,8 +126,8 @@ First check of any bench session, before anything is energised:
 i2cdetect -y -r 7
 ```
 
-`0x40`, `0x41` and `0x43` must appear. If any is missing, stop: nothing
-below this line will work.
+`0x40` and `0x43` must appear (`0x41` only when the INA3221 is back on the
+bus). If either is missing, stop: nothing below this line will work.
 
 ### Retries handle glitches, not broken wires
 
@@ -127,17 +142,28 @@ never a substitute for one.**
 
 ## Bring-up order
 
-This is the order the 2026-07-22 session actually followed, and it is the one
-to repeat. Steps 1 and 2 cannot move anything, which is the whole point.
+The order for the Jetson bench. Steps 1 to 3 cannot move anything, which
+is the whole point. The session runbook,
+[session_v02.md](session_v02.md), walks it with checkboxes.
 
-1. `i2cdetect -y 1` shows `0x40`. **Servo rail still off.**
-2. Validate the chain **with no power to the servos**: set 50 Hz, write all 13
-   channels, read the registers back, and leave every output in **FULL_OFF**
-   before the battery goes anywhere near it.
-3. Put both arms in a **compact pose, resting on the bench**. Then energise
-   the 6 V rail. Expect a twitch.
-4. Only then run the driver, and only then consider arming it. Arming needs
-   Andres to say so out loud first: see [safety.md](safety.md).
+1. **Jetson and container first**, servo rail OFF. The Jetson boots on its
+   own adapter; `docker compose -f docker-compose.jetson.yml up -d`; the log
+   says "MOCK backend, DISARMED".
+2. `i2cdetect -y -r 7` shows `0x40` and `0x43`. The boards' logic runs on
+   the Jetson's 3.3 V, so they answer with the servo rail off.
+3. **Silence both boards** before the rail comes up, in case a previous
+   session left them driving pulses (a killed process does not clean up):
+   `i2cset -y 7 0x40 0xfd 0x10` and `i2cset -y 7 0x43 0xfd 0x10`. That is
+   ALL_LED_OFF_H with the full-off bit, the same write the driver's
+   `disable_all()` makes. With V+ off it cannot move anything.
+4. **Arms hanging at rest**, hands and tools clear, the ATX rear switch in
+   reach. ATX on. Expect the power-on twitch.
+5. Multimeter: **6.00 V on both V+ terminal blocks.**
+6. Only then the gates of [safety.md](safety.md) rule 2, and only when
+   Andres says so out loud: gate 1 by relaunch, gate 2 by `/soma/arm`.
+
+Shutting down is the same list backwards: `relax` (home, then disarm),
+ATX off, close gate 1 with a plain relaunch; the Jetson can stay up.
 
 Channel by channel identification, when the wiring is unknown or has been
 touched: drive **one channel at a time** with **60 ms bursts**, which is the

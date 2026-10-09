@@ -50,8 +50,8 @@ else, and the full model is in **[docs/safety.md](docs/safety.md)**:
    hand. It will not happen twice.
 3. **Energise the 6 V rail only with the arms folded and resting.** These
    servos twitch at power-up.
-4. **The real emergency stop is the switch on the 6 V rail.** Keep it in
-   reach.
+4. **The real emergency stop is the switch that feeds the servo rail**,
+   today the ATX rear switch. Keep it in reach.
 
 ---
 

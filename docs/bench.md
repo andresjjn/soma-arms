@@ -162,3 +162,93 @@ anything.
 Fix: send an **extend** command and apply **gentle manual traction** on the
 rod. The hand breaks the wedge. Afterwards it takes absolute positions
 normally again.
+
+---
+
+## 6. On the Jetson
+
+The bench computer since August: a Jetson Orin Nano Super at
+`192.168.1.2` on WiFi, user `jetson`, the repository at
+`/home/jetson/soma-arms`, the PCA9685 boards on header bus `i2c-7`.
+JetPack 7.2 has no ROS 2 Humble, so the driver runs in the `soma_driver`
+container of `docker-compose.jetson.yml`, always from the repo root.
+
+```bash
+ssh jetson@192.168.1.2
+cd /home/jetson/soma-arms
+i2cdetect -y -r 7      # 0x40 and 0x43 (0x70 is the all-call address)
+```
+
+`0x41` no longer appears: the INA3221 is off the bus since 2026-10-01.
+A missing `0x40` or `0x43` is a harness fault: stop there.
+
+The driver container, which boots MOCK and DISARMED every time:
+
+```bash
+docker compose -f docker-compose.jetson.yml up -d
+docker compose -f docker-compose.jetson.yml logs -f      # Ctrl-C leaves it running
+docker compose -f docker-compose.jetson.yml down
+```
+
+New code reaches the driver by pulling and recreating the container,
+which rebuilds the workspace on boot (expect about a minute before the
+log says "MOCK backend, DISARMED"):
+
+```bash
+git pull --ff-only
+docker compose -f docker-compose.jetson.yml up -d --force-recreate
+```
+
+### The `soma` helper
+
+Every ROS command runs inside the container with both setup files
+sourced. One shell function per SSH session saves the boilerplate (or
+add it to `~/.bashrc` on the Jetson):
+
+```bash
+soma() { docker exec -it soma_driver bash -c 'source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash && exec "$@"' soma "$@"; }
+```
+
+The arguments travel as positional parameters, so quoted YAML such as
+`"{data: true}"` arrives as one word. (Splicing `$*` into the `bash -c`
+string instead would split it in two.) Check that once per session; it
+must print `[{data: true}]` on one line:
+
+```bash
+soma printf '[%s]\n' "{data: true}"
+```
+
+Then:
+
+```bash
+soma ros2 topic echo /joint_states --once
+soma ros2 param get /soma_driver allow_real        # gate 1: False unless relaunched
+soma ros2 service call /soma/arm std_srvs/srv/SetBool "{data: true}"    # gate 2
+soma ros2 service call /soma/arm std_srvs/srv/SetBool "{data: false}"   # disarm
+soma ros2 run soma_driver soma_sign_check --arm right
+soma ros2 run soma_driver soma_primitives wave --step
+```
+
+Gate 1 (`allow_real`) is a launch parameter, opened by relaunching the
+container and closed by relaunching it without the variable. See the
+header of `docker-compose.jetson.yml` and [safety.md](safety.md) rule 2:
+
+```bash
+ALLOW_REAL=true docker compose -f docker-compose.jetson.yml up -d --force-recreate   # open
+docker compose -f docker-compose.jetson.yml up -d --force-recreate                   # close
+```
+
+### Can it move a motor
+
+| Command | Can it move a motor |
+|---|---|
+| `i2cdetect -y -r 7`, `compose up`, `logs`, `down` | no |
+| `soma ros2 topic echo ...`, `soma ros2 param get ...` | no |
+| `ALLOW_REAL=true ... up -d --force-recreate` (gate 1) | no by itself: the driver boots MOCK and DISARMED, but the next gate is live |
+| `soma ros2 service call /soma/arm ... "{data: true}"` (gate 2) | **yes**: every servo starts receiving the pulse of the pose the driver holds (rule 2 of [safety.md](safety.md)) |
+| `soma ros2 run soma_driver soma_sign_check`, `soma_primitives ...` | only while ARMED; disarmed they move `/joint_states` and nothing else |
+| `soma ros2 service call /soma/arm ... "{data: false}"` | no drive: the signal is cut and the servos go limp, so an arm that is not hanging falls to the hang |
+| the ATX rear switch | it is the emergency stop: 12 V, both UBECs and the 6 V rail go down, the Jetson stays up |
+
+Arming is Andres's call, out loud, every session. Nothing in this table
+changes that.

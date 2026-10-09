@@ -34,10 +34,15 @@
 
   AXIS SIGNS ARE PROVISIONAL: lengths, parallelism and anchors are
   caliper-measured; the world-direction of each joint's positive sense
-  still needs the first powered RViz-vs-reality comparison (v0.2 session,
-  one small commanded angle per joint). A wrong sense is a one-line flip
-  here plus the same flip in the mirror. Do not "fix" signs from the
-  armchair; fix them from the bench.
+  is checked joint by joint by soma_sign_check (v0.2). Two findings, two
+  different fixes. METAL moving opposite to the hug convention is a
+  driver fix: mirror the joint's SERVO_MAP row and sync its limits here
+  (macro defaults for the right arm, the bench call for the left). It is
+  never an axis flip: every planar <axis> below uses ${side}, so a flip
+  changes both arms. RViz drawing a joint the other way while the metal
+  is right is the case for an <axis> flip, and a flip only one arm needs
+  takes a per-side parameter, not an edit of the shared line. Do not
+  "fix" signs from the armchair; fix them from the bench.
 
   Visuals are honest bounding boxes; pretty geometry arrives with the
   CAD-to-URDF pipeline (task #30). Roughly 0.7 kg per hanging arm (the

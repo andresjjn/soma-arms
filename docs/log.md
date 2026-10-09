@@ -168,3 +168,8 @@ change they forced.
   reach map with the verified signs (`--flip`), cardboard deck, then the
   laser; buy six wooden blocks and a lamp; AI Studio auth key with billing
   and `er2_probe.py` on one frame from the Jetson.
+- Clarified 2026-10-09: "with the verified signs (`--flip`)" above is
+  wrong for the case it was written for. Metal reversed is fixed by
+  mirroring the joint's `SERVO_MAP` row, and the map is then rerun
+  without `--flip`; RViz reversed with the metal right is an axis flip in
+  the model, which the map does not read. See `docs/plan.md` section 4.

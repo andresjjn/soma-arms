@@ -25,7 +25,10 @@ on every one of the four parallel axes (axis +Y of the bench frame on
 both arms). Only the yaw direction is verified on the metal (2026-10-01:
 negative = forward); shoulder, elbow and wrist pitch are hypotheses until
 the v0.2 sign check. `--flip <joint>` mirrors one joint's sense and its
-limits, so the map can be redone the evening the signs are known.
+limits: a preview of the reach while a reversed joint waits for its
+driver fix. Once its SERVO_MAP row is mirrored, run the map WITHOUT
+`--flip`: it reads the corrected limits, and its frame is the physical
+hug convention, so an axis flip in the URDF changes nothing here.
 """
 import argparse
 import math

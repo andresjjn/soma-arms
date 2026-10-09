@@ -242,3 +242,71 @@ class TestBoardWatchdog:
             if n is not None:
                 n.destroy_node()
             rclpy.shutdown()
+
+
+class TestWhatArmingSends:
+    """docs/safety.md rule 2, made executable (2026-10-09).
+
+    Arming swaps in the real boards with every output FULL_OFF, and the
+    next 50 Hz tick sends EVERY channel the pulse of the pose the driver
+    believes it holds, all at once. After a clean boot that is the
+    calibrated zero. The ramp cannot shape this first move: the driver
+    is open loop and believes each joint is already there, so a servo
+    that is physically elsewhere goes to its pulse at its own speed.
+    Same fake smbus2 as above: no hardware is reachable from here.
+    """
+
+    @staticmethod
+    def _real_node():
+        from rclpy.parameter import Parameter
+        return ArmController(parameter_overrides=[
+            Parameter('allow_real', value=True),
+            Parameter('i2c_bus', value=7)])
+
+    @staticmethod
+    def _counts(chips, spec):
+        regs = chips.regs[spec.address]
+        base = 0x06 + 4 * spec.channel          # LEDn_ON_L
+        return regs.get(base + 2, 0) | (regs.get(base + 3, 0) << 8)
+
+    @staticmethod
+    def _counts_for(spec, position):
+        return round(spec.command_to_us(position) / 20000.0 * 4096.0)
+
+    def test_the_first_armed_tick_sends_every_calibrated_zero(self, chips):
+        rclpy.init()
+        n = None
+        try:
+            n = self._real_node()
+            assert _arm(n, True).success is True
+            n._tick()
+            for name, spec in SERVO_MAP.items():
+                assert self._counts(chips, spec) == self._counts_for(
+                    spec, spec.clamp(0.0)), name
+        finally:
+            if n is not None:
+                n.destroy_node()
+            rclpy.shutdown()
+
+    def test_it_sends_the_believed_pose_even_when_that_is_not_zero(self, chips):
+        from sensor_msgs.msg import JointState
+        rclpy.init()
+        n = None
+        try:
+            n = self._real_node()
+            msg = JointState()
+            msg.name = ['right_arm_elbow_joint']
+            msg.position = [-0.6]
+            n._on_command(msg)
+            for _ in range(100):                 # the mock walks the ramp
+                n._tick()
+            assert n.current['right_arm_elbow_joint'] == pytest.approx(-0.6)
+            assert _arm(n, True).success is True
+            n._tick()
+            spec = SERVO_MAP['right_arm_elbow_joint']
+            # Straight to the believed pose, wherever the metal is.
+            assert self._counts(chips, spec) == self._counts_for(spec, -0.6)
+        finally:
+            if n is not None:
+                n.destroy_node()
+            rclpy.shutdown()
