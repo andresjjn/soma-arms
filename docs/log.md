@@ -251,19 +251,32 @@ change they forced.
   image's Python 3.10 an "OK" with exit 0. The image's pytest 6.2.5
   played no part; colcon only needs it importable.
 - Fix: `extras_require={'test': ['pytest']}` in `soma_driver/setup.py`,
-  the form of the Humble `ament_python` template since 2025-09. The
-  colcon step fails when `build/soma_driver/pytest.xml` is missing or
-  counts no test; smoke step 2 runs the same commands and guard instead
-  of plain pytest; `ROS_LOCALHOST_ONLY` covers the whole job.
-- Read off run 37976168647 (the fix branch): 397 passed, 5 skipped,
-  `Summary: 402 tests, 0 errors, 0 failures, 5 skipped`, in the colcon
-  step and again in smoke step 2. On the Mac through colcon: 377
-  passed, 9 skipped, the same as plain pytest.
-- Noted, not changed: `test_sim_oracle.py` and the two CLI tests say a
-  module-level importorskip aborts collection of every sibling file on
-  the container's pytest 6.2.5 with pluggy 0.13. A minimal case on
-  pytest 6.2.5, pluggy 0.13.1 and Python 3.9 does not reproduce it: the
-  skipped file is reported and its siblings run. The "125 tests
-  collapsed to 0" of 2026-08-10 fits the unittest fallback better (a
-  skipped file still counts 1 skipped). One check inside the container
-  would settle it.
+  the form of the Humble `ament_python` template since 2025-09. CI's
+  colcon step and smoke step 2, which now runs the same commands instead
+  of plain pytest, end with `scripts/check_test_results.py`: it fails
+  unless at least one test reached a verdict (tests minus skipped minus
+  errors). `ROS_LOCALHOST_ONLY` covers the whole job.
+- A count, not a grep: the first guard looked for `tests="[1-9]` in the
+  XML and missed the other silent zero. pytest exits 5 when it collects
+  nothing, colcon passes that, and the XML of a collapsed collection
+  says `tests="1"`, one skip. The collapse happened here: on 2026-08-11
+  a module level `importorskip('mujoco')` cut the suite to "1 skipped"
+  in the container (run 31451116966, fixed in fd6bec3). The trigger is
+  `launch_testing`'s pytest hook (Humble source): it imports every test
+  module itself and catches only SyntaxError, so the skip escapes and
+  takes the whole collection with it. Reproduced with pytest 6.2.5 and
+  a stand-in for the hook; pytest 6.2.5 alone skips just the one file.
+  The comments in `test_sim_oracle.py` and the two CLI tests have the
+  effect right but blame the container's old pytest, not the hook. Not
+  changed.
+- The end to end failed once (run 37976433906, a docs-only commit after
+  a green run of the same code): the elbow command was published and TF
+  still read z 0.006. Likely cause: `ros2 topic pub --once` exits 0.1 s
+  after its only sample, and a driver that has not matched the
+  publisher yet drops it (DDS discovery is not symmetric). The smoke
+  test now sends the same command three times (`--times 3`), 1 s apart.
+- Read off run 37977558879 at df7ac0f: 403 passed, 5 skipped, `Summary:
+  408 tests, 0 errors, 0 failures, 5 skipped` and "403 tests ran", in
+  the colcon step and again in smoke step 2; the end to end lifted tool0
+  311.0 mm. On the Mac: 383 passed, 9 skipped, through colcon as through
+  plain pytest.
