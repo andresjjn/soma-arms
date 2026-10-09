@@ -174,11 +174,14 @@ Being honest about this matters more than the list above.
   milliseconds under load (an estimate, never measured on this supply: the
   ATX spec holds the output up at least 16 ms after the mains go, and a
   light load stretches that). The Jetson, on its own adapter, stays up and
-  keeps its logs. Keep that switch in reach, and a hand near it, whenever the arms are
-  armed. Pulling the XT60 is **not** a stop: it takes a firm two-handed pull
-  on a connector built to stay mated, it breaks a DC load in the air (the
-  arc pits the contacts), and it yanks the harness that rule 6 calls part
-  of the safety system.
+  keeps its logs. Keep that switch in reach, and a hand near it, whenever
+  the arms are armed. The driver cannot see the rail drop (the boards'
+  logic runs on the Jetson's 3.3 V), so after an ATX stop it is still
+  ARMED: disarm before the ATX ever comes back on, or every servo is
+  driven the moment the rail returns. Pulling the XT60 is **not** a stop:
+  it takes a firm two-handed pull on a connector built to stay mated, it
+  breaks a DC load in the air (the arc pits the contacts), and it yanks
+  the harness that rule 6 calls part of the safety system.
 
 ## Incident log
 

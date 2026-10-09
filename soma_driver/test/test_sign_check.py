@@ -438,3 +438,12 @@ def test_parse_cli_refuses(argv, capsys):
 def test_radians_are_radians():
     assert math.degrees(sc.DELTA) == pytest.approx(14.3, abs=0.1)
     assert sc.MAX_DELTA < math.pi / 4
+
+
+def test_the_printed_runbook_carries_the_generated_tables():
+    # docs/session_v02.md is read at the bench with a pen: its tables must
+    # be exactly what the tool will command and expect.
+    runbook = (Path(__file__).resolve().parents[2] / 'docs' / 'session_v02.md').read_text()
+    for arm in sc.ARMS:
+        assert sc.expectation_table(arm) in runbook, (
+            f'docs/session_v02.md drifted from expectation_table({arm!r})')
