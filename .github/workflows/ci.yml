@@ -61,10 +61,10 @@ jobs:
           source /opt/ros/humble/setup.bash
           colcon build --symlink-install
 
-      # colcon picks pytest only because soma_driver/setup.py declares it.
-      # Without that, it falls back to unittest, finds nothing and still
-      # passes ("0 tests", run 37964849489): the grep refuses that silent
-      # zero. colcon test-result exits 1 on any failure or error.
+      # colcon picks pytest only because soma_driver/setup.py declares it,
+      # and colcon test-result exits 1 on any failure or error. Neither
+      # catches a run where nothing ran (the unittest fallback of run
+      # 37964849489, a collapsed collection): check_test_results.py does.
       - name: Run tests through colcon (includes the ROS node tests)
         shell: bash
         working-directory: ros2_ws
@@ -73,10 +73,7 @@ jobs:
           source install/setup.bash
           colcon test --packages-select soma_driver --event-handlers console_direct+
           colcon test-result --verbose
-          grep -qs 'tests="[1-9]' build/soma_driver/pytest.xml || {
-            echo 'FAILED: no pytest tests ran (pytest missing, or not in setup.py?)'
-            exit 1
-          }
+          python3 src/soma-arms/scripts/check_test_results.py build/soma_driver/pytest.xml
 
       - name: Process and validate every xacro model
         shell: bash

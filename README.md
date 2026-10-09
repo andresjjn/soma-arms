@@ -142,7 +142,7 @@ Videos land here as each tag ships.
 soma_description/   URDF/xacro, SRDF, RViz config
 soma_driver/        PCA9685 driver (mock and real) plus the safety test suite
 docs/               see below
-scripts/            smoke_test.sh, check_model_driver_sync.py
+scripts/            smoke_test.sh, check_model_driver_sync.py, check_test_results.py
 docker/             headless ROS 2 Humble image for building and validating
 ```
 

@@ -24,15 +24,12 @@ colcon build --symlink-install
 source install/setup.bash
 
 echo '=== 2/4 test suite through colcon test (servo map, safety rules, ROS node) ==='
-# The same commands and guard as the colcon step of CI. A pytest.xml left
-# by an earlier run would satisfy the guard, so it goes first.
+# The same commands as the colcon step of CI. A pytest.xml left by an
+# earlier run would satisfy the check, so it goes first.
 rm -f build/soma_driver/pytest.xml
 colcon test --packages-select soma_driver --event-handlers console_direct+
 colcon test-result --verbose
-grep -qs 'tests="[1-9]' build/soma_driver/pytest.xml || {
-  echo 'FAILED: no pytest tests ran (pytest missing, or not in setup.py?)'
-  exit 1
-}
+python3 src/soma-arms/scripts/check_test_results.py build/soma_driver/pytest.xml
 
 echo '=== 3/4 xacro and URDF validation of the three models ==='
 xacro_run() {
