@@ -235,3 +235,35 @@ change they forced.
   tests actually run inside `scripts/smoke_test.sh`. Noted, not fixed.
 - Tests on the Mac (no ROS, no mujoco): 377 passed, 9 skipped.
 - Next: the bench session, with `docs/session_v02.md` printed.
+
+## 2026-10-09: colcon test runs the driver suite (CI only, nothing moved)
+
+- Measured: the ROS job's "Run tests through colcon" step printed
+  `Summary: 0 tests` and passed (runs 37964849489 at 3cb1cd4 and
+  37965586501 at a2fa035). The suite and its ROS node tests ran only in
+  `scripts/smoke_test.sh`, through plain pytest: 397 passed, 5 skipped
+  at a2fa035.
+- Cause, read in the colcon-core 0.21.3 source and reproduced on the
+  Mac: colcon runs pytest only when `setup.py` names it, in
+  `tests_require` or `extras_require['test']`. `soma_driver` named it
+  only as a `<test_depend>`, which is for rosdep, so colcon ran
+  `python3 -m unittest`: no TestCase found, no junit XML, and on the
+  image's Python 3.10 an "OK" with exit 0. The image's pytest 6.2.5
+  played no part; colcon only needs it importable.
+- Fix: `extras_require={'test': ['pytest']}` in `soma_driver/setup.py`,
+  the form of the Humble `ament_python` template since 2025-09. The
+  colcon step fails when `build/soma_driver/pytest.xml` is missing or
+  counts no test; smoke step 2 runs the same commands and guard instead
+  of plain pytest; `ROS_LOCALHOST_ONLY` covers the whole job.
+- Read off run 37976168647 (the fix branch): 397 passed, 5 skipped,
+  `Summary: 402 tests, 0 errors, 0 failures, 5 skipped`, in the colcon
+  step and again in smoke step 2. On the Mac through colcon: 377
+  passed, 9 skipped, the same as plain pytest.
+- Noted, not changed: `test_sim_oracle.py` and the two CLI tests say a
+  module-level importorskip aborts collection of every sibling file on
+  the container's pytest 6.2.5 with pluggy 0.13. A minimal case on
+  pytest 6.2.5, pluggy 0.13.1 and Python 3.9 does not reproduce it: the
+  skipped file is reported and its siblings run. The "125 tests
+  collapsed to 0" of 2026-08-10 fits the unittest fallback better (a
+  skipped file still counts 1 skipped). One check inside the container
+  would settle it.
