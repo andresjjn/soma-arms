@@ -96,7 +96,11 @@ require_z "$Z0"
 echo "  tool0 z initial = ${Z0} (expected ~0.006: fingertips nearly touch the plate)"
 
 echo '--- command: left elbow to -2.5 rad, clamped to its -1.9635 soft limit ---'
-ros2 topic pub --once /soma/command sensor_msgs/msg/JointState \
+# Three samples, not --once: --once exits 0.1 s after its only sample, and
+# a driver that has not matched the publisher yet drops it (DDS discovery
+# is not symmetric). The likely cause of the one end to end failure, run
+# 37976433906. Every sample sets the same clamped target.
+ros2 topic pub --times 3 /soma/command sensor_msgs/msg/JointState \
   "{name: [left_arm_elbow_joint], position: [-2.5]}"
 sleep 5
 
