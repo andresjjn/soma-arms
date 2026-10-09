@@ -33,6 +33,10 @@ jobs:
     timeout-minutes: 25
     container:
       image: ros:humble-ros-base-jammy
+    # Every rclpy process of the job (the node tests, run twice, and the
+    # end to end) stays on loopback, under the same conditions.
+    env:
+      ROS_LOCALHOST_ONLY: '1'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,6 +61,10 @@ jobs:
           source /opt/ros/humble/setup.bash
           colcon build --symlink-install
 
+      # colcon picks pytest only because soma_driver/setup.py declares it.
+      # Without that, it falls back to unittest, finds nothing and still
+      # passes ("0 tests", run 37964849489): the grep refuses that silent
+      # zero. colcon test-result exits 1 on any failure or error.
       - name: Run tests through colcon (includes the ROS node tests)
         shell: bash
         working-directory: ros2_ws
@@ -65,6 +73,10 @@ jobs:
           source install/setup.bash
           colcon test --packages-select soma_driver --event-handlers console_direct+
           colcon test-result --verbose
+          grep -qs 'tests="[1-9]' build/soma_driver/pytest.xml || {
+            echo 'FAILED: no pytest tests ran (pytest missing, or not in setup.py?)'
+            exit 1
+          }
 
       - name: Process and validate every xacro model
         shell: bash
@@ -87,8 +99,6 @@ jobs:
       - name: End to end smoke test (mock backend, nothing can move)
         shell: bash
         working-directory: ros2_ws
-        env:
-          ROS_LOCALHOST_ONLY: '1'
         run: |
           export WS="$PWD"
           bash src/soma-arms/scripts/smoke_test.sh
