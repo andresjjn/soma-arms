@@ -7,7 +7,12 @@ defines. When the human aborts, it walks the arm back home along the path
 it has just proved, one step at a time, never with a single jump: from the
 top of the wave, "go home" would be a 2 rad elbow move through territory
 whose sign may be wrong, which is exactly what step mode exists to probe.
+
+The two command-line helpers at the bottom (strip_ros_segment and
+fresh_input) are shared with the sign check, which asks a human the same
+way.
 """
+import sys
 from dataclasses import dataclass
 from typing import Callable
 
@@ -96,7 +101,21 @@ def play(name: str,
     return True
 
 
-def _strip_ros_segment(argv: list[str]) -> list[str]:
+def fresh_input(prompt: str) -> str:
+    """input(), after throwing away whatever was typed during the motion.
+
+    Keys pressed while a joint moves wait in the terminal buffer and
+    answer the NEXT prompt: a nervous double ENTER would accept one step
+    and start the next before anyone read it. Flushing pending input
+    first means every answer was typed after its question was on screen.
+    """
+    if sys.stdin.isatty():
+        import termios   # POSIX only, and only needed on a real terminal
+        termios.tcflush(sys.stdin.fileno(), termios.TCIFLUSH)
+    return input(prompt)
+
+
+def strip_ros_segment(argv: list[str]) -> list[str]:
     """Drop every `--ros-args ... [--]` segment, which belongs to rclpy."""
     own, i = [], 0
     while i < len(argv):
@@ -113,7 +132,7 @@ def _strip_ros_segment(argv: list[str]) -> list[str]:
 
 def parse_cli(argv: list[str]) -> tuple[str | None, bool]:
     """(target, step) from the command line; target None means 'print help'."""
-    own = _strip_ros_segment(argv)
+    own = strip_ros_segment(argv)
     step = '--step' in own
     rest = [a for a in own if a != '--step']
     if not rest or rest[0] in HELP_WORDS:

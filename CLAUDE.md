@@ -110,7 +110,9 @@ soma_driver/          PCA9685 driver
                                    (the surface the v0.5 supervisor will call)
   soma_driver/player.py            the sequence player and its step mode, pure
   soma_driver/primitives_cli.py    ros2 run soma_driver soma_primitives <name> [--step]
-  soma_driver/sign_check_cli.py    bench tool: verify joint axis signs (v0.2)
+  soma_driver/sign_check.py        the v0.2 sign check, pure: excursions, verdicts,
+                                   the SERVO_MAP mirror a reversed joint needs
+  soma_driver/sign_check_cli.py    ros2 run soma_driver soma_sign_check [--arm right|left|both]
   soma_driver/ina3221.py           power monitor, read-only, no gates needed
   test/                            the safety test suite
 docs/                 plan, log, hardware, wiring, safety, bench, migration

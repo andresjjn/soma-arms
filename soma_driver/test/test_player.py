@@ -3,6 +3,7 @@
 Pure tests, no ROS: the player receives fake publish, sleep and ask
 callables and the assertions read what it did with them.
 """
+import io
 import sys
 from pathlib import Path
 
@@ -10,7 +11,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from soma_driver.player import (  # noqa: E402
-    PROMPT, SETTLE_MARGIN_S, parse_cli, plan, play, unwind)
+    PROMPT, SETTLE_MARGIN_S, fresh_input, parse_cli, plan, play, unwind)
 from soma_driver.primitives import (  # noqa: E402
     HOME, SEQUENCES, pose_targets, settle_time_s)
 
@@ -124,3 +125,28 @@ def test_unwind_skips_repeated_states():
 ])
 def test_parse_cli(argv, expected):
     assert parse_cli(argv) == expected
+
+
+def test_fresh_input_discards_typeahead_on_a_terminal(monkeypatch):
+    # An ENTER pressed while the arm moved must not answer the next
+    # question: the pending input is flushed before the prompt appears.
+    import termios
+    calls = []
+
+    class Terminal:
+        def isatty(self):
+            return True
+
+        def fileno(self):
+            return 0
+
+    monkeypatch.setattr(sys, 'stdin', Terminal())
+    monkeypatch.setattr(termios, 'tcflush', lambda fd, queue: calls.append((fd, queue)))
+    monkeypatch.setattr('builtins.input', lambda prompt: calls.append(prompt) or 'x')
+    assert fresh_input('go? ') == 'x'
+    assert calls == [(0, termios.TCIFLUSH), 'go? ']
+
+
+def test_fresh_input_reads_plainly_off_a_terminal(monkeypatch):
+    monkeypatch.setattr(sys, 'stdin', io.StringIO('typed\n'))
+    assert fresh_input('') == 'typed'
