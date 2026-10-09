@@ -115,7 +115,8 @@ soma_driver/          PCA9685 driver
   soma_driver/sign_check_cli.py    ros2 run soma_driver soma_sign_check [--arm right|left|both]
   soma_driver/ina3221.py           power monitor, read-only, no gates needed
   test/                            the safety test suite
-docs/                 plan, log, hardware, wiring, safety, bench, migration
+docs/                 plan, log, hardware, wiring, safety, bench, migration,
+                      session_v02 (the printable v0.2 bench runbook)
 scripts/              smoke_test.sh, check_model_driver_sync.py,
                       workspace_map.py (reach map and deck drawing),
                       er2_probe.py (one pointing call to ER 2, key from the environment)
@@ -160,7 +161,7 @@ you if you forgot.
 ## The tests are the specification
 
 24 tests came over from the bench driver, and the suite has grown since
-(253 passing plus 7 skipped as of 2026-10-03 on a machine without ROS or
+(377 passing plus 9 skipped as of 2026-10-09 on a machine without ROS or
 the mujoco wheel; the skipped ones need `rclpy`, which the ROS job of CI
 has, or mujoco, which the unit job installs). They encode every hardware contract. If a
 change breaks one, the change is wrong until proven otherwise. Never edit a

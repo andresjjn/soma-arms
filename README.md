@@ -154,6 +154,7 @@ docker/             headless ROS 2 Humble image for building and validating
 | [docs/wiring.md](docs/wiring.md) | the verified channel map, power chain, connectors, bring-up order |
 | [docs/safety.md](docs/safety.md) | the rules, how each is enforced in code, and the incident log |
 | [docs/bench.md](docs/bench.md) | validated commands, RViz in a browser, the calibration procedures |
+| [docs/session_v02.md](docs/session_v02.md) | the printable runbook of the v0.2 bench session: power-up, the two gates, the sign check, the wave |
 | [docs/migration.md](docs/migration.md) | what carried over from the bench driver and what was deliberately changed |
 
 ## Development

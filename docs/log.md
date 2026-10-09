@@ -173,3 +173,65 @@ change they forced.
   mirroring the joint's `SERVO_MAP` row, and the map is then rerun
   without `--flip`; RViz reversed with the metal right is an axis flip in
   the model, which the map does not read. See `docs/plan.md` section 4.
+
+## 2026-10-09: the v0.2 bench tools, written at the desk (nothing moved)
+
+- No hardware was touched and nothing moved: a desk session on the Mac,
+  executing the plan of `docs/next_session.md` (deleted with this entry,
+  its items are done). The Jetson was not contacted.
+- `soma_sign_check` rewritten (`sign_check.py`, pure, plus a thin rclpy
+  adapter): `--arm right|left|both`, joints in confidence order (yaw
+  first, shoulder last), every excursion on the hug side and at least
+  0.1 rad from a stop (the right yaw goes to -0.25 now, not to +0.25, 1.4
+  deg from its +0.2749 stop), verdicts `ok` / `reversed` / `model` /
+  `unclear`. A `reversed` joint gets its mirrored `SERVO_MAP` row, its
+  xacro limits and the list of catalog poses that leave the new band (a
+  mirrored right elbow breaks `wave` and `demo`); it never gets an axis
+  flip. It refuses to start unless the driver listens and every joint it
+  will move reads 0.0: a walk that starts off zero can show the right
+  motion as the wrong direction.
+- Corrections to the handoff, found while doing it:
+  - Ctrl-C on Humble: rclpy's own SIGINT handler shuts the context down
+    (read in the rclpy humble source, `signal_handler.cpp`), and nothing
+    can be published after that. The sign check now starts rclpy with
+    `SignalHandlerOptions.NO`, so Ctrl-C mid-hold still sends the joint
+    back to 0.0; two tests in the ROS job pin it. `soma_primitives` keeps
+    the default: Ctrl-C there leaves the arm at its last pose, held by the
+    driver, and `q` stays the abort that unwinds.
+  - Arming does cause motion, and not under the ramp: the first armed
+    tick sends every channel the pulse of the pose the driver believes it
+    holds, at the servo's own speed (about 6 rad/s against the 2.5 rad/s
+    cap). `TestWhatArmingSends` pins it (396 passed, 5 skipped in the ROS
+    job at 3cb1cd4); `docs/safety.md` rule 2 says it.
+  - `--flip`: a reversed metal is a driver fix, after which the reach map
+    is rerun WITHOUT `--flip`; a model fix never touches the map, which
+    does not read the URDF. "RViz reversed, then `--flip`" would have
+    drawn a physically wrong deck.
+  - The model check needs no metal, so it left the bench session: section
+    10 of `docs/session_v02.md` runs it at a desk against the mock driver.
+    RViz beside the bench has no validated recipe yet.
+  - Gate 1 outlives a reboot: `restart: unless-stopped` keeps a container
+    created with `ALLOW_REAL=true`, so every session closes gate 1 with a
+    plain relaunch.
+  - After an ATX stop the driver is still ARMED (the boards' logic runs on
+    the Jetson's 3.3 V, it cannot see the rail drop): disarm before the
+    ATX comes back on.
+  - Keys typed while a joint moved answered the next prompt (a double
+    ENTER could accept a verdict and start the next joint); both CLIs
+    discard pending input before every prompt now.
+  - The `soma` helper of the handoff spliced `$*` into `bash -c`, which
+    splits `"{data: true}"` in two; it passes positional parameters now,
+    with a quoting self-test in the runbook.
+- Desk analysis for the model check, a prediction until RViz confirms it
+  (pure Python FK transcribed from the xacro, signed fingertip separation):
+  the four planar joints are drawn negative = forward on both arms, as the
+  hug convention wants; a negative wrist roll is drawn clockwise seen from
+  above on the right arm and counterclockwise on the left, to compare with
+  the CW or CCW noted at the bench; and the finger axis `0 1 0` turns both
+  fingertips toward each other for a positive angle (separation +25.7 mm
+  at 0.0, -6.8 at 0.25, -84.9 at 1.0), so RViz should draw "open" as
+  crossed fingers: a likely `model` finding on both grippers.
+- CI: the "Run tests through colcon" step collects 0 tests; the ROS node
+  tests actually run inside `scripts/smoke_test.sh`. Noted, not fixed.
+- Tests on the Mac (no ROS, no mujoco): 377 passed, 9 skipped.
+- Next: the bench session, with `docs/session_v02.md` printed.
