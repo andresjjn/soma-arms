@@ -13,7 +13,9 @@ Step mode (`--step`, sequences only) publishes one pose, waits for ENTER,
 and on `q` unwinds to home along the path already walked, one proven step
 at a time, never with a single jump. It is how a sequence meets the metal
 for the first time; the logic lives in player.py and is tested without
-ROS.
+ROS. Keys pressed during a step are discarded, so ENTER always answers
+a prompt that is already on screen. Abort with q: Ctrl-C ends the
+program and leaves the arm where it is, held by the driver.
 
 This tool NEVER arms the driver and holds no safety logic of its own:
 the two gates (allow_real parameter + /soma/arm service) live in the
@@ -28,7 +30,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_srvs.srv import SetBool
 
-from .player import SETTLE_MARGIN_S, parse_cli, play
+from .player import SETTLE_MARGIN_S, fresh_input, parse_cli, play
 from .primitives import POSES, SEQUENCES, pose_targets, settle_time_s
 
 
@@ -57,7 +59,7 @@ class PrimitiveRunner(Node):
     def run_sequence(self, name: str, step: bool = False) -> bool:
         """Play a sequence; False when a human unwound it in step mode."""
         return play(name, self._publish, time.sleep,
-                    ask=input if step else None,
+                    ask=fresh_input if step else None,
                     log=self.get_logger().info)
 
     def relax(self) -> None:
