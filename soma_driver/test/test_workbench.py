@@ -120,3 +120,47 @@ class TestSequencePlayer:
         for st, (pose, _) in zip(plan_sequence('demo'), SEQUENCES['demo']):
             assert st['move_s'] == settle_time_s(pose_targets(pose), current)
             current.update(pose_targets(pose))
+
+
+class _LockCheckingBus:
+    """A fake SMBus that fails any access made without the fleet's lock."""
+
+    def __init__(self, fleet, regs):
+        self.fleet, self.regs = fleet, regs
+
+    def read_byte_data(self, addr, reg):
+        assert self.fleet.lock.locked(), 'bus read without the lock'
+        return self.regs[addr][reg]
+
+
+def _bare_fleet(regs):
+    import threading
+    from servo_workbench import Fleet
+    fleet = Fleet.__new__(Fleet)            # no threads, no real bus
+    fleet.lock = threading.Lock()
+    fleet.addrs = sorted(regs)
+    fleet.armed, fleet.active, fleet.fault = True, 'k', None
+    fleet.last_us, fleet.target_us = {'k': 1500.0}, {'k': 1500.0}
+    fleet.bus = _LockCheckingBus(fleet, regs)
+    return fleet
+
+
+def test_watchdog_reads_the_bus_only_under_the_lock():
+    # One SMBus serves both boards and smbus2 sets the address and then
+    # transfers in two syscalls: an unlocked read between them would send
+    # a ramp write to the other board.
+    from servo_workbench import MODE1, PRESCALE
+    healthy = {a: {MODE1: 0x20, PRESCALE: 121} for a in (0x40, 0x43)}
+    fleet = _bare_fleet(healthy)
+    assert fleet.check_boards() == []
+    assert fleet.armed is True
+
+
+def test_watchdog_disarms_on_a_board_reset():
+    from servo_workbench import MODE1, PRESCALE
+    regs = {0x40: {MODE1: 0x20, PRESCALE: 121}, 0x43: {MODE1: 0x11, PRESCALE: 0x1E}}
+    fleet = _bare_fleet(regs)
+    bad = fleet.check_boards()
+    assert len(bad) == 1 and '0x43' in bad[0]
+    assert fleet.armed is False and fleet.last_us == {}
+    assert 'BOARD FAULT' in fleet.fault

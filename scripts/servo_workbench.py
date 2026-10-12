@@ -186,6 +186,18 @@ class Fleet:
         """
         while True:
             time.sleep(1.0)
+            self.check_boards()
+
+    def check_boards(self):
+        """One watchdog pass, entirely under the lock.
+
+        Both boards share one SMBus, and smbus2 sets the slave address and
+        then transfers in two separate syscalls. A read from this thread
+        landing between the two calls of a ramp write would send that
+        write to the other board. So every bus access holds the lock,
+        these reads included.
+        """
+        with self.lock:
             bad = []
             for a in self.addrs:
                 try:
@@ -196,16 +208,16 @@ class Fleet:
                 except OSError:
                     bad.append(f'0x{a:02x} not answering')
             if bad:
-                with self.lock:
-                    was_live = self.armed or bool(self.last_us)
-                    self.armed = False
-                    self.active = None
-                    self.last_us.clear()
-                    self.target_us.clear()
-                    if was_live or self.fault is None:
-                        self.fault = ('BOARD FAULT: ' + '; '.join(bad)
-                                      + '. Disarmed. Check the 3.3 V logic supply, then ARM again.')
-                        print(self.fault, flush=True)
+                was_live = self.armed or bool(self.last_us)
+                self.armed = False
+                self.active = None
+                self.last_us.clear()
+                self.target_us.clear()
+                if was_live or self.fault is None:
+                    self.fault = ('BOARD FAULT: ' + '; '.join(bad)
+                                  + '. Disarmed. Check the 3.3 V logic supply, then ARM again.')
+                    print(self.fault, flush=True)
+            return bad
 
     def _ramp_loop(self):
         """50 Hz: walk each commanded output smoothly toward its target.
