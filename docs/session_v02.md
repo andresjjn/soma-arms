@@ -280,7 +280,11 @@ bash scripts/jetson_driver.sh closed
 
 The RViz column. It needs no metal: the model is right when RViz draws each
 command the way the expectation says, and the metal has nothing to add once
-its own verdicts are in. Run it at a desk, any day after the session, in the
+its own verdicts are in. Since 2026-10-12 most of it is a test:
+`soma_driver/test/test_model_directions.py` runs the FK of the URDF and
+pins the direction of every joint as seen on the metal that day (it
+caught the wrist roll and the fingers drawn backwards). RViz stays the
+eyes-on confirmation. Run it at a desk, any day after the session, in the
 VNC container of [bench.md](bench.md) section 3, with the mock driver:
 
 ```bash

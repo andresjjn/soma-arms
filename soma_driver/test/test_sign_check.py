@@ -357,11 +357,11 @@ def test_a_reversed_finger_is_never_mirrored():
 
 def test_a_model_finding_flips_the_axis_and_warns_about_both_arms():
     text = sc.summary([sc.Finding('right_arm_wrist_roll_joint', -0.25, 'model')])
-    assert '<axis xyz="${side} 0 0"/>  ->  <axis xyz="${-side} 0 0"/>' in text
+    assert '<axis xyz="${-side} 0 0"/>  ->  <axis xyz="${side} 0 0"/>' in text
     assert 'BOTH arms' in text
     assert 'ServoSpec(' not in text
     finger = sc.summary([sc.Finding('left_arm_finger_l_joint', 0.25, 'model')])
-    assert '<axis xyz="0 1 0"/>  ->  <axis xyz="0 -1 0"/>' in finger
+    assert '<axis xyz="0 -1 0"/>  ->  <axis xyz="0 1 0"/>' in finger
     assert 'finger_r' in finger
 
 
@@ -447,3 +447,12 @@ def test_the_printed_runbook_carries_the_generated_tables():
     for arm in sc.ARMS:
         assert sc.expectation_table(arm) in runbook, (
             f'docs/session_v02.md drifted from expectation_table({arm!r})')
+
+
+def test_the_axis_lines_the_summary_quotes_are_the_ones_in_the_xacro():
+    # A model finding tells someone which line to edit: it must name the
+    # line that is actually there (the roll and finger lines changed on
+    # 2026-10-12, after the bench showed the model drew them backwards).
+    xacro = (PACKAGE.parents[1] / 'soma_description' / 'urdf' / 'soma_arm.xacro').read_text()
+    for kind, (current, flipped) in sc._AXIS.items():
+        assert current in xacro, (kind, current)

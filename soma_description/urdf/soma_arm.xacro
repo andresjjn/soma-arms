@@ -32,10 +32,11 @@
   mirror-symmetric between arms by definition, so the left arm uses
   side=1 and the right arm side=-1 on every revolute axis.
 
-  AXIS SIGNS ARE PROVISIONAL: lengths, parallelism and anchors are
-  caliper-measured; the world-direction of each joint's positive sense
-  is checked joint by joint by soma_sign_check (v0.2). Two findings, two
-  different fixes. METAL moving opposite to the hug convention is a
+  AXIS SIGNS, VERIFIED 2026-10-12: the sign check passed 12 of 12 on the
+  metal, and soma_driver/test/test_model_directions.py runs the FK of
+  this model to pin that it draws every joint the way the metal moves
+  (the wrist roll and the fingers were drawn backwards until that day).
+  For any future joint or servo, two findings, two different fixes. METAL moving opposite to the hug convention is a
   driver fix: mirror the joint's SERVO_MAP row and sync its limits here
   (macro defaults for the right arm, the bench call for the left). It is
   never an axis flip: every planar <axis> below uses ${side}, so a flip
@@ -213,7 +214,10 @@
       <parent link="${prefix}wrist_link"/>
       <child link="${prefix}gripper_base_link"/>
       <origin xyz="${wrist_len} 0 0"/>
-      <axis xyz="${side} 0 0"/>
+      <!-- ${-side}, not ${side}: a negative roll turns the gripper inward,
+           CCW seen from above on the right arm, CW on the left (seen on the
+           metal 2026-10-12; test_model_directions.py pins it). -->
+      <axis xyz="${-side} 0 0"/>
       <limit lower="${wrist_roll_lower}" upper="${wrist_roll_upper}" effort="${effort_nm}" velocity="${vel_rads}"/>
     </joint>
 
@@ -235,7 +239,9 @@
       <parent link="${prefix}gripper_base_link"/>
       <child link="${prefix}finger_l_link"/>
       <origin xyz="${gripper_base_h} 0 ${finger_sep/2}"/>
-      <axis xyz="0 1 0"/>
+      <!-- 0 -1 0: a positive command OPENS (the tips move apart). With 0 1 0
+           the model drew 1.0 as two crossed fingers (fixed 2026-10-12). -->
+      <axis xyz="0 -1 0"/>
       <limit lower="0.0" upper="1.0" effort="${effort_nm}" velocity="${vel_rads}"/>
     </joint>
     <link name="${prefix}finger_l_link">
@@ -255,7 +261,7 @@
       <parent link="${prefix}gripper_base_link"/>
       <child link="${prefix}finger_r_link"/>
       <origin xyz="${gripper_base_h} 0 ${-finger_sep/2}"/>
-      <axis xyz="0 1 0"/>
+      <axis xyz="0 -1 0"/>
       <limit lower="-1.0" upper="0.0" effort="${effort_nm}" velocity="${vel_rads}"/>
       <mimic joint="${prefix}finger_l_joint" multiplier="-1.0"/>
     </joint>

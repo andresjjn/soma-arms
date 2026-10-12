@@ -245,9 +245,24 @@ change they forced.
   hypothesis to verified. The driver log shows one ARMED and, about six
   minutes later, one DISARMED, with no board fault between them; every
   joint read 0.0 afterwards. Report: `calibration/sign_check_2026-10-12_right.json`.
-  The right wrist roll turned clockwise for the negative command, as
-  Andres saw it (viewpoint not yet recorded; the desk analysis of
-  2026-10-09 predicted clockwise seen from above). Left arm: not yet.
+  Left arm, same session: 6 of 6 `ok`, report
+  `calibration/sign_check_2026-10-12_left.json`, again one ARMED and one
+  DISARMED with no fault. All 12 joints are sign-checked on the metal;
+  for the v0.2 tag only the wave on video is missing.
+- The model, checked against the metal: seen from above, a negative wrist
+  roll turns the gripper inward, counterclockwise on the right arm and
+  clockwise on the left (Andres; a first report of "clockwise" on the
+  right had no viewpoint). The FK of the URDF drew both the other way,
+  so the model was wrong and the metal right: a `model` finding on both
+  arms, fixed with the shared `<axis>` line (`${side}` to `${-side}`).
+  The same FK showed the fingers drawn closing and crossing for a
+  positive (opening) command, while the metal opens: both finger axes go
+  from `0 1 0` to `0 -1 0`. `test_model_directions.py` now runs a
+  generic FK over the bench URDF and pins every direction: planar joints
+  forward for a negative command, rolls inward, fingers opening. On the
+  URDF the Jetson's container produced before the fix, 4 of its 12 cases
+  failed (the rolls and the fingers); with the three axis lines flipped,
+  12 of 12 pass. The driver, the limits and the reach map are unchanged.
 - Andres's impression of the servos at the bench: fragile, with play,
   weak. Not measured yet. Three things look alike and are told apart by
   measurement, not by eye: backlash (MG996R gear play, 1 to 2 deg at the

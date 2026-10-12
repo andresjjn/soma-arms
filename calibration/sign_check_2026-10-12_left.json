@@ -1,0 +1,46 @@
+{
+  "arm": "left",
+  "delta": 0.25,
+  "dwell": 2.0,
+  "planned": [
+    "left_arm_yaw_joint",
+    "left_arm_finger_l_joint",
+    "left_arm_wrist_roll_joint",
+    "left_arm_wrist_pitch_joint",
+    "left_arm_elbow_joint",
+    "left_arm_shoulder_joint"
+  ],
+  "findings": [
+    {
+      "joint": "left_arm_yaw_joint",
+      "target": -0.25,
+      "verdict": "ok"
+    },
+    {
+      "joint": "left_arm_finger_l_joint",
+      "target": 0.25,
+      "verdict": "ok"
+    },
+    {
+      "joint": "left_arm_wrist_roll_joint",
+      "target": -0.25,
+      "verdict": "ok"
+    },
+    {
+      "joint": "left_arm_wrist_pitch_joint",
+      "target": -0.25,
+      "verdict": "ok"
+    },
+    {
+      "joint": "left_arm_elbow_joint",
+      "target": -0.25,
+      "verdict": "ok"
+    },
+    {
+      "joint": "left_arm_shoulder_joint",
+      "target": -0.25,
+      "verdict": "ok"
+    }
+  ],
+  "date": "2026-10-12T23:54:09"
+}

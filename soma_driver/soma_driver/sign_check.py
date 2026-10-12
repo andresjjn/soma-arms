@@ -86,15 +86,17 @@ _EXPECT = {
     'finger_l': ('the gripper CLOSES', 'the gripper OPENS'),
 }
 
-# Each joint's <axis> line in soma_arm.xacro, and the same line flipped.
+# Each joint's <axis> line in soma_arm.xacro as it is today, and the same
+# line flipped. The roll and finger lines were flipped on 2026-10-12;
+# test_sign_check.py checks that the first column is in the xacro.
 _PLANAR_AXIS = ('<axis xyz="0 0 ${side}"/>', '<axis xyz="0 0 ${-side}"/>')
 _AXIS = {
     'yaw': _PLANAR_AXIS,
     'shoulder': _PLANAR_AXIS,
     'elbow': _PLANAR_AXIS,
     'wrist_pitch': _PLANAR_AXIS,
-    'wrist_roll': ('<axis xyz="${side} 0 0"/>', '<axis xyz="${-side} 0 0"/>'),
-    'finger_l': ('<axis xyz="0 1 0"/>', '<axis xyz="0 -1 0"/>'),
+    'wrist_roll': ('<axis xyz="${-side} 0 0"/>', '<axis xyz="${side} 0 0"/>'),
+    'finger_l': ('<axis xyz="0 -1 0"/>', '<axis xyz="0 1 0"/>'),
 }
 
 
