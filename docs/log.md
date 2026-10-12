@@ -235,3 +235,61 @@ change they forced.
   tests actually run inside `scripts/smoke_test.sh`. Noted, not fixed.
 - Tests on the Mac (no ROS, no mujoco): 377 passed, 9 skipped.
 - Next: the bench session, with `docs/session_v02.md` printed.
+
+## 2026-10-12: first joints moved through the ROS driver; the camera; the Jetson as found
+
+- Right-arm sign check on the metal, through the driver: 6 of 6 `ok`
+  (yaw, finger, wrist roll, wrist pitch, elbow, shoulder), every
+  excursion 0.25 rad toward the hug side and back. The hug convention
+  holds on the right arm; shoulder, elbow and wrist pitch move from URDF
+  hypothesis to verified. The driver log shows one ARMED and, about six
+  minutes later, one DISARMED, with no board fault between them; every
+  joint read 0.0 afterwards. Report: `calibration/sign_check_2026-10-12_right.json`.
+  The right wrist roll turned clockwise for the negative command, as
+  Andres saw it (viewpoint not yet recorded; the desk analysis of
+  2026-10-09 predicted clockwise seen from above). Left arm: not yet.
+- Andres's impression of the servos at the bench: fragile, with play,
+  weak. Not measured yet. Three things look alike and are told apart by
+  measurement, not by eye: backlash (MG996R gear play, 1 to 2 deg at the
+  output is typical, about 5 mm at the fingertip per degree at the base),
+  torque (about 10 kg.cm against roughly 1 N.m for a 0.7 kg arm held
+  horizontal, an estimate), and V+ sag under load (6.00 V was measured
+  with no load only). Decision by Andres: keep building on the MG996R;
+  when they become the limit, evaluate the best servos available with
+  real position feedback. That is a new driver backend behind the same
+  Pca9685Backend boundary; the mock boot, the two gates and the ramp do
+  not change.
+- The OAK-D Lite is mounted but looks forward toward the operator, not
+  down at the plate. Frames captured on the Jetson (1920x1080 RGB, USB
+  SUPER, depthai 2.32): the first shows the desk and Andres, the second
+  the right gripper held up by hand a few centimeters from the lens. The
+  image is upside down (mount at 180 deg, one line in the pipeline). The
+  work area is not in view, the gripper reaches the lens, and that range
+  is inside the stereo blind zone (MinZ about 34 cm, 17 cm with extended
+  disparity, from the 75 mm baseline and the 73 deg mono HFOV). It has to
+  go up and out of the arms' reach, looking down; Andres cannot move it
+  this week. A yaw motion Andres confirmed for a field-of-view check was
+  not executed: the camera could not see the work area and a hand was on
+  the arm.
+- The Jetson as found: on DHCP at 192.168.1.11 (use `jetson.local`), the
+  repository at `/home/jetson/Projects/soma/soma-arms` (not
+  `/home/jetson/soma-arms` as the docs said), no `docker compose`, and
+  the driver container created by hand on 2026-10-02 with
+  `allow_real:=true`, running on code of 2026-10-03 (8d38831). Gate 1 had
+  been open across reboots for ten days (a row in `docs/safety.md`).
+  Andres pulled `main` (1e17481) and recreated the container; the old one
+  is kept stopped as `soma_driver_old_8d38831`. New:
+  `scripts/jetson_driver.sh closed|open`, which refuses while ARMED and
+  is tested against a fake docker; the docs use it instead of compose.
+- Desk work of the day: the workbench watchdog reads the bus under the
+  lock (1e17481); the plan was reviewed against the ER 2 docs read
+  again. What changes, for a later edit of `docs/plan.md`: the API key
+  and `er2_probe.py` on a real frame start now, in parallel, with no
+  motors; ER 2 pointing replaces the click in the v0.3 acceptance; the
+  rate limits of ER 2 are not published (read them in AI Studio, billing
+  before v0.5); the right lane splits above about 70 mm of fingertip
+  height, so pockets stay shallow (10 mm or less) or the deck goes; the
+  joint limits are the captured mechanical stops, so the IK keeps a fixed
+  0.1 rad margin; the driver needs a status topic before the agent can
+  report honest results; the tending cell stays the v1.0 task and the
+  one hour soak stays a gate.
