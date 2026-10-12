@@ -147,7 +147,7 @@ is the whole point. The session runbook,
 [session_v02.md](session_v02.md), walks it with checkboxes.
 
 1. **Jetson and container first**, servo rail OFF. The Jetson boots on its
-   own adapter; `docker compose -f docker-compose.jetson.yml up -d`; the log
+   own adapter; `bash scripts/jetson_driver.sh closed`; the log
    says "MOCK backend, DISARMED".
 2. `i2cdetect -y -r 7` shows `0x40` and `0x43`. The boards' logic runs on
    the Jetson's 3.3 V, so they answer with the servo rail off.

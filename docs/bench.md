@@ -167,36 +167,42 @@ normally again.
 
 ## 6. On the Jetson
 
-The bench computer since August: a Jetson Orin Nano Super at
-`192.168.1.2` on WiFi, user `jetson`, the repository at
-`/home/jetson/soma-arms`, the PCA9685 boards on header bus `i2c-7`.
+The bench computer since August: a Jetson Orin Nano Super on WiFi, user
+`jetson`, the repository at `/home/jetson/Projects/soma/soma-arms`, the
+PCA9685 boards on header bus `i2c-7`. Its address comes from DHCP and
+changes (192.168.1.2 until early October, 192.168.1.11 on 2026-10-12; the
+reservation is still pending), so reach it by name: `jetson.local`.
 JetPack 7.2 has no ROS 2 Humble, so the driver runs in the `soma_driver`
-container of `docker-compose.jetson.yml`, always from the repo root.
+container.
 
 ```bash
-ssh jetson@192.168.1.2
-cd /home/jetson/soma-arms
+ssh jetson@jetson.local
+cd ~/Projects/soma/soma-arms
 i2cdetect -y -r 7      # 0x40 and 0x43 (0x70 is the all-call address)
 ```
 
 `0x41` no longer appears: the INA3221 is off the bus since 2026-10-01.
 A missing `0x40` or `0x43` is a harness fault: stop there.
 
-The driver container, which boots MOCK and DISARMED every time:
+The Jetson has **no `docker compose`** (checked 2026-10-12). The driver
+container is created with `scripts/jetson_driver.sh`, which is
+`docker-compose.jetson.yml` written as one `docker run` with the same
+flags. It boots MOCK and DISARMED every time, and it refuses to replace a
+driver that is still ARMED:
 
 ```bash
-docker compose -f docker-compose.jetson.yml up -d
-docker compose -f docker-compose.jetson.yml logs -f      # Ctrl-C leaves it running
-docker compose -f docker-compose.jetson.yml down
+bash scripts/jetson_driver.sh closed      # (re)create, gate 1 closed
+docker logs -f soma_driver                 # Ctrl-C leaves it running
+docker stop soma_driver                    # stays stopped until started again
 ```
 
 New code reaches the driver by pulling and recreating the container,
-which rebuilds the workspace on boot (expect about a minute before the
-log says "MOCK backend, DISARMED"):
+which rebuilds the workspace on boot (about a minute before the log says
+"MOCK backend, DISARMED"):
 
 ```bash
 git pull --ff-only
-docker compose -f docker-compose.jetson.yml up -d --force-recreate
+bash scripts/jetson_driver.sh closed
 ```
 
 ### The `soma` helper
@@ -229,22 +235,22 @@ soma ros2 run soma_driver soma_sign_check --arm right
 soma ros2 run soma_driver soma_primitives wave --step
 ```
 
-Gate 1 (`allow_real`) is a launch parameter, opened by relaunching the
-container and closed by relaunching it without the variable. See the
-header of `docker-compose.jetson.yml` and [safety.md](safety.md) rule 2:
+Gate 1 (`allow_real`) is a launch parameter, opened by recreating the
+container with it and closed by recreating it without. See
+[safety.md](safety.md) rule 2:
 
 ```bash
-ALLOW_REAL=true docker compose -f docker-compose.jetson.yml up -d --force-recreate   # open
-docker compose -f docker-compose.jetson.yml up -d --force-recreate                   # close
+bash scripts/jetson_driver.sh open      # gate 1 open
+bash scripts/jetson_driver.sh closed    # gate 1 closed, end of every session
 ```
 
 ### Can it move a motor
 
 | Command | Can it move a motor |
 |---|---|
-| `i2cdetect -y -r 7`, `compose up`, `logs`, `down` | no |
+| `i2cdetect -y -r 7`, `jetson_driver.sh closed`, `docker logs`, `docker stop` | no |
 | `soma ros2 topic echo ...`, `soma ros2 param get ...` | no |
-| `ALLOW_REAL=true ... up -d --force-recreate` (gate 1) | no by itself: the driver boots MOCK and DISARMED, but the next gate is live |
+| `jetson_driver.sh open` (gate 1) | no by itself: the driver boots MOCK and DISARMED, but the next gate is live |
 | `soma ros2 service call /soma/arm ... "{data: true}"` (gate 2) | **yes**: every servo starts receiving the pulse of the pose the driver holds (rule 2 of [safety.md](safety.md)) |
 | `soma ros2 run soma_driver soma_sign_check`, `soma_primitives ...` | only while ARMED; disarmed they move `/joint_states` and nothing else |
 | `soma ros2 service call /soma/arm ... "{data: false}"` | no drive: the signal is cut and the servos go limp, so an arm that is not hanging falls to the hang |

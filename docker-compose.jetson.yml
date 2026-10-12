@@ -1,6 +1,10 @@
 # SOMA runtime on the Jetson Orin Nano (JetPack 7.2 has no ROS 2 Humble,
 # so the driver runs in a Humble container with the I2C bus passed through).
-# Run from the repo root on the Jetson (/home/jetson/soma-arms):
+# Run from the repo root on the Jetson (/home/jetson/Projects/soma/soma-arms).
+#
+# NOTE 2026-10-12: the Jetson has no `docker compose` plugin. The container
+# is made by scripts/jetson_driver.sh (closed|open), which is this file
+# written as one `docker run` with the same flags. Keep the two in step.
 #
 #   docker compose -f docker-compose.jetson.yml up -d      # MOCK, disarmed
 #   docker compose -f docker-compose.jetson.yml logs -f

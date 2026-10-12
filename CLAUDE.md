@@ -120,6 +120,7 @@ docs/                 plan, log, hardware, wiring, safety, bench, migration,
 scripts/              smoke_test.sh, check_model_driver_sync.py,
                       workspace_map.py (reach map and deck drawing),
                       er2_probe.py (one pointing call to ER 2, key from the environment)
+                      jetson_driver.sh (recreate the Jetson driver container, gate 1 closed|open)
 ```
 
 Packages that arrive with their milestone, and not before: `soma_agent`

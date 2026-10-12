@@ -46,11 +46,12 @@ ros2 service call /soma/arm std_srvs/srv/SetBool "{data: false}"
 
 On the Jetson the driver lives in the `soma_driver` container, so gate 1 is
 a relaunch and gate 2 goes through `docker exec` (the `soma` helper is in
-[bench.md](bench.md), section 6):
+[bench.md](bench.md), section 6; the Jetson has no `docker compose`, so
+the container is made by `scripts/jetson_driver.sh`):
 
 ```bash
 # 1. relaunch with gate 1 open; it still boots MOCK and DISARMED
-ALLOW_REAL=true docker compose -f docker-compose.jetson.yml up -d --force-recreate
+bash scripts/jetson_driver.sh open
 
 # 2. only after Andres has confirmed, out loud, for this specific run:
 soma ros2 service call /soma/arm std_srvs/srv/SetBool "{data: true}"
@@ -58,14 +59,16 @@ soma ros2 service call /soma/arm std_srvs/srv/SetBool "{data: true}"
 # 3. cut the signal at any time
 soma ros2 service call /soma/arm std_srvs/srv/SetBool "{data: false}"
 
-# 4. end of session: close gate 1 with a relaunch WITHOUT the variable
-docker compose -f docker-compose.jetson.yml up -d --force-recreate
+# 4. end of session: close gate 1 (the script refuses while ARMED)
+bash scripts/jetson_driver.sh closed
 ```
 
 `ros2 param set /soma_driver allow_real true` opens gate 1 without a
 restart and is the documented alternative. Step 4 matters: the container
 restarts with the configuration it was created with, so one created with
-`ALLOW_REAL=true` comes back after a reboot with gate 1 still open.
+gate 1 open comes back after a reboot with gate 1 still open. That is not
+hypothetical: on 2026-10-12 the container found on the Jetson had been
+running with `allow_real:=true` since 2026-10-02, across reboots.
 
 Calling `/soma/arm` on a node started without `allow_real:=true` is **refused**
 and logged. Disarming cuts every channel, drops back to the mock, and always
@@ -194,6 +197,7 @@ Being honest about this matters more than the list above.
 | 2026-09-01 | Hot plugging the servo branch on the shared ATX sank the 12 V rail and hard-shut the Jetson (inrush of two UBECs plus twelve servos; the supply is the common root of the star) | power domains split: the Jetson on its own adapter, the ATX for servos only; nothing is ever hot plugged onto the servo rail |
 | 2026-10-01 | The harness was reported as "channels 1 to 12" and the map followed it: a dead right arm, a left arm driven by neighbouring joints' pulses. The boards have no silkscreen and the header was counted from the wrong end | map restored to the proven layout (15 to 10 on `0x40`, 9 to 4 on `0x43`); rule in `docs/wiring.md`: a channel number is proven by moving a servo, never by counting pins |
 | 2026-10-01 | A 3.3 V logic glitch put both PCA9685 back to power-on defaults (asleep, 200 Hz) while software believed it was driving pulses | the driver re-checks MODE1 and PRESCALE while armed and disarms on a reset; arming re-runs the init (`test_board_reset.py`) |
+| 2026-10-12 | The driver container on the Jetson had been running with `allow_real:=true` since 2026-10-02: created by hand with `docker run`, and `restart: unless-stopped` brought it back after every reboot. Gate 1 was open for ten days without anyone choosing it; gate 2 held | `scripts/jetson_driver.sh closed\|open` recreates the container, refuses while ARMED, and `closed` is the last step of every session (`docs/session_v02.md` step 9) |
 
 New incidents belong in this table, with the change that came out of them. An
 incident with no change is an incident that will happen again. Note that two
