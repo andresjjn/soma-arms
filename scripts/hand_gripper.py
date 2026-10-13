@@ -220,39 +220,262 @@ def joint_for(arm: str) -> str:
     return f'{arm}_arm_finger_l_joint'
 
 
-def bridge(arm: str, wait_s: float = 5.0) -> int:
-    """Inside the driver's container: targets from stdin to /soma/command."""
+# The present gesture (Andres's video, 2026-10-12): the hand opens and
+# closes, then the arm lifts to the front, gripper shut, and the wrist
+# rolls a little each way until the operator ends it. Numbers for either
+# arm in the hug convention (negative = forward), both verified on the
+# metal by the sign check. By the URDF's estimated masses, a level
+# forearm 50 deg forward asks the base for about 9.9 kg.cm, the MG996R's
+# measured limit; this pose asks about 7 (the designed wave's load) and
+# the elbow about 4. The elbow curls first, with the arm hanging, so the
+# path never crosses the level, loaded forearm; on the way down the base
+# goes first.
+PRESENT_ELBOW = -1.65      # forearm raised; 0.31 rad inside the left stop
+PRESENT_YAW = -0.52        # 30 deg forward
+ELBOW_RAMP_S = 2.0
+YAW_RAMP_S = 1.5
+ROLL_HOME_S = 0.8
+SHOW_PAUSE_S = 0.4         # still, before the wrist starts to roll
+ROLL_AMPLITUDE = 0.25      # rad each way, about 14 deg
+ROLL_PERIOD_S = 3.0
+PRESENT_MAX_S = 30.0       # then home on its own: the base holds ~70% of its torque
+TRIGGER_OPEN_S = 0.5       # the hand must stay open this long before a close counts
+STREAM_HZ = 10
+
+
+def away_from_home(state: dict[str, float], arm: str, tolerance: float = 0.02):
+    """The arm's joints (fingers aside) not at 0.0 on /joint_states, by name.
+
+    The Presenter plans its raise from 0.0: started anywhere else, its
+    first command would be a jump.
+    """
+    names = [f'{arm}_arm_{j}_joint' for j in
+             ('yaw', 'shoulder', 'elbow', 'wrist_pitch', 'wrist_roll')]
+    return [n for n in names if n not in state or abs(state[n]) > tolerance]
+
+
+def min_jerk(a: float, b: float, tau: float) -> float:
+    """From a to b at fraction tau of the time, on a minimum-jerk profile."""
+    tau = min(max(tau, 0.0), 1.0)
+    return a + (b - a) * tau ** 3 * (10.0 - 15.0 * tau + 6.0 * tau ** 2)
+
+
+class Presenter:
+    """The bridge's brain: follow the hand, and with `present`, show off.
+
+    Phases: follow (finger targets pass through), raise (elbow, then
+    base), show (the wrist rolls), home (wrist, base, elbow, in that
+    order), done. hand() takes a finger target from the tracker, tick()
+    the clock, finish() the end of input; each returns the commands to
+    publish now, as {joint: position}. Only this arm's yaw, elbow, wrist
+    roll and driven finger are ever named; from the trigger on, the
+    finger is held at 0.0 and the hand is ignored.
+    """
+
+    def __init__(self, arm: str, present: bool = False,
+                 present_max_s: float = PRESENT_MAX_S,
+                 roll: float = ROLL_AMPLITUDE, period_s: float = ROLL_PERIOD_S) -> None:
+        joint_for(arm)   # validates the arm
+        self.joint = {k: f'{arm}_arm_{k}_joint'
+                      for k in ('yaw', 'elbow', 'wrist_roll', 'finger_l')}
+        self.present, self.present_max_s = present, present_max_s
+        self.roll, self.period_s = roll, period_s
+        self.phase = 'follow'
+        self.last = {'yaw': 0.0, 'elbow': 0.0, 'wrist_roll': 0.0, 'finger_l': None}
+        self._open_since: float | None = None
+        self._was_open = False
+        self._plan: list[tuple[float, float, str, float, float]] = []
+        self._show_from = 0.0
+
+    @property
+    def done(self) -> bool:
+        return self.phase == 'done'
+
+    def hand(self, now: float, value: float) -> dict[str, float]:
+        if self.phase != 'follow':
+            return {}
+        if value >= 1.0:
+            if self._open_since is None:
+                self._open_since = now
+        elif self._open_since is not None:
+            self._was_open = now - self._open_since >= TRIGGER_OPEN_S
+            self._open_since = None
+        out = self._set({'finger_l': value})
+        if self.present and value <= 0.0 and self._was_open:
+            self.phase = 'raise'
+            self._plan = self._ramps(now, [('elbow', PRESENT_ELBOW, ELBOW_RAMP_S),
+                                           ('yaw', PRESENT_YAW, YAW_RAMP_S)])
+        elif value <= 0.0:
+            self._was_open = False
+        return out
+
+    def tick(self, now: float) -> dict[str, float]:
+        if self.phase in ('raise', 'home'):
+            out = self._sample(now)
+            if now >= self._plan[-1][1]:
+                if self.phase == 'raise':
+                    self.phase, self._show_from = 'show', now + SHOW_PAUSE_S
+                else:
+                    self.phase = 'done'
+            return out
+        if self.phase == 'show':
+            if now - self._show_from >= self.present_max_s:
+                return self.finish(now)
+            if now < self._show_from:
+                return {}
+            angle = 2.0 * math.pi * (now - self._show_from) / self.period_s
+            return self._set({'wrist_roll': round(self.roll * math.sin(angle), 3)})
+        return {}
+
+    def finish(self, now: float) -> dict[str, float]:
+        """End of input (or the show's time is up): walk home, or stop."""
+        if self.phase == 'follow':
+            self.phase = 'done'
+            return {}
+        if self.phase in ('home', 'done'):
+            return {}
+        self.phase = 'home'
+        self._plan = self._ramps(now, [('wrist_roll', 0.0, ROLL_HOME_S),
+                                       ('yaw', 0.0, YAW_RAMP_S),
+                                       ('elbow', 0.0, ELBOW_RAMP_S)],
+                                 full={'wrist_roll': self.roll, 'yaw': PRESENT_YAW,
+                                       'elbow': PRESENT_ELBOW})
+        return self._sample(now)
+
+    def _ramps(self, now, legs, full=None):
+        """Back-to-back ramps from where each joint was last commanded.
+
+        With `full`, a leg's time shrinks with its distance (a raise cut
+        short comes down in less time); a leg with nothing to do is
+        skipped. Always ends with a hold of the finger at 0.0.
+        """
+        plan, t = [], now
+        for name, goal, duration in legs:
+            start = self.last[name]
+            if full is not None:
+                span = abs(full[name]) or 1.0
+                duration = max(0.3, duration * abs(goal - start) / span)
+                if start == goal:
+                    continue
+            plan.append((t, t + duration, name, start, goal))
+            t += duration
+        if not plan:
+            plan.append((now, now, 'finger_l', 0.0, 0.0))
+        return plan
+
+    def _sample(self, now: float) -> dict[str, float]:
+        targets = {'finger_l': 0.0}
+        for t0, t1, name, a, b in self._plan:
+            if now >= t0:
+                tau = 1.0 if t1 <= t0 else (now - t0) / (t1 - t0)
+                targets[name] = round(min_jerk(a, b, tau), 3)
+        return self._set(targets)
+
+    def _set(self, targets: dict[str, float]) -> dict[str, float]:
+        self.last.update(targets)
+        return {self.joint[k]: v for k, v in targets.items()}
+
+
+def bridge(arm: str, present: bool = False, present_max_s: float = PRESENT_MAX_S,
+           roll: float = ROLL_AMPLITUDE, wait_s: float = 5.0) -> int:
+    """Inside the driver's container: targets from stdin to /soma/command.
+
+    Without `present` only the finger follows the hand. With it, the
+    Presenter adds the show (see PRESENT_YAW). The end of input, which is
+    what Ctrl-C on the operator's side becomes in here, walks the arm home
+    before the bridge exits: it never leaves a raised arm to whoever comes
+    next, and it never disarms (an unpowered raised arm falls).
+    """
+    import os
+    import select
+
     import rclpy
     from rclpy.signals import SignalHandlerOptions
     from sensor_msgs.msg import JointState
 
-    joint = joint_for(arm)
+    brain = Presenter(arm, present, present_max_s, roll)
     rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
     node = rclpy.create_node('soma_hand_gripper')
     pub = node.create_publisher(JointState, 'soma/command', 10)
+    seen: dict[str, float] = {}
+    sub = node.create_subscription(
+        JointState, 'joint_states',
+        lambda m: seen.update(zip(m.name, m.position)), 10)
+
+    def say(text: str) -> None:
+        try:   # the operator's side may be gone (Ctrl-C) while we walk home
+            print(text, file=sys.stderr, flush=True)
+        except OSError:
+            pass
+
+    def send(targets: dict[str, float]) -> None:
+        if not targets:
+            return
+        msg = JointState()
+        msg.header.stamp = node.get_clock().now().to_msg()
+        msg.name, msg.position = list(targets), [float(v) for v in targets.values()]
+        pub.publish(msg)
+
     try:
         deadline = time.monotonic() + wait_s
-        while pub.get_subscription_count() == 0 and time.monotonic() < deadline:
+        while ((pub.get_subscription_count() == 0 or not seen)
+               and time.monotonic() < deadline):
             rclpy.spin_once(node, timeout_sec=0.1)
+        node.destroy_subscription(sub)
         if pub.get_subscription_count() == 0:
-            print('REFUSED: nobody listens on /soma/command. Is the driver up?',
-                  file=sys.stderr)
+            say('REFUSED: nobody listens on /soma/command. Is the driver up?')
             return 2
-        print(f'bridge up: stdin -> {joint}', file=sys.stderr, flush=True)
-        for line in sys.stdin:
-            value = parse_target(line)
-            if value is None:
-                continue
-            msg = JointState()
-            msg.header.stamp = node.get_clock().now().to_msg()
-            msg.name, msg.position = [joint], [value]
-            pub.publish(msg)
-            print(f'{joint} -> {value:.2f}', file=sys.stderr, flush=True)
-        print('bridge: end of input, the gripper holds its last target',
-              file=sys.stderr)
+        off = away_from_home(seen, arm) if present else []
+        if off:
+            say('REFUSED, nothing was commanded: not at 0.0 on /joint_states: '
+                + ', '.join(off) + '. Bring the arm home first.')
+            return 2
+        say(f'bridge up: stdin -> {arm} arm' + (', present armed: open then close'
+                                                 if present else ', gripper only'))
+        fd = sys.stdin.fileno()
+        state = {'pending': b'', 'open': True, 'phase': brain.phase}
+
+        def step() -> None:
+            """One pass: read what the tracker sent, then let the clock act."""
+            started = time.monotonic()
+            if state['open']:
+                ready, _, _ = select.select([fd], [], [], 1.0 / STREAM_HZ)
+                if ready:
+                    chunk = os.read(fd, 4096)
+                    if not chunk:
+                        state['open'] = False
+                        say('bridge: end of input')
+                        send(brain.finish(time.monotonic()))
+                    *lines, state['pending'] = (state['pending'] + chunk).split(b'\n')
+                    for line in lines:
+                        value = parse_target(line.decode(errors='replace'))
+                        if value is not None:
+                            targets = brain.hand(time.monotonic(), value)
+                            send(targets)
+                            if targets:
+                                say(f'gripper -> {value:.2f}')
+            else:
+                time.sleep(max(0.0, 1.0 / STREAM_HZ - (time.monotonic() - started)))
+            send(brain.tick(time.monotonic()))
+            if brain.phase != state['phase']:
+                state['phase'] = brain.phase
+                say(f'bridge: {brain.phase}')
+
+        interrupts = 0
+        while not brain.done:
+            try:
+                step()
+            except KeyboardInterrupt:
+                # The first one ends the input and walks home, like the end
+                # of the pipe; a second one gives up: the arm holds.
+                interrupts += 1
+                if interrupts > 1:
+                    say('bridge: interrupted again, the arm holds its last targets')
+                    return 130
+                state['open'] = False
+                send(brain.finish(time.monotonic()))
+        say('bridge: done, the arm holds its last targets')
         return 0
-    except KeyboardInterrupt:
-        return 130
     finally:
         node.destroy_node()
         rclpy.try_shutdown()
@@ -573,6 +796,15 @@ def parse_cli(argv: list[str]):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--bridge', choices=ARMS, metavar='ARM',
                     help='inside the container: forward stdin targets to that arm')
+    ap.add_argument('--present', action='store_true',
+                    help='with --bridge: open then close the hand and the arm lifts '
+                         'to the front and shows, until the end of input')
+    ap.add_argument('--present-max', type=float, default=PRESENT_MAX_S,
+                    help='seconds the show may last before the arm goes home on its own '
+                         '(default %(default)s, at most 60)')
+    ap.add_argument('--roll', type=float, default=ROLL_AMPLITUDE,
+                    help='wrist roll each way during the show, rad (default %(default)s, '
+                         'at most 0.5)')
     ap.add_argument('--emit', action='store_true',
                     help='print gripper targets on stdout, for the bridge')
     ap.add_argument('--show', action='store_true',
@@ -598,8 +830,15 @@ def parse_cli(argv: list[str]):
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_cli(sys.argv[1:] if argv is None else argv)
+    if not 0.0 < args.present_max <= 60.0 or not 0.0 <= args.roll <= 0.5:
+        print('--present-max must be in (0, 60] s and --roll in [0, 0.5] rad',
+              file=sys.stderr)
+        return 2
     if args.bridge:
-        return bridge(args.bridge)
+        try:
+            return bridge(args.bridge, args.present, args.present_max, args.roll)
+        except KeyboardInterrupt:   # before the loop: nothing was commanded
+            return 130
     try:
         Follower(args.closed, args.open, smoothing=args.smoothing,
                  close_below=args.close_below)

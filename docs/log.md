@@ -482,3 +482,15 @@ change they forced.
 - Not checked yet: Andres says the two grippers hang about 15 cm apart,
   more than the model's spacing suggests; to be measured with a ruler
   before the `grippers_open` fix is sized.
+- Then Andres asked for a sequence for a video: the gripper follows his
+  hand; once he opens and closes it, the arm lifts to the front, gripper
+  shut, and the wrist rolls a little each way until he ends it. The
+  bridge's `--present` does it (designed, tested, not yet run on the
+  metal). By the URDF's estimated masses, a level forearm 50 deg forward
+  would ask the base for about 9.9 kg.cm, the MG996R's measured limit;
+  the chosen pose (base -0.52, elbow -1.65, forearm raised) asks about 7,
+  the designed wave's load. The elbow curls first with the arm hanging
+  and the base lands first on the way down, so the path never crosses
+  the level, loaded forearm (checked through the driver's own planner).
+  The show goes home on its own after 30 s; the end of input walks it
+  home before the bridge exits; it refuses to start off home.

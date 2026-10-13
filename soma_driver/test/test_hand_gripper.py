@@ -296,3 +296,137 @@ def test_the_web_view_listens_on_localhost_only():
     source = (REPO / 'scripts' / 'hand_gripper.py').read_text()
     assert "ThreadingHTTPServer(('127.0.0.1'" in source
     assert '0.0.0.0' not in source
+
+
+# The present gesture: follow, then on open-then-close lift and show.
+
+def show_run(arm='left', present=True, hand_script=None, end_at=None,
+             present_max_s=hg.PRESENT_MAX_S, dt=0.1, until=60.0):
+    """Drive a Presenter with a fake clock; return [(t, {joint: value})]."""
+    brain = hg.Presenter(arm, present, present_max_s)
+    script = hand_script if hand_script is not None else [
+        (0.5, 0.0), (1.0, 1.0), (2.0, 0.6), (2.3, 0.0)]
+    out, t = [], 0.0
+    while t <= until and not brain.done:
+        for when, value in script:
+            if abs(when - t) < dt / 2:
+                out.append((t, brain.hand(t, value)))
+        if end_at is not None and abs(end_at - t) < dt / 2:
+            out.append((t, brain.finish(t)))
+        out.append((t, brain.tick(t)))
+        t = round(t + dt, 3)
+    return brain, [(t, c) for t, c in out if c]
+
+
+def series(cmds, joint):
+    return [(t, c[joint]) for t, c in cmds if joint in c]
+
+
+def test_without_present_only_the_finger_ever_moves():
+    brain, cmds = show_run(present=False, until=10.0)
+    assert {j for _, c in cmds for j in c} == {'left_arm_finger_l_joint'}
+    assert brain.finish(10.0) == {} and brain.done
+
+
+def test_open_then_close_lifts_the_arm_shows_and_comes_home_on_its_own():
+    brain, cmds = show_run(present_max_s=10.0)
+    assert brain.done
+    names = {j for _, c in cmds for j in c}
+    assert names == {f'left_arm_{j}_joint' for j in ('yaw', 'elbow', 'wrist_roll', 'finger_l')}
+    yaw, elbow = series(cmds, 'left_arm_yaw_joint'), series(cmds, 'left_arm_elbow_joint')
+    assert min(v for _, v in yaw) == pytest.approx(hg.PRESENT_YAW)
+    assert min(v for _, v in elbow) == pytest.approx(hg.PRESENT_ELBOW)
+    for joint in ('yaw', 'elbow', 'wrist_roll', 'finger_l'):
+        assert series(cmds, f'left_arm_{joint}_joint')[-1][1] == 0.0   # all home
+
+
+def test_a_short_open_hand_does_not_trigger():
+    brain, cmds = show_run(hand_script=[(1.0, 1.0), (1.2, 0.0)], until=8.0)
+    assert brain.phase == 'follow'
+    assert not series(cmds, 'left_arm_yaw_joint')
+
+
+def test_entering_with_a_closed_hand_does_not_trigger():
+    brain, _ = show_run(hand_script=[(0.5, 0.0), (1.0, 0.0), (3.0, 0.0)], until=6.0)
+    assert brain.phase == 'follow'
+
+
+def test_after_the_trigger_the_gripper_stays_shut_and_the_hand_is_ignored():
+    script = [(0.5, 0.0), (1.0, 1.0), (2.0, 0.0), (5.0, 1.0), (9.0, 1.0)]
+    _, cmds = show_run(hand_script=script, present_max_s=5.0)
+    finger = series(cmds, 'left_arm_finger_l_joint')
+    trigger = next(t for t, v in finger if t >= 2.0)
+    assert all(v == 0.0 for t, v in finger if t >= trigger)
+
+
+def test_the_elbow_curls_before_the_base_lifts_and_the_base_lands_first():
+    _, cmds = show_run(present_max_s=5.0)
+    elbow = dict(series(cmds, 'left_arm_elbow_joint'))
+    yaw = series(cmds, 'left_arm_yaw_joint')
+    lifting = [t for t, v in yaw if v < 0.0]
+    up = [t for t, v in elbow.items() if v == pytest.approx(hg.PRESENT_ELBOW)]
+    assert min(lifting) >= min(up)                 # base waits for the elbow
+    base_down = min(t for t, v in yaw if t > max(lifting) - 0.05 and v == 0.0)
+    unbend = [t for t, v in elbow.items() if t > min(up) and v > hg.PRESENT_ELBOW + 1e-6]
+    assert min(unbend) >= base_down                # elbow waits for the base
+
+
+def test_every_streamed_target_is_slow_and_well_inside_the_limits():
+    _, cmds = show_run(present_max_s=8.0)
+    for joint in ('yaw', 'elbow', 'wrist_roll'):
+        name = f'left_arm_{joint}_joint'
+        spec = SERVO_MAP[name]
+        values = series(cmds, name)
+        for _, v in values:   # 0.3 rad from every stop, or the hang itself
+            assert spec.lower + 0.3 <= v <= max(spec.upper - 0.3, 0.0)
+        for (t0, a), (t1, b) in zip(values, values[1:]):
+            if t1 > t0:
+                assert abs(b - a) / (t1 - t0) <= 2.0 < spec.max_rate
+
+
+def test_the_wrist_rolls_both_ways_by_the_amplitude_only():
+    _, cmds = show_run(present_max_s=10.0)
+    roll = [v for _, v in series(cmds, 'left_arm_wrist_roll_joint')]
+    assert max(roll) == pytest.approx(hg.ROLL_AMPLITUDE, abs=0.01)
+    assert min(roll) == pytest.approx(-hg.ROLL_AMPLITUDE, abs=0.01)
+
+
+def test_ending_mid_raise_comes_home_from_where_it_is_without_a_jump():
+    brain, cmds = show_run(end_at=3.3, until=20.0)    # elbow halfway up
+    assert brain.done
+    assert not series(cmds, 'left_arm_yaw_joint')        # the base never lifted
+    values = [v for _, v in series(cmds, 'left_arm_elbow_joint')]
+    assert min(values) > hg.PRESENT_ELBOW + 0.1
+    assert all(abs(b - a) <= 0.2 for a, b in zip(values, values[1:]))
+    assert values[-1] == 0.0
+
+
+def test_the_show_has_a_time_limit():
+    brain, cmds = show_run(present_max_s=4.0, until=30.0)
+    assert brain.done
+    last = max(t for t, _ in cmds)
+    assert last < 2.3 + hg.ELBOW_RAMP_S + hg.YAW_RAMP_S + 4.0 + 6.0
+
+
+def test_the_present_numbers_respect_the_measured_stops_on_both_arms():
+    for arm in hg.ARMS:
+        for joint, value in (('yaw', hg.PRESENT_YAW), ('elbow', hg.PRESENT_ELBOW),
+                             ('wrist_roll', hg.ROLL_AMPLITUDE),
+                             ('wrist_roll', -hg.ROLL_AMPLITUDE)):
+            spec = SERVO_MAP[f'{arm}_arm_{joint}_joint']
+            assert spec.lower + 0.3 <= value <= spec.upper - 0.3
+
+
+def test_present_refuses_an_arm_away_from_home():
+    home = {f'left_arm_{j}_joint': 0.0 for j in
+            ('yaw', 'shoulder', 'elbow', 'wrist_pitch', 'wrist_roll')}
+    assert hg.away_from_home(home, 'left') == []
+    bent = dict(home, left_arm_elbow_joint=-0.6)
+    assert hg.away_from_home(bent, 'left') == ['left_arm_elbow_joint']
+    assert hg.away_from_home({}, 'left')            # no state is not home
+
+
+@pytest.mark.parametrize('argv', [['--present-max', '0'], ['--present-max', '120'],
+                                  ['--roll', '0.9']])
+def test_bad_show_settings_are_refused(argv):
+    assert hg.main(argv) == 2
