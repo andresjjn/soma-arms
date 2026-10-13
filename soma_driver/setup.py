@@ -16,6 +16,15 @@ setup(
         (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
     ],
     install_requires=['setuptools'],
+    # colcon test runs pytest only when setup.py declares it; the
+    # <test_depend> in package.xml is for rosdep. Without this, colcon
+    # falls back to unittest, which finds none of these pytest tests and
+    # still reports success: 0 tests, green (CI run 37964849489).
+    extras_require={
+        'test': [
+            'pytest',
+        ],
+    },
     zip_safe=True,
     maintainer='Andres Jejen',
     maintainer_email='andresjt93@gmail.com',

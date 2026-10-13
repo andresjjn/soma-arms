@@ -4,7 +4,8 @@
 #
 # It checks, in order:
 #   1. the workspace builds
-#   2. the unit tests pass (channel map, safety rules, golden rule)
+#   2. the driver test suite passes through colcon test, ROS node tests
+#      included (channel map, safety rules, golden rule)
 #   3. all three xacro models process and are valid URDF
 #   4. end to end: the driver in MOCK mode bends the left elbow and TF
 #      confirms the geometry measured on 2026-08-05
@@ -22,8 +23,13 @@ cd "$WS"
 colcon build --symlink-install
 source install/setup.bash
 
-echo '=== 2/4 unit tests (servo map, safety rules, golden rule) ==='
-python3 -m pytest src/soma-arms/soma_driver/test/ -q
+echo '=== 2/4 test suite through colcon test (servo map, safety rules, ROS node) ==='
+# The same commands as the colcon step of CI. A pytest.xml left by an
+# earlier run would satisfy the check, so it goes first.
+rm -f build/soma_driver/pytest.xml
+colcon test --packages-select soma_driver --event-handlers console_direct+
+colcon test-result --verbose
+python3 src/soma-arms/scripts/check_test_results.py build/soma_driver/pytest.xml
 
 echo '=== 3/4 xacro and URDF validation of the three models ==='
 xacro_run() {
@@ -90,7 +96,11 @@ require_z "$Z0"
 echo "  tool0 z initial = ${Z0} (expected ~0.006: fingertips nearly touch the plate)"
 
 echo '--- command: left elbow to -2.5 rad, clamped to its -1.9635 soft limit ---'
-ros2 topic pub --once /soma/command sensor_msgs/msg/JointState \
+# Three samples, not --once: --once exits 0.1 s after its only sample, and
+# a driver that has not matched the publisher yet drops it (DDS discovery
+# is not symmetric). The likely cause of the one end to end failure, run
+# 37976433906. Every sample sets the same clamped target.
+ros2 topic pub --times 3 /soma/command sensor_msgs/msg/JointState \
   "{name: [left_arm_elbow_joint], position: [-2.5]}"
 sleep 5
 

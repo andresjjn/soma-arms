@@ -236,6 +236,51 @@ change they forced.
 - Tests on the Mac (no ROS, no mujoco): 377 passed, 9 skipped.
 - Next: the bench session, with `docs/session_v02.md` printed.
 
+## 2026-10-09: colcon test runs the driver suite (CI only, nothing moved)
+
+- Measured: the ROS job's "Run tests through colcon" step printed
+  `Summary: 0 tests` and passed (runs 37964849489 at 3cb1cd4 and
+  37965586501 at a2fa035). The suite and its ROS node tests ran only in
+  `scripts/smoke_test.sh`, through plain pytest: 397 passed, 5 skipped
+  at a2fa035.
+- Cause, read in the colcon-core 0.21.3 source and reproduced on the
+  Mac: colcon runs pytest only when `setup.py` names it, in
+  `tests_require` or `extras_require['test']`. `soma_driver` named it
+  only as a `<test_depend>`, which is for rosdep, so colcon ran
+  `python3 -m unittest`: no TestCase found, no junit XML, and on the
+  image's Python 3.10 an "OK" with exit 0. The image's pytest 6.2.5
+  played no part; colcon only needs it importable.
+- Fix: `extras_require={'test': ['pytest']}` in `soma_driver/setup.py`,
+  the form of the Humble `ament_python` template since 2025-09. CI's
+  colcon step and smoke step 2, which now runs the same commands instead
+  of plain pytest, end with `scripts/check_test_results.py`: it fails
+  unless at least one test reached a verdict (tests minus skipped minus
+  errors). `ROS_LOCALHOST_ONLY` covers the whole job.
+- A count, not a grep: the first guard looked for `tests="[1-9]` in the
+  XML and missed the other silent zero. pytest exits 5 when it collects
+  nothing, colcon passes that, and the XML of a collapsed collection
+  says `tests="1"`, one skip. The collapse happened here: on 2026-08-11
+  a module level `importorskip('mujoco')` cut the suite to "1 skipped"
+  in the container (run 31451116966, fixed in fd6bec3). The trigger is
+  `launch_testing`'s pytest hook (Humble source): it imports every test
+  module itself and catches only SyntaxError, so the skip escapes and
+  takes the whole collection with it. Reproduced with pytest 6.2.5 and
+  a stand-in for the hook; pytest 6.2.5 alone skips just the one file.
+  The comments in `test_sim_oracle.py` and the two CLI tests have the
+  effect right but blame the container's old pytest, not the hook. Not
+  changed.
+- The end to end failed once (run 37976433906, a docs-only commit after
+  a green run of the same code): the elbow command was published and TF
+  still read z 0.006. Likely cause: `ros2 topic pub --once` exits 0.1 s
+  after its only sample, and a driver that has not matched the
+  publisher yet drops it (DDS discovery is not symmetric). The smoke
+  test now sends the same command three times (`--times 3`), 1 s apart.
+- Read off run 37977558879 at df7ac0f: 403 passed, 5 skipped, `Summary:
+  408 tests, 0 errors, 0 failures, 5 skipped` and "403 tests ran", in
+  the colcon step and again in smoke step 2; the end to end lifted tool0
+  311.0 mm. On the Mac: 383 passed, 9 skipped, through colcon as through
+  plain pytest.
+
 ## 2026-10-12: first joints moved through the ROS driver; the camera; the Jetson as found
 
 - Right-arm sign check on the metal, through the driver: 6 of 6 `ok`

@@ -118,6 +118,7 @@ soma_driver/          PCA9685 driver
 docs/                 plan, log, hardware, wiring, safety, bench, migration,
                       session_v02 (the printable v0.2 bench runbook)
 scripts/              smoke_test.sh, check_model_driver_sync.py,
+                      check_test_results.py (fails CI when colcon test ran nothing),
                       workspace_map.py (reach map and deck drawing),
                       er2_probe.py (one pointing call to ER 2, key from the environment)
                       jetson_driver.sh (recreate the Jetson driver container, gate 1 closed|open)
@@ -162,9 +163,9 @@ you if you forgot.
 ## The tests are the specification
 
 24 tests came over from the bench driver, and the suite has grown since
-(377 passing plus 9 skipped as of 2026-10-09 on a machine without ROS or
-the mujoco wheel; the skipped ones need `rclpy`, which the ROS job of CI
-has, or mujoco, which the unit job installs). They encode every hardware contract. If a
+(393 passing plus 21 skipped as of 2026-10-12 on a machine without ROS,
+xacro or the mujoco wheel; the skipped ones need `rclpy`, which the ROS
+job of CI has, or xacro or mujoco, which the unit job installs). They encode every hardware contract. If a
 change breaks one, the change is wrong until proven otherwise. Never edit a
 test to make a change pass without saying so explicitly and explaining why
 the hardware fact changed.
