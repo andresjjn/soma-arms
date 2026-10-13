@@ -465,6 +465,20 @@ change they forced.
      thread that drops lines; every frame goes to a log file instead.
 - Calibrated on Andres's hand, 270 s: a pinch reads 0.4 to 0.5, an open
   hand 1.5 to 1.7. Defaults now 0.5 for gripper 0.0, 1.5 for 1.0.
+- On the metal, Andres's go-ahead for the left gripper only (the right
+  one shows some play, to look at later). First a dry run against the
+  disarmed driver: the bridge works inside the container, and it left
+  the mock finger at 0.63 because the last reading was a half-open hand.
+  Arming then would have sent 0.63 to the real gripper with no ramp, so
+  the finger was commanded back to 0.0 (still disarmed) and checked on
+  `/joint_states` before arming. Armed, the left gripper followed his
+  left hand "very well" (his words).
+- His one complaint, measured on that run: near closed the gripper
+  fluttered, 57 of 216 targets in 107 s sat between 0 and 0.2. The
+  filter now takes the median of 3 readings, averages with weight 0.3,
+  and holds the ends: at or below 0.2 the gripper shuts and stays shut
+  until the hand passes 0.3 (the open end mirrors it at 0.85 and 0.75).
+  Replayed on the same run: 131 targets, none between 0 and 0.2.
 - Not checked yet: Andres says the two grippers hang about 15 cm apart,
   more than the model's spacing suggests; to be measured with a ruler
   before the `grippers_open` fix is sized.

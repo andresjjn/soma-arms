@@ -104,21 +104,59 @@ def test_a_misread_is_skipped_even_as_the_first_reading():
     assert f.sent == 1.0
 
 
-def test_deadband_holds_small_changes_but_the_ends_always_go_out():
-    f = hg.Follower(smoothing=1.0)          # no smoothing: raw readings
-    span = hg.OPEN_RATIO - hg.CLOSED_RATIO
-    assert f.update(hg.CLOSED_RATIO + 0.5 * span) == 0.5
-    assert f.update(hg.CLOSED_RATIO + 0.52 * span) is None
-    assert f.update(hg.CLOSED_RATIO + 0.6 * span) == 0.6
-    f2 = hg.Follower(smoothing=1.0)
-    f2.update(hg.CLOSED_RATIO + 0.03 * span)
-    assert f2.update(0.0) == 0.0            # inside the deadband, but closed
+def at(level):
+    """The ratio that reads as this openness."""
+    return hg.CLOSED_RATIO + level * (hg.OPEN_RATIO - hg.CLOSED_RATIO)
+
+
+def raw_follower(**kw):
+    """A follower without median or smoothing: targets follow the readings."""
+    return hg.Follower(median_of=1, smoothing=1.0, **kw)
+
+
+def test_deadband_holds_small_changes_between_the_ends():
+    f = raw_follower()
+    assert f.update(at(0.5)) == 0.5
+    assert f.update(at(0.52)) is None
+    assert f.update(at(0.6)) == 0.6
 
 
 def test_smoothing_moves_part_of_the_way():
-    f = hg.Follower(smoothing=0.5, deadband=0.0)
-    f.update(hg.CLOSED_RATIO)
-    assert f.update(hg.OPEN_RATIO) == 0.5
+    f = hg.Follower(median_of=1, smoothing=0.5, deadband=0.0)
+    assert f.update(at(0.0)) == 0.0
+    assert f.update(at(1.0)) == 0.5
+
+
+def test_a_closed_hand_that_flutters_keeps_the_gripper_shut():
+    f = hg.Follower()
+    noise = [0.05, 0.22, 0.0, 0.25, 0.12, 0.24, 0.02, 0.2, 0.18, 0.25] * 5
+    sent = [t for t in (f.update(at(v)) for v in noise) if t is not None]
+    assert sent == [0.0]
+
+
+def test_the_closed_end_lets_go_only_past_the_hysteresis():
+    f = raw_follower()
+    assert f.update(at(0.1)) == 0.0
+    assert f.update(at(0.28)) is None         # still inside 0.2 + 0.1
+    assert f.update(at(0.31)) == 0.31
+
+
+def test_the_open_end_holds_the_same_way():
+    f = raw_follower()
+    assert f.update(at(0.9)) == 1.0
+    assert f.update(at(0.78)) is None         # still above 0.85 - 0.1
+    assert f.update(at(0.74)) == 0.74
+
+
+def test_a_one_frame_spike_never_reaches_the_gripper():
+    f = hg.Follower(median_of=3, smoothing=1.0)
+    assert f.update(at(0.5)) == 0.5
+    assert [f.update(at(v)) for v in (0.5, 1.0, 0.5, 0.5)] == [None] * 4
+
+
+def test_held_ends_that_overlap_are_refused():
+    with pytest.raises(ValueError):
+        hg.Follower(close_below=0.5, open_above=0.6)
 
 
 def test_every_target_is_inside_zero_to_one():
@@ -232,6 +270,12 @@ def test_bridge_drives_only_the_driven_finger_of_one_arm():
     for bad in ('both', 'torso', 'right_arm_elbow_joint', ''):
         with pytest.raises(ValueError):
             hg.joint_for(bad)
+
+
+@pytest.mark.parametrize('argv', [['--open', '0.4'], ['--smoothing', '0'],
+                                  ['--close-below', '0.8']])
+def test_bad_tuning_is_refused_before_the_camera_opens(argv):
+    assert hg.main(argv) == 2
 
 
 def test_the_script_cannot_arm_the_driver():

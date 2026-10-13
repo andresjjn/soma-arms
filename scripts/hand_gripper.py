@@ -60,9 +60,17 @@ WIDTH_TO_LENGTH = 1.3
 # 0.4 to 0.5, an open hand 1.5 to 1.7; readings above 2.5 were not a hand.
 CLOSED_RATIO = 0.5      # thumb on the fingertips: gripper 0.0
 OPEN_RATIO = 1.5        # hand open, thumb out: gripper 1.0
-SMOOTHING = 0.5         # weight of the newest reading
+MEDIAN_OF = 3           # readings in the median that drops one-frame spikes
+SMOOTHING = 0.3         # weight of the newest reading in the running average
 DEADBAND = 0.05         # smallest change worth a new target
 MAX_RATIO = 2.5         # above this no real hand: a misread, skipped
+# The two ends hold. At or below CLOSE_BELOW the gripper goes to 0.0 and
+# stays shut until the hand opens past CLOSE_BELOW + HYSTERESIS; the open
+# end mirrors it. Without this, a closed hand's noise (0.0 to 0.25) sent
+# 89 small targets in 107 s on the metal, 2026-10-12: the gripper fluttered.
+CLOSE_BELOW = 0.2
+OPEN_ABOVE = 0.85
+HYSTERESIS = 0.1
 ARMS = ('right', 'left')
 
 
@@ -107,29 +115,49 @@ class Follower:
     update() takes the hand's ratio, or None when no hand is in view, and
     returns a gripper target or None. A lost hand never moves the gripper,
     and neither does a ratio above max_ratio: an open hand reads about
-    1.7 at most, so 3 is the landmarker guessing, not a hand. The fully
-    closed and fully open ends always go out, even inside the deadband,
-    so a closed hand really reaches 0.0.
+    1.7 at most, so 3 is the landmarker guessing, not a hand.
+
+    Each usable reading goes through three layers: the median of the last
+    `median_of` readings (a one-frame spike never reaches the gripper),
+    a running average (`smoothing` is the newest reading's weight), and
+    the two held ends (see CLOSE_BELOW). Between the ends the target is
+    the smoothed level, sent only when it moved by the deadband; reaching
+    an end always goes out, so a closed hand really reaches 0.0.
     """
 
     def __init__(self, closed: float = CLOSED_RATIO, open_: float = OPEN_RATIO,
                  smoothing: float = SMOOTHING, deadband: float = DEADBAND,
-                 max_ratio: float = MAX_RATIO) -> None:
+                 max_ratio: float = MAX_RATIO, median_of: int = MEDIAN_OF,
+                 close_below: float = CLOSE_BELOW, open_above: float = OPEN_ABOVE,
+                 hysteresis: float = HYSTERESIS) -> None:
         if not open_ > closed:
             raise ValueError(f'--open ({open_}) must be above --closed ({closed})')
+        if not 0.0 <= close_below < close_below + hysteresis < open_above - hysteresis:
+            raise ValueError('the held ends overlap: need close_below + hysteresis '
+                             'below open_above - hysteresis')
         self.closed, self.open_ = closed, open_
         self.smoothing, self.deadband = smoothing, deadband
         self.max_ratio = max_ratio
+        self.median_of = median_of
+        self.close_below, self.open_above = close_below, open_above
+        self.hysteresis = hysteresis
+        self.recent: list[float] = []      # last raw readings, for the median
         self.level: float | None = None    # smoothed openness
+        self.held: float | None = None     # 0.0 or 1.0 while an end holds
         self.sent: float | None = None     # last target that went out
 
     def update(self, ratio: float | None) -> float | None:
         if ratio is None or ratio > self.max_ratio:
             return None
-        raw = openness(ratio, self.closed, self.open_)
-        self.level = raw if self.level is None else (
-            self.smoothing * raw + (1.0 - self.smoothing) * self.level)
-        target = round(self.level, 2)
+        self.recent = (self.recent + [openness(ratio, self.closed, self.open_)]
+                       )[-self.median_of:]
+        ordered = sorted(self.recent)
+        mid = len(ordered) // 2
+        median = (ordered[mid] if len(ordered) % 2
+                  else (ordered[mid - 1] + ordered[mid]) / 2)
+        self.level = median if self.level is None else (
+            self.smoothing * median + (1.0 - self.smoothing) * self.level)
+        target = self._hold(self.level)
         if self.sent is not None:
             moved = abs(target - self.sent)
             at_end = target in (0.0, 1.0) and target != self.sent
@@ -137,6 +165,19 @@ class Follower:
                 return None
         self.sent = target
         return target
+
+    def _hold(self, level: float) -> float:
+        """The target for this level, with the ends held (hysteresis)."""
+        if self.held == 0.0 and level < self.close_below + self.hysteresis:
+            return 0.0
+        if self.held == 1.0 and level > self.open_above - self.hysteresis:
+            return 1.0
+        self.held = None
+        if level <= self.close_below:
+            self.held = 0.0
+        elif level >= self.open_above:
+            self.held = 1.0
+        return self.held if self.held is not None else round(level, 2)
 
 
 def _fmt(value: float | None) -> str:
@@ -261,7 +302,8 @@ def track(args) -> int:
         desc = dai.NNModelDescription(model=model, platform='RVC2')
         return dai.NNArchive(dai.getModelFromZoo(desc))
 
-    follower = Follower(args.closed, args.open)
+    follower = Follower(args.closed, args.open, smoothing=args.smoothing,
+                        close_below=args.close_below)
     out = sys.stderr if args.emit else sys.stdout
     with dai.Pipeline() as pipeline:
         palm = archive('luxonis/mediapipe-palm-detection:192x192')
@@ -540,6 +582,11 @@ def parse_cli(argv: list[str]):
                     help='ratio read as a closed hand (default %(default)s)')
     ap.add_argument('--open', type=float, default=OPEN_RATIO,
                     help='ratio read as an open hand (default %(default)s)')
+    ap.add_argument('--smoothing', type=float, default=SMOOTHING,
+                    help='weight of the newest reading, lower is smoother and slower '
+                         '(default %(default)s)')
+    ap.add_argument('--close-below', type=float, default=CLOSE_BELOW,
+                    help='at or below this the gripper shuts and holds (default %(default)s)')
     ap.add_argument('--fps', type=int, default=8, help='camera fps (default 8, RVC2)')
     ap.add_argument('--min-confidence', type=float, default=0.5)
     ap.add_argument('--no-rotate', action='store_true', help='frames as they come')
@@ -553,9 +600,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_cli(sys.argv[1:] if argv is None else argv)
     if args.bridge:
         return bridge(args.bridge)
-    if not args.open > args.closed:
-        print(f'--open ({args.open}) must be above --closed ({args.closed})',
-              file=sys.stderr)
+    try:
+        Follower(args.closed, args.open, smoothing=args.smoothing,
+                 close_below=args.close_below)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    if not 0.0 < args.smoothing <= 1.0:
+        print('--smoothing must be in (0, 1]', file=sys.stderr)
         return 2
     return track(args)
 
