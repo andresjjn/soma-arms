@@ -128,6 +128,7 @@ scripts/              smoke_test.sh, check_model_driver_sync.py,
                       oak_view.py (live OAK view on the Jetson desktop, s saves a frame)
                       jetson_driver.sh (recreate the Jetson driver container, gate 1 closed|open)
                       hand_gripper.py (bench experiment: one gripper follows one hand on the OAK)
+                      hand_show.sh (one take of the hand show: home check, arms only if 'arm' is typed)
 ```
 
 Packages that arrive with their milestone, and not before: `soma_agent`
@@ -169,7 +170,7 @@ you if you forgot.
 ## The tests are the specification
 
 24 tests came over from the bench driver, and the suite has grown since
-(487 passing plus 23 skipped as of 2026-10-12 on a machine without ROS,
+(499 passing plus 23 skipped as of 2026-10-12 on a machine without ROS,
 xacro or the mujoco wheel; the skipped ones need `rclpy`, which the ROS
 job of CI has, or xacro or mujoco, which the unit job installs). They encode every hardware contract. If a
 change breaks one, the change is wrong until proven otherwise. Never edit a

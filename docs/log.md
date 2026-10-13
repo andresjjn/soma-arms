@@ -511,4 +511,11 @@ change they forced.
   False, pinned by a test). And `--lift` goes up to 45 deg: about
   8.0 kg.cm on the base by the model, 80% of the measured torque, so
   above 40 deg the show lasts at most 15 s.
+- Since a lost hand disarms, Andres asked for arming in the same command.
+  `hand_gripper.py` still cannot arm; `scripts/hand_show.sh` runs one
+  take: it checks that every arm joint of both arms reads 0.0 (the first
+  armed tick sends the believed pose with no ramp), prints the rule 4
+  checklist, arms only if "arm" is typed, then starts the tracker and
+  the bridge. Tested on a fake docker, with a mutation check: a copy
+  that arms without asking fails five tests.
 

@@ -553,6 +553,43 @@ def bridge(arm: str, present: bool = False, present_max_s: float = PRESENT_MAX_S
         rclpy.try_shutdown()
 
 
+def home_check(wait_s: float = 5.0) -> int:
+    """Inside the container: 0 when every arm joint of both arms reads 0.0.
+
+    For scripts/hand_show.sh, before it offers to arm: the first armed tick
+    sends the believed pose with no ramp, so it must be the hang. Fingers
+    are reported, not required (a limp gripper keeps its last position).
+    Reads /joint_states only; it commands nothing.
+    """
+    import rclpy
+    from rclpy.signals import SignalHandlerOptions
+    from sensor_msgs.msg import JointState
+
+    rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
+    node = rclpy.create_node('soma_home_check')
+    seen: dict[str, float] = {}
+    node.create_subscription(JointState, 'joint_states',
+                             lambda m: seen.update(zip(m.name, m.position)), 10)
+    try:
+        deadline = time.monotonic() + wait_s
+        while not seen and time.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=0.1)
+        if not seen:
+            print('no /joint_states: is the driver up?', file=sys.stderr)
+            return 2
+        fingers = ', '.join(f'{n} {v:.2f}' for n, v in seen.items() if n.endswith('finger_l_joint'))
+        print(f'fingers believed at: {fingers} (arming sends them there)')
+        off = [n for arm in ARMS for n in away_from_home(seen, arm)]
+        if off:
+            print('not at 0.0: ' + ', '.join(off), file=sys.stderr)
+            return 2
+        print('every arm joint of both arms reads 0.0')
+        return 0
+    finally:
+        node.destroy_node()
+        rclpy.try_shutdown()
+
+
 def track(args) -> int:
     """On the Jetson host: the hand on the camera to targets on stdout."""
     import depthai as dai
@@ -872,6 +909,8 @@ def _web_view(port: int):
 
 def parse_cli(argv: list[str]):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
+    ap.add_argument('--home-check', action='store_true',
+                    help='inside the container: exit 0 only if every arm joint reads 0.0')
     ap.add_argument('--bridge', choices=ARMS, metavar='ARM',
                     help='inside the container: forward stdin targets to that arm')
     ap.add_argument('--present', action='store_true',
@@ -921,6 +960,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f'--present-max must be in (0, 60] s, --roll in [0, 0.5] rad and '
               f'--lift in (0, {LIFT_MAX}] rad', file=sys.stderr)
         return 2
+    if args.home_check:
+        return home_check()
     if args.bridge:
         try:
             return bridge(args.bridge, args.present, args.present_max, args.roll,
