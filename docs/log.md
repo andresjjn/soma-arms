@@ -397,3 +397,35 @@ change they forced.
   0.1 rad margin; the driver needs a status topic before the agent can
   report honest results; the tending cell stays the v1.0 task and the
   one hour soak stays a gate.
+
+## 2026-10-12, evening: the branches merged, the rules, the camera at work
+
+- Integrated, after a review of each: the CI colcon fix (squash; colcon
+  now runs the suite, 448 tests ran in the ROS job), the Ctrl-C and `q`
+  unwind (re-checked on the merged code: `q` on the way down of the wave
+  is 1 move home, it was 12), and the hardware docs (Jetson bench, July
+  as history). Inviolable rules 1 and 4 reworded with Andres's approval:
+  SSH on the Jetson; arms hanging at rest, never folded by hand before
+  arming. CI failed once on a DNS error of the runner (packages.ros.org)
+  and passed on rerun.
+- The camera put to work: `scripts/oak_view.py` (live view, turned right
+  side up, depth beside it, `s` saves a frame) tested on the Jetson;
+  `er2_probe.py` gained Google's own open pointing prompt and
+  `--annotate`. The ER 2 key is not created yet: no call made.
+- Luxonis' depthai 3 examples run on the Jetson in a separate venv. The
+  spatial detections example crashed the OAK-D Lite with `E_OUT_OF_MEM`
+  in the stereo filter; the example's own TODO says to use 4 SHAVEs
+  instead of 7 on the Lite. In v3 the camera is turned with
+  `Camera.setImageOrientation(ROTATE_180_DEG)`, so the network sees the
+  scene upright. The COCO detector does not know boxes or wooden blocks;
+  YOLO-World is RVC4 only.
+- Found while choosing a motion for a video: `grippers_open` opens both
+  grippers at once, sideways, and by the model's FK the inner fingertips
+  overlap by about 12 mm at full open. `demo` must not run until the
+  catalog changes (in `docs/next_session.md`).
+- Asked and answered, not decided: a full arm mimic is post-1.0 by
+  CLAUDE.md (at most a timeboxed v0 after the v0.2 wave, by an explicit
+  decision); a gripper opened and closed by a hand pinch gesture is about
+  2 to 3 hours, one joint, and would also measure the gripper's contact.
+- Gate 1 is open on the Jetson at the end of the day, the driver
+  disarmed. Handoff: `docs/next_session.md`.
