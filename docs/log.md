@@ -503,3 +503,12 @@ change they forced.
   by default, at most 0.7): about 5.7 kg.cm on the base by the model,
   45 mm from the body, and the wrist rolls +-0.25 rad. The elbow is
   never commanded.
+- The straight lift ran on the metal (Andres: "genial"). Two additions
+  on his request. A lost hand releases: once a hand seen before has been
+  gone 2 s, the tracker sends `release`; the bridge walks the arm home if
+  it was raised, waits 1 s for the ramp to land, and disarms. The script
+  can now disarm but still never arm (one request, built with data
+  False, pinned by a test). And `--lift` goes up to 45 deg: about
+  8.0 kg.cm on the base by the model, 80% of the measured torque, so
+  above 40 deg the show lasts at most 15 s.
+

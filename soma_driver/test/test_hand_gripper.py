@@ -285,10 +285,16 @@ def test_bad_tuning_is_refused_before_the_camera_opens(argv):
     assert hg.main(argv) == 2
 
 
-def test_the_script_cannot_arm_the_driver():
+def test_the_script_can_disarm_but_never_arm_the_driver():
+    # Since the release on a lost hand the bridge calls /soma/arm, so the
+    # old "never names SetBool" check moved here: one request, built with
+    # data False, and no way to write True into it.
+    import re
     source = (REPO / 'scripts' / 'hand_gripper.py').read_text()
-    assert 'SetBool' not in source
-    assert "'soma/arm'" not in source and '"soma/arm"' not in source
+    assert source.count('SetBool.Request()') == 1
+    assert source.count('request.data = False') == 1
+    assert not re.search(r'data\s*[=:]\s*(True|true|1)\b', source)
+    assert source.count("'soma/arm'") == 1
     assert "create_publisher(JointState, 'soma/command'" in source
 
 
@@ -444,3 +450,53 @@ def test_a_smaller_lift_for_a_first_try():
 def test_a_lift_past_the_designed_load_is_refused():
     with pytest.raises(ValueError):
         hg.Presenter('left', True, lift=hg.LIFT_MAX + 0.1)
+
+
+def test_a_lost_hand_is_reported_once_and_only_after_a_first_hand():
+    lost = hg.LostHand(after_s=2.0)
+    assert not any(lost.update(t / 10, False) for t in range(50))   # never seen yet
+    assert not lost.update(5.0, True)
+    assert not lost.update(6.0, False)
+    assert not lost.update(7.9, False)
+    assert lost.update(8.0, False)
+    assert not lost.update(9.0, False)                                # once
+
+
+def test_a_hand_back_in_view_resets_the_clock():
+    lost = hg.LostHand(after_s=2.0)
+    lost.update(0.0, True)
+    lost.update(1.0, False)
+    lost.update(2.5, True)
+    assert not lost.update(4.0, False)
+    assert lost.update(6.0, False)
+
+
+def test_release_while_following_stops_at_once_for_the_cut():
+    brain = hg.Presenter('left', present=False)
+    brain.hand(0.0, 0.6)
+    assert brain.release(1.0) == {} and brain.done and brain.released
+
+
+def test_release_during_the_show_walks_home_before_the_cut():
+    brain, cmds = show_run(present_max_s=20.0, until=6.0)
+    assert brain.phase == 'show'
+    brain.release(6.0)
+    t, last = 6.0, {}
+    while not brain.done:
+        last.update(brain.tick(t))
+        t = round(t + 0.1, 3)
+        assert t < 15.0
+    assert brain.released
+    assert last['left_arm_yaw_joint'] == 0.0 and last['left_arm_wrist_roll_joint'] == 0.0
+
+
+def test_a_heavy_lift_gets_a_short_show():
+    assert hg.Presenter('left', True, 30.0, lift=hg.LIFT_MAX).present_max_s == hg.HEAVY_MAX_S
+    assert hg.Presenter('left', True, 30.0, lift=hg.LIFT).present_max_s == 30.0
+
+
+def test_45_degrees_is_the_ceiling():
+    assert hg.LIFT_MAX == pytest.approx(0.79)
+    hg.Presenter('left', True, lift=0.785)            # 45 deg accepted
+    with pytest.raises(ValueError):
+        hg.Presenter('left', True, lift=0.8)
