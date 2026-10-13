@@ -26,7 +26,7 @@ The bench as it runs since 2026-09-01:
 | 2 | UBEC 6 V, 8 to 10 A | the 6 V servo rails, one per board, so a stall on one arm cannot brown out the other |
 | 1 | NVIDIA Jetson Orin Nano Super 8 GB | the computer: JetPack 7.2, the driver in a ROS 2 Humble container, I2C on bus `i2c-7`. Its own wall adapter, never the servo supply |
 | 1 | INA3221 three channel power monitor | meant for the rails, read only, at `0x41`. Off the bus since 2026-10-01 |
-| 1 | Luxonis OAK-D Lite | the eyes, verified on the Jetson on 2026-10-01; from v0.3 fixed on the bench column looking down at the deck |
+| 1 | Luxonis OAK-D Lite | the eyes, verified on the Jetson on 2026-10-01. Since 2026-10-13 fixed on a mast above the central box, tilted forward over the arms' arc and rolled a quarter turn: software turns frames 90 deg counterclockwise (`oak_view.ROTATION`, `hand_gripper.CAMERA_ROTATE_DEG`) |
 
 **History, not the current bench.** The first power-up, on 2026-07-22, ran
 on a **Raspberry Pi 5** (ROS 2 Humble in Docker, I2C bus 1) and a

@@ -528,3 +528,35 @@ change they forced.
   heartbeat line going, so a Ctrl-C still reaches the bridge as the end
   of input and brings the arm home at once.
 
+## 2026-10-13: servos kept, the camera on its mast, a coverage check
+
+- Servos: a research pass (actuator classes, from programmable PWM to
+  Dynamixel and brushless) concluded that inside v1.0 a servo change is
+  a thermal decision, not a smoothness one: the shoulder limit cycle is
+  backlash inside the servo's P loop where gravity torque crosses zero,
+  which a one-sign preload cures and no actuator removes by itself. The
+  candidates that fit the brackets with margin cost about USD 460 for J1
+  and J2 of both arms. Andres decided to keep the MG996R: preload, rest
+  pose off the vertical, a fan and the INA3221 back on the bus first; a
+  servo is bought only if the cycle survives the preload or the base
+  passes 60 C in the soak.
+- Found while planning: every joint's radians come from a NOMINAL
+  2000 us = 180 deg (`apply_calibration.py`), never measured. The sign
+  check proved directions, not magnitudes; the elbow jam of 2026-10-12
+  is the first evidence they differ. Measuring them is v0.2 work.
+- The OAK-D Lite is fixed on a mast above the central box, tilted over
+  the arms' forward arc, rolled a quarter turn. Depth (extended
+  disparity, 60 frames): 76% valid, the robot's metal at 36 to 42 cm, a
+  gripper held in front at 52 to 57 cm. Both viewers now turn frames
+  90 deg (checked on frames: `addRotateDeg` turns the opposite way to
+  OpenCV's naming, -90 there).
+- Each arm only moves in its own vertical plane, so pixel to position
+  can be one homography per arm plane (four marks each), not only one of
+  the deck; the camera only has to see the two planes.
+- Coverage check, written and smoke-tested, not run with motion yet:
+  `camera_check` (one straight arm at a time, base only, 15, 30, 40 deg,
+  down the same way) and `scripts/camera_coverage.py`, which compares
+  depth against the empty bench and reports, per pose, whether the arm
+  is in frame or cut by an edge. A smoke run showed why nobody may be in
+  view: a person moving reads as "closer than the baseline".
+

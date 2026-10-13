@@ -68,6 +68,24 @@ _WAVE_ELBOW_UP = -1.83      # forearm up, about 25 deg off vertical
 _WAVE_ELBOW_OPEN = -1.57    # out-swing, hand opens
 _WAVE_ELBOW_CLOSE = -2.09   # in-swing, hand closes
 
+def _straight(side: str, yaw: float) -> dict[str, float]:
+    """One arm swung forward by the base alone, every other joint of that
+    arm at zero: a straight arm, nothing implied."""
+    return {f'{side}_arm_{j}_joint': float(v) for j, v in (
+        ('yaw', yaw), ('shoulder', 0.0), ('elbow', 0.0), ('wrist_pitch', 0.0),
+        ('wrist_roll', 0.0), ('finger_l', 0.0))}
+
+
+# The camera coverage check (2026-10-13, the OAK on its mast): one arm at a
+# time, straight, swung forward by the base only, so the camera can be
+# checked against poses whose geometry is not in doubt. The base is the
+# joint whose direction the metal proved and whose large angles the hand
+# show ran; the elbow stays out (it jammed against the central box at a
+# large angle the model did not predict). 40 deg is the ceiling: about
+# 7.3 kg.cm on the base by the model, the designed wave's load, because in
+# step mode a pose is held for as long as the operator reads the screen.
+_CAM_LIFTS = ((15, -0.26), (30, -0.52), (40, -0.70))
+
 POSES: dict[str, dict[str, float]] = {
     'home': dict(HOME),
     # On the hanging bench the resting fold IS the hang. Same numbers on
@@ -84,6 +102,16 @@ POSES: dict[str, dict[str, float]] = {
     'wave_open': _wave_pose(yaw=_WAVE_YAW, elbow=_WAVE_ELBOW_OPEN, finger=1.0),
     'wave_close': _wave_pose(yaw=_WAVE_YAW, elbow=_WAVE_ELBOW_CLOSE, finger=0.0),
 }
+POSES.update({f'cam_{side}_{deg}': _straight(side, yaw)
+              for side in ('right', 'left') for deg, yaw in _CAM_LIFTS})
+
+
+def _camera_sweep(side: str) -> tuple[tuple[str, float], ...]:
+    """Up 15, 30, 40 deg and back down the same way; 3 s at each pose up
+    (the coverage capture needs 2 s of still frames)."""
+    up = tuple((f'cam_{side}_{deg}', 3.0) for deg, _ in _CAM_LIFTS)
+    down = tuple((f'cam_{side}_{deg}', 2.0) for deg, _ in reversed(_CAM_LIFTS[:-1]))
+    return up + down + (('home', 2.5),)
 
 # Sequences: (pose name, dwell seconds after commanding it). Dwells leave
 # room for the minimum-jerk profile to arrive and visibly settle.
@@ -117,6 +145,9 @@ SEQUENCES: dict[str, tuple[tuple[str, float], ...]] = {
         ('wave_probe', 1.5),
         ('home', 2.0),
     ),
+    # Camera coverage: the right arm, home, then the left arm. Pair it with
+    # scripts/camera_coverage.py --watch, which captures each pose.
+    'camera_check': (('home', 1.5),) + _camera_sweep('right') + _camera_sweep('left'),
 }
 
 

@@ -14,8 +14,9 @@ Runs on the Jetson with its system Python (depthai 2.32 and OpenCV, outside
 the driver's container), in a desktop session for the window. It only
 reads the camera: it cannot reach the driver or a servo.
 
-The camera is mounted upside down (found 2026-10-12), so every frame is
-turned 180 deg in software; --no-rotate shows it as it comes. Depth uses
+The camera sits on the mast above the central box (fixed 2026-10-13),
+rolled a quarter turn: every frame is turned 90 deg counterclockwise in
+software (ROTATION); --no-rotate shows it as it comes. Depth uses
 extended disparity, because the work area can sit near the stereo pair's
 minimum range (about 34 cm, 17 cm with extended disparity).
 """
@@ -27,6 +28,8 @@ import cv2
 import depthai as dai
 
 SAVE_PATH = '/tmp/soma_cam/frame.jpg'
+# The mount of 2026-10-13: raw frames come a quarter turn clockwise.
+ROTATION = cv2.ROTATE_90_COUNTERCLOCKWISE
 VIEW_HEIGHT = 540
 
 
@@ -80,7 +83,7 @@ def main() -> int:
     ap.add_argument('--snapshot', metavar='PATH',
                     help='no window: save one settled RGB frame (and depth, with --depth) and exit')
     args = ap.parse_args()
-    turn = (lambda img: img) if args.no_rotate else (lambda img: cv2.rotate(img, cv2.ROTATE_180))
+    turn = (lambda img: img) if args.no_rotate else (lambda img: cv2.rotate(img, ROTATION))
 
     with dai.Device(build(args.depth)) as dev:
         print(f'OAK {dev.getMxId()} on USB {dev.getUsbSpeed().name}', flush=True)

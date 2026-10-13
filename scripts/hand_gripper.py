@@ -250,6 +250,7 @@ ROLLS = 4                  # full wrist cycles per show, then home on its own
 PRESENT_MAX_S = 30.0       # a cap on the show; HEAVY_MAX_S above HEAVY_LIFT
 TRIGGER_OPEN_S = 0.5       # the hand must stay open this long before a close counts
 STREAM_HZ = 10
+CAMERA_ROTATE_DEG = -90     # the mast mount of 2026-10-13 (checked on a frame), see oak_view.ROTATION
 RELEASE = 'release'        # the tracker's word for "the hand is gone"
 HEARTBEAT = '.'            # the tracker's "still here", ignored by the bridge
 HEARTBEAT_S = 0.5
@@ -655,9 +656,18 @@ def track(args) -> int:
         palm = archive('luxonis/mediapipe-palm-detection:192x192')
         marks = archive('luxonis/mediapipe-hand-landmarker:224x224')
         cam = pipeline.create(dai.node.Camera).build()
-        if not args.no_rotate:   # the camera hangs upside down (2026-10-12)
-            cam.setImageOrientation(dai.CameraImageOrientation.ROTATE_180_DEG)
         video = cam.requestOutput((side, side), dai.ImgFrame.Type.BGR888p, fps=fps)
+        if not args.no_rotate:
+            # The mast mount (fixed 2026-10-13) rolls the camera a quarter
+            # turn, and the camera node only offers 180 deg: an ImageManip
+            # turns the square frame upright before anything sees it (the
+            # landmarker loses confidence on a sideways hand).
+            upright = pipeline.create(dai.node.ImageManip)
+            upright.setMaxOutputFrameSize(side * side * 3)
+            upright.initialConfig.addRotateDeg(CAMERA_ROTATE_DEG)
+            upright.initialConfig.setFrameType(dai.ImgFrame.Type.BGR888p)
+            video.link(upright.inputImage)
+            video = upright.out
         resize = pipeline.create(dai.node.ImageManip)
         resize.setMaxOutputFrameSize(palm.getInputWidth() * palm.getInputHeight() * 3)
         resize.initialConfig.setOutputSize(palm.getInputWidth(), palm.getInputHeight(),
