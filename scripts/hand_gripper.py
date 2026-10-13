@@ -35,9 +35,9 @@ What keeps this safe:
     every target (minimum jerk under the joint's max rate).
   - Nothing here can arm the driver: /soma/arm stays a manual call. It
     can only DISARM: once the hand has been gone for --release-after
-    seconds, the bridge walks the arm home if it was raised, lets it
-    settle, and then cuts every servo (an arm released raised would
-    fall).
+    seconds, the bridge walks the arm home if it was raised (a show
+    running completes its wrist rolls first), lets it settle, and then
+    cuts every servo (an arm released raised would fall).
   - No hand in view, no command: the gripper holds where it is.
   - Ending either side (q, Ctrl-C, the pipe closing) sends nothing more;
     the gripper holds its last target until the driver is disarmed.
@@ -246,10 +246,13 @@ ROLL_HOME_S = 0.8
 SHOW_PAUSE_S = 0.4         # still, before the wrist starts to roll
 ROLL_AMPLITUDE = 0.25      # rad each way, about 14 deg
 ROLL_PERIOD_S = 3.0
-PRESENT_MAX_S = 30.0       # then home on its own; HEAVY_MAX_S above HEAVY_LIFT
+ROLLS = 4                  # full wrist cycles per show, then home on its own
+PRESENT_MAX_S = 30.0       # a cap on the show; HEAVY_MAX_S above HEAVY_LIFT
 TRIGGER_OPEN_S = 0.5       # the hand must stay open this long before a close counts
 STREAM_HZ = 10
 RELEASE = 'release'        # the tracker's word for "the hand is gone"
+HEARTBEAT = '.'            # the tracker's "still here", ignored by the bridge
+HEARTBEAT_S = 0.5
 RELEASE_AFTER_S = 2.0      # hand gone this long: walk home, then disarm
 RELEASE_SETTLE_S = 1.0     # after the last home target, before the signal is cut
 
@@ -314,7 +317,7 @@ class Presenter:
     def __init__(self, arm: str, present: bool = False,
                  present_max_s: float = PRESENT_MAX_S,
                  roll: float = ROLL_AMPLITUDE, period_s: float = ROLL_PERIOD_S,
-                 lift: float = LIFT) -> None:
+                 lift: float = LIFT, rolls: int = ROLLS) -> None:
         joint_for(arm)   # validates the arm
         if not 0.0 < lift <= LIFT_MAX:
             raise ValueError(f'lift must be in (0, {LIFT_MAX}] rad')
@@ -324,6 +327,7 @@ class Presenter:
             present_max_s = min(present_max_s, HEAVY_MAX_S)
         self.present, self.present_max_s = present, present_max_s
         self.roll, self.period_s, self.lift = roll, period_s, lift
+        self.show_s = min(rolls * period_s, present_max_s)
         self.released = False
         self.phase = 'follow'
         self.last = {'yaw': 0.0, 'wrist_roll': 0.0, 'finger_l': None}
@@ -363,7 +367,7 @@ class Presenter:
                     self.phase = 'done'
             return out
         if self.phase == 'show':
-            if now - self._show_from >= self.present_max_s:
+            if now - self._show_from >= self.show_s:
                 return self.finish(now)
             if now < self._show_from:
                 return {}
@@ -372,9 +376,13 @@ class Presenter:
         return {}
 
     def release(self, now: float) -> dict[str, float]:
-        """The hand is gone: walk home like finish(), and mark that the
-        servos are to be cut once home. Only the bridge can cut them."""
+        """The hand is gone: the servos are to be cut once home (only the
+        bridge can cut them). While following, home is now. During the
+        raise or the show it waits: the show completes its rolls first,
+        then walks home, then the cut. Asking again changes nothing."""
         self.released = True
+        if self.phase in ('raise', 'show'):
+            return {}
         return self.finish(now)
 
     def finish(self, now: float) -> dict[str, float]:
@@ -425,7 +433,8 @@ class Presenter:
 
 
 def bridge(arm: str, present: bool = False, present_max_s: float = PRESENT_MAX_S,
-           roll: float = ROLL_AMPLITUDE, lift: float = LIFT, wait_s: float = 5.0) -> int:
+           roll: float = ROLL_AMPLITUDE, lift: float = LIFT, rolls: int = ROLLS,
+           wait_s: float = 5.0) -> int:
     """Inside the driver's container: targets from stdin to /soma/command.
 
     Without `present` only the finger follows the hand. With it, the
@@ -442,7 +451,10 @@ def bridge(arm: str, present: bool = False, present_max_s: float = PRESENT_MAX_S
     from sensor_msgs.msg import JointState
     from std_srvs.srv import SetBool
 
-    brain = Presenter(arm, present, present_max_s, roll, lift=lift)
+    brain = Presenter(arm, present, present_max_s, roll, lift=lift, rolls=rolls)
+    if present and brain.show_s < rolls * ROLL_PERIOD_S:
+        print(f'bridge: the show is capped at {brain.show_s:g} s: '
+              f'{brain.show_s / ROLL_PERIOD_S:.1f} of {rolls} rolls', file=sys.stderr)
     rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
     node = rclpy.create_node('soma_hand_gripper')
     pub = node.create_publisher(JointState, 'soma/command', 10)
@@ -512,10 +524,12 @@ def bridge(arm: str, present: bool = False, present_max_s: float = PRESENT_MAX_S
                     *lines, state['pending'] = (state['pending'] + chunk).split(b'\n')
                     for line in lines:
                         if line.strip() == RELEASE.encode():
-                            say('bridge: the hand is gone, walking home, then release')
-                            state['open'] = False
+                            if not brain.released:
+                                say('bridge: the hand is gone: release once home'
+                                    + (', after the show' if brain.phase in
+                                       ('raise', 'show') else ''))
                             send(brain.release(time.monotonic()))
-                            return
+                            continue
                         value = parse_target(line.decode(errors='replace'))
                         if value is not None:
                             targets = brain.hand(time.monotonic(), value)
@@ -674,7 +688,7 @@ def track(args) -> int:
         lock = HandLock()
         lost = LostHand(args.release_after) if args.emit and args.release_after > 0 else None
         frames, started = 0, time.monotonic()
-        last_print = last_save = 0.0
+        last_print = last_save = last_beat = 0.0
         hands, kpts, img = [], None, None
         try:
             while pipeline.isRunning():
@@ -695,9 +709,12 @@ def track(args) -> int:
                     print(f'{target:.2f}', flush=True)
                 if lost is not None and lost.update(now, kpts is not None):
                     print(RELEASE, flush=True)
-                    say(f'hand gone for {args.release_after:g} s: release sent, tracker done')
-                    time.sleep(0.5)     # let the line reach the bridge
-                    return 0
+                    say(f'hand gone for {args.release_after:g} s: release sent')
+                if args.emit and now - last_beat >= HEARTBEAT_S:
+                    # A write is how this side learns the bridge has ended
+                    # (BrokenPipeError); the bridge ignores the line.
+                    print(HEARTBEAT, flush=True)
+                    last_beat = now
                 palms = ' '.join(
                     f'{c:.2f}/{_fmt(hand_ratio(k))}@{k[WRIST][0]:.2f},{k[WRIST][1]:.2f}'
                     f'/L{math.dist(k[WRIST], k[MIDDLE_MCP]):.3f}'
@@ -916,6 +933,9 @@ def parse_cli(argv: list[str]):
     ap.add_argument('--present', action='store_true',
                     help='with --bridge: open then close the hand and the straight arm '
                          'swings to the front and shows, until the end of input')
+    ap.add_argument('--rolls', type=int, default=ROLLS,
+                    help=f'full wrist cycles of {ROLL_PERIOD_S:g} s in the show, then home '
+                         '(default %(default)s, 1 to 10)')
     ap.add_argument('--lift', type=float, default=LIFT,
                     help=f'how far the base swings the arm forward, rad (default '
                          f'%(default)s = 30 deg, at most {LIFT_MAX} = 45 deg; above '
@@ -956,16 +976,17 @@ def parse_cli(argv: list[str]):
 def main(argv: list[str] | None = None) -> int:
     args = parse_cli(sys.argv[1:] if argv is None else argv)
     if (not 0.0 < args.present_max <= 60.0 or not 0.0 <= args.roll <= 0.5
-            or not 0.0 < args.lift <= LIFT_MAX or args.release_after < 0.0):
-        print(f'--present-max must be in (0, 60] s, --roll in [0, 0.5] rad and '
-              f'--lift in (0, {LIFT_MAX}] rad', file=sys.stderr)
+            or not 0.0 < args.lift <= LIFT_MAX or args.release_after < 0.0
+            or not 1 <= args.rolls <= 10):
+        print(f'--present-max must be in (0, 60] s, --roll in [0, 0.5] rad, '
+              f'--lift in (0, {LIFT_MAX}] rad and --rolls in 1..10', file=sys.stderr)
         return 2
     if args.home_check:
         return home_check()
     if args.bridge:
         try:
             return bridge(args.bridge, args.present, args.present_max, args.roll,
-                          args.lift)
+                          args.lift, args.rolls)
         except KeyboardInterrupt:   # before the loop: nothing was commanded
             return 130
     try:

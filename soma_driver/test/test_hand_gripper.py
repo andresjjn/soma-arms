@@ -437,7 +437,8 @@ def test_present_refuses_an_arm_away_from_home():
 
 
 @pytest.mark.parametrize('argv', [['--present-max', '0'], ['--present-max', '120'],
-                                  ['--roll', '0.9'], ['--lift', '0'], ['--lift', '1.2']])
+                                  ['--roll', '0.9'], ['--lift', '0'], ['--lift', '1.2'],
+                                  ['--rolls', '0'], ['--rolls', '11']])
 def test_bad_show_settings_are_refused(argv):
     assert hg.main(argv) == 2
 
@@ -477,17 +478,73 @@ def test_release_while_following_stops_at_once_for_the_cut():
     assert brain.release(1.0) == {} and brain.done and brain.released
 
 
-def test_release_during_the_show_walks_home_before_the_cut():
-    brain, cmds = show_run(present_max_s=20.0, until=6.0)
-    assert brain.phase == 'show'
-    brain.release(6.0)
-    t, last = 6.0, {}
+def finish_ticking(brain, t, limit):
+    """Tick a Presenter to done; return (end time, roll values, last targets)."""
+    last, rolls = {}, []
     while not brain.done:
-        last.update(brain.tick(t))
+        out = brain.tick(t)
+        last.update(out)
+        if 'left_arm_wrist_roll_joint' in out:
+            rolls.append(out['left_arm_wrist_roll_joint'])
         t = round(t + 0.1, 3)
-        assert t < 15.0
+        assert t < limit
+    return t, rolls, last
+
+
+def peaks(values):
+    """How many times a series reaches its positive amplitude."""
+    top = max(values)
+    return sum(1 for a, b in zip(values, values[1:]) if b >= top - 1e-3 > a)
+
+
+def test_release_during_the_show_waits_for_the_rolls_then_walks_home():
+    # 2026-10-12: Andres took his hand away right after the trigger; the
+    # release cut the show before the wrist had rolled once.
+    brain, cmds = show_run(present_max_s=30.0, until=6.0)
+    assert brain.phase == 'show'
+    assert brain.release(6.0) == {} and brain.phase == 'show'    # deferred
+    end, rolls, last = finish_ticking(brain, 6.0, 40.0)
+    all_rolls = [v for _, v in series(cmds, 'left_arm_wrist_roll_joint')] + rolls
+    assert peaks(all_rolls) == hg.ROLLS
     assert brain.released
     assert last['left_arm_yaw_joint'] == 0.0 and last['left_arm_wrist_roll_joint'] == 0.0
+
+
+def test_release_during_the_raise_also_waits_for_the_show():
+    brain = hg.Presenter('left', True)
+    for t, v in ((0.5, 0.0), (1.0, 1.0), (2.0, 0.0)):
+        brain.hand(t, v)
+    assert brain.phase == 'raise'
+    brain.release(2.5)
+    _, rolls, _ = finish_ticking(brain, 2.5, 40.0)
+    assert peaks(rolls) == hg.ROLLS and brain.released
+
+
+def test_end_of_input_still_comes_home_at_once_after_a_release():
+    brain, _ = show_run(present_max_s=30.0, until=6.0)
+    brain.release(6.0)
+    brain.finish(6.5)                                   # Ctrl-C
+    assert brain.phase == 'home'
+    end, _, _ = finish_ticking(brain, 6.5, 12.0)
+    assert end < 6.5 + hg.ROLL_HOME_S + hg.YAW_RAMP_S + 0.5
+
+
+def test_without_a_release_the_show_does_its_rolls_and_comes_home():
+    brain, cmds = show_run(present_max_s=30.0, until=40.0)
+    assert brain.done and not brain.released
+    assert peaks([v for _, v in series(cmds, 'left_arm_wrist_roll_joint')]) == hg.ROLLS
+
+
+def test_asking_to_release_twice_changes_nothing():
+    brain = hg.Presenter('left', True)
+    brain.hand(0.0, 0.5)
+    assert brain.release(1.0) == {} and brain.done
+    assert brain.release(1.5) == {}
+
+
+def test_a_heavy_lift_caps_the_rolls():
+    brain = hg.Presenter('left', True, 30.0, lift=hg.LIFT_MAX, rolls=8)
+    assert brain.show_s == hg.HEAVY_MAX_S
 
 
 def test_a_heavy_lift_gets_a_short_show():

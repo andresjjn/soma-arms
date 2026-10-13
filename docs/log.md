@@ -518,4 +518,13 @@ change they forced.
   checklist, arms only if "arm" is typed, then starts the tracker and
   the bridge. Tested on a fake docker, with a mutation check: a copy
   that arms without asking fails five tests.
+- At 45 deg the take worked, but the wrist barely rolled: Andres took his
+  hand away right after the trigger, and 2 s later the release walked
+  the arm home before the show had begun. The show now does a fixed
+  number of full wrist cycles (`--rolls`, 4 of 3 s by default; the time
+  caps still apply), then comes home on its own. A release asked during
+  the raise or the show waits for it to finish; before the trigger it
+  is immediate. The tracker no longer exits on a release: it keeps a
+  heartbeat line going, so a Ctrl-C still reaches the bridge as the end
+  of input and brings the arm home at once.
 
