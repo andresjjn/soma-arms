@@ -12,8 +12,13 @@ Rules that hold for the whole session ([safety.md](safety.md), CLAUDE.md):
 - After any ATX-off stop, **disarm before the ATX comes back on**
   (`/soma/arm false`): an armed driver drives every servo the moment the
   rail returns.
-- In step mode abort with `q`, which unwinds. Ctrl-C ends the program and
-  leaves the arm where it is, held by the driver (recovery in step 7).
+- A sequence stops with `q` at a prompt or Ctrl-C at any moment, with or
+  without `--step`: either way the arm walks home over moves it has
+  already made (a move cut short on the way up is reversed first, one on
+  the way down is let finish). That walk is motion too; the stop that
+  removes power is still the ATX switch. A second Ctrl-C ends the walk
+  and leaves the arm at the last pose commanded, held by the driver
+  (recovery in step 7).
 
 Commands run on the Jetson, from `~/Projects/soma/soma-arms`, with the
 `soma` helper of [bench.md](bench.md) section 6 pasted into the SSH session.
@@ -176,7 +181,8 @@ soma ros2 service call /soma/arm std_srvs/srv/SetBool "{data: false}"
 
 ## 7. The wave
 
-Step mode first: one pose per ENTER, `q` unwinds along the walked path.
+Step mode first: one pose per ENTER; `q` or Ctrl-C walks the arm home over
+the moves already made.
 
 ```bash
 soma ros2 run soma_driver soma_primitives wave --step
@@ -195,9 +201,13 @@ soma ros2 run soma_driver soma_primitives wave
 
 - [ ] Played end to end, the ATX switch never needed. Clip saved.
 
-If Ctrl-C was pressed instead of `q`, the arm stays at the last pose, held by
-the driver. Walk it home by hand, one pose per command, back along the path
-(from the top: `wave_raise_2`, `wave_raise_1`, `wave_probe`, `home`):
+Ctrl-C does what `q` does, also without `--step`. Only a second Ctrl-C,
+pressed while the arm walks home, leaves it at the last pose commanded, held
+by the driver. Read which one with `soma ros2 topic echo /joint_states --once`
+(the last pose named on screen is the likely one), then walk it home by
+hand, one pose per command, down this list from the pose after the one it
+holds (from `wave_close`, start at `wave_open`): `wave_open`,
+`wave_raise_2`, `wave_raise_1`, `wave_probe`, `home`.
 
 ```bash
 soma ros2 run soma_driver soma_primitives wave_raise_2

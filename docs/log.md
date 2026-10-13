@@ -281,6 +281,45 @@ change they forced.
   311.0 mm. On the Mac: 383 passed, 9 skipped, through colcon as through
   plain pytest.
 
+## 2026-10-09: Ctrl-C walks the arm home in `soma_primitives` too (nothing moved)
+
+- Desk work on the Mac, no hardware touched, the Jetson not contacted.
+- `soma_primitives` now starts rclpy with `SignalHandlerOptions.NO`, like
+  the sign check, and turns a hang-up or a kill into Ctrl-C. This replaces
+  the line of the entry above that kept the rclpy default. `play()` takes
+  every way out of a sequence the way `q` takes it: the end of input,
+  Ctrl-C at a prompt or in the middle of a move (with or without
+  `--step`), and any error, which is raised again once the arm is home. A
+  second Ctrl-C, during the walk home, is let through: the arm keeps the
+  last pose commanded (manual recovery in `docs/session_v02.md` step 7).
+- Found while doing it: the unwind retraced the walked path literally, so
+  `q` after the descending `wave_probe`, one move from home, climbed back
+  through all three swings (12 moves), and a Ctrl-C during the final
+  `home` would have replayed the whole wave backwards. The unwind now
+  starts from the first time the arm held its current pose and skips the
+  loop that followed: still only moves already made, each at most 1 rad,
+  now never the same pose twice (from the descending probe: 1 move).
+- A move cut short is undone when it is new ground (the way up, which is
+  what step mode probes) and let finish, undisturbed, when it retraces a
+  move already made (the swings after the first, the way down). If the
+  interrupt lands inside the publish, the command may or may not have gone
+  out, so the move is always undone: that asks for the pose the arm is
+  already in, or reverses a move that just began.
+- Undoing a move in flight is new for the driver's planner, which replans
+  from the current position and velocity. Simulated with `trajectory.py`
+  at the 50 Hz tick, every step of both sequences cut at every 1% of its
+  ramp: the reverse strays at most 0.023 rad outside the span already
+  walked on an arm joint (0.024 rad on a finger, past its closed end,
+  where the pulse saturates) and settles at least 0.47 s inside the wait
+  the unwind sleeps. Simulated, not measured. A test pins the bounds at a
+  tenth of a ramp: 0.1 rad and the wait.
+- Re-sending the same target mid-ramp is not harmless: the replan
+  overshot by up to 0.047 rad in the same simulation, which is why a move
+  that is let finish is waited for, not commanded again.
+- Tests on the Mac (no ROS, no mujoco): 398 passed, 11 skipped. The two
+  new real-rclpy tests (the init call, and a publish that still goes out
+  after a real SIGINT) run only in the ROS job.
+
 ## 2026-10-12: first joints moved through the ROS driver; the camera; the Jetson as found
 
 - Right-arm sign check on the metal, through the driver: 6 of 6 `ok`
