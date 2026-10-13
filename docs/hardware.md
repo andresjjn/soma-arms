@@ -14,16 +14,26 @@ Two kinds of numbers appear below and they are never mixed:
 
 ## 1. Bill of materials
 
+The bench as it runs since 2026-09-01:
+
 | Qty | Part | Role |
 |---|---|---|
 | 2 | 6DOF aluminum robot arm, "Arm Only" variant (ThanksBuyer / Red Sun Global) | the arms |
 | 13 | Tower Pro MG996R servo | 12 in the arms, 1 spare |
-| 1 | Actuonix L16-140-63-6-R linear actuator | torso lift |
-| 1 | PCA9685 16 channel PWM driver | one I2C bus drives all 13 actuators |
-| 1 | UBEC 6 V, 8 to 10 A | the 6 V servo rail. A **second one is planned**, one per arm, and is not fitted yet |
-| 1 | LiPo 2S, with switch and fuse | current bench supply. It feeds the UBEC, never the servos |
-| 1 | Raspberry Pi 5 | runs ROS 2 Humble in Docker |
-| 1 | Luxonis OAK-D Lite | the eyes; from v0.3 fixed on the bench column looking down at the deck |
+| 1 | Actuonix L16-140-63-6-R linear actuator | torso lift. Off the hanging bench until the printed torso |
+| 2 | PCA9685 16 channel PWM driver | one per arm, both on one I2C bus: `0x40` right arm and L16, `0x43` left arm |
+| 1 | ATX supply, MaxiTech 300U, rated 10 A on +12 V | the bench supply, behind a 10 A fuse. Its rear switch is the emergency stop |
+| 2 | UBEC 6 V, 8 to 10 A | the 6 V servo rails, one per board, so a stall on one arm cannot brown out the other |
+| 1 | NVIDIA Jetson Orin Nano Super 8 GB | the computer: JetPack 7.2, the driver in a ROS 2 Humble container, I2C on bus `i2c-7`. Its own wall adapter, never the servo supply |
+| 1 | INA3221 three channel power monitor | meant for the rails, read only, at `0x41`. Off the bus since 2026-10-01 |
+| 1 | Luxonis OAK-D Lite | the eyes, verified on the Jetson on 2026-10-01; from v0.3 fixed on the bench column looking down at the deck |
+
+**History, not the current bench.** The first power-up, on 2026-07-22, ran
+on a **Raspberry Pi 5** (ROS 2 Humble in Docker, I2C bus 1) and a
+**LiPo 2S** with switch and fuse feeding a single UBEC, shared by both arms
+and the L16. The Jetson replaced the Pi on 2026-07-30, and the ATX chain
+with one UBEC per arm replaced the LiPo on 2026-09-01. The dated July
+material below (sections 5, 6, 7 and 8) says which hardware it ran on.
 
 ---
 
@@ -45,9 +55,10 @@ Chinese with English subtitles. Two pages matter for this repository:
 
 **We do not use the vendor electronics.** The kit ships an Arduino Nano, an
 expansion board, a Bluetooth module and an LM2596 step down module. All of it
-stays in the box: SOMA drives the servos from a Raspberry Pi 5 over I2C
-through a PCA9685. The manual's page 28 is kept only as the source of the
-A to F labelling.
+stays in the box: SOMA drives the servos from a Jetson Orin Nano Super over
+I2C through two PCA9685 boards (in July 2026, from a Raspberry Pi 5 through
+one). The manual's page 28 is kept only as the source of the A to F
+labelling.
 
 ### Kit contents (manual, page 1)
 
@@ -160,7 +171,8 @@ gearbox, **6** V, **R** = RC servo interface.
 | Lead screw | self locking | datasheet |
 
 Because the interface is a plain RC servo signal, the L16 is simply the
-thirteenth channel on the PCA9685. No extra electronics, no motor driver.
+thirteenth channel, channel 3 of the `0x40` board. No extra electronics, no
+motor driver.
 
 ### MEASURED: this unit runs inverted
 
@@ -198,32 +210,36 @@ Usable travel is therefore **130 mm**, and a full sweep takes 6.5 s at
 
 ---
 
-## 5. PCA9685 servo driver
+## 5. PCA9685 servo drivers
+
+Two boards on one I2C bus, one per arm.
 
 | Property | Value |
 |---|---|
-| Channels | 16, 12 bit PWM each |
-| Interface | I2C, address `0x40` |
+| Channels | 16 per board, 12 bit PWM each |
+| Interface | I2C: `0x40` (right arm and L16) and `0x43` (A0+A1 bridged, left arm since 2026-08-12), both on the Jetson's bus `i2c-7` |
 | Frequency | 50 Hz (20 ms period), the servo standard. Prescale 121 gives exactly 50.0 Hz, verified on the chip |
 | Duty conversion | `duty12 = us / 20000 * 4095`, so 1500 us is 307 counts |
-| Library | `smbus2`, register level, imported lazily after the arming check. Same protocol the bench tools validated on the chip; works identically on the Pi (bus 1) and the Jetson Orin Nano (bus 7), with autodetection |
+| Library | `smbus2`, register level, imported lazily after the arming check. Same protocol the bench tools validated on the chip; works identically on the Jetson Orin Nano (bus 7, today) and on the Pi (bus 1, July 2026), with autodetection |
 
 Channel allocation and the power wiring live in [wiring.md](wiring.md).
 
 Two rules that are not optional:
 
-- **Never power the servo rail from USB or from the Pi's 5 V.** The V+
-  terminal block takes 6 V from the UBEC with wire of 16 AWG or thicker, and
-  a capacitor across V+.
-- **The board carries no silkscreen channel numbers.** The map in `wiring.md`
-  was confirmed channel by channel with power on. Do not infer it from a
-  photo.
+- **Never power a servo rail from USB or from the computer's 5 V** (the
+  Jetson's today, the Pi's in July). Each board's V+ terminal block takes
+  6 V from its own UBEC with wire of 16 AWG or thicker, and a capacitor
+  across V+.
+- **Neither board carries silkscreen channel numbers.** The map in
+  `wiring.md` was proven output by output with a spare servo on 2026-10-01.
+  Prove a channel number by moving a servo on it; never infer it from a
+  photo or by counting pins.
 
 ### MEASURED: I2C failures, and what actually caused them
 
-On 2026-07-22 the bus dropped four times in one session with `OSError 121`
-(Remote I/O error). The last drop did not recover at all, even after 20
-retries.
+On 2026-07-22, on the Pi (bus 1) with a single board, the bus dropped four
+times in one session with `OSError 121` (Remote I/O error). The last drop
+did not recover at all, even after 20 retries.
 
 The failures correlated with **handling and vibration**, not with motion or
 current draw. Root cause: a **dupont jumper broken inside its insulation**, or
@@ -240,60 +256,129 @@ Two conclusions, and it matters that they are kept separate:
   twitching at power-up.
 
 Diagnostic that works: watch `i2cdetect` in a loop and tap the cables. If
-`0x40` blinks, the problem is mechanical.
+`0x40` or `0x43` blinks, the problem is mechanical.
 
 ---
 
 ## 6. Compute and camera
 
-**Raspberry Pi 5.** Runs ROS 2 Humble in Docker. I2C to the PCA9685 goes over
-**bus 1**, on header pins 1 (3V3), 3 (SDA), 5 (SCL) and 6 (GND).
-`i2cdetect -y 1` showing `0x40` is the first check of any bench session.
-`smbus2` is available natively on the Pi, outside Docker, which is what the
-bare metal bring-up scripts use.
+**NVIDIA Jetson Orin Nano Super 8 GB**, the bench computer since
+2026-07-30. JetPack 7.2 ships no ROS 2 Humble, so the driver runs in the
+`soma_driver` container, made by `scripts/jetson_driver.sh` (the Jetson
+has no `docker compose`; `docker-compose.jetson.yml` is its readable
+twin). The repository lives at `/home/jetson/Projects/soma/soma-arms`,
+and the address comes from DHCP: reach it as `jetson.local`. I2C to both PCA9685
+boards goes over **bus `i2c-7`**, on header pins 1 (3V3), 3 (SDA), 5 (SCL)
+and 6 (GND); pin 1 also feeds the boards' 3.3 V logic. `i2cdetect -y -r 7`
+showing `0x40` and `0x43` is the first check of any bench session. Since
+2026-09-01 the Jetson runs on its own wall adapter, never on the servo
+supply (section 7). How to operate it: [bench.md](bench.md), section 6.
 
-**Luxonis OAK-D Lite.** 91 x 28 x 17.5 mm, 61 g. On the hanging bench it
-is fixed to the column looking down at the deck (v0.3), at least 35 cm from
-the work area; on the printed torso it becomes the head. It carries its own
-VPU: on-camera inference is available, and the depth it produces is what
-turns a 2D point from the supervisor into a deck coordinate.
+**History: Raspberry Pi 5**, the computer of the first power-up on
+2026-07-22. It ran ROS 2 Humble in Docker with the single PCA9685 of the
+time on **bus 1** (same header pins, `i2cdetect -y 1`), and `smbus2`
+natively, outside Docker, for the bare metal bring-up scripts that still
+live in `scripts/pi/`.
+
+**Luxonis OAK-D Lite.** 91 x 28 x 17.5 mm, 61 g (datasheet). Stereo
+baseline 75 mm, mono HFOV 73 deg, RGB HFOV 69 deg (Luxonis); minimum
+depth about 34 cm in standard mode and 17 cm with extended disparity
+(computed from those numbers at 640 px, matching the Luxonis figures),
+and a stated absolute depth error under 2 % below 4 m, which is 7 to
+11 mm at 35 to 55 cm. That is why a point from the supervisor becomes a
+deck coordinate through the plane of the deck (a homography from
+markers), with depth kept for confirming a part and its height, not for
+placing the gripper. From v0.3 it is fixed to the column of the hanging
+bench, looking down at the deck, at least 35 cm from the work area, and
+out of the arms' reach. As found on 2026-10-12 it is mounted but looks
+forward at the operator, a few centimeters from where the raised gripper
+reaches, upside down (180 deg, corrected in software): it has to move.
+On the printed torso it becomes the head; it carries its own VPU for
+on-camera inference.
+
+MEASURED on the Jetson, 2026-10-01, on its USB-C port with a 40 Gbps cable:
+USB SUPER (5 Gbps), RGB 640x400 at 29.7 fps, depth 640x480 at 30.0 fps with
+LR-check and subpixel, depthai 2.32 on the system Python. Against a plain
+wall at 196 cm: 0.93 cm of temporal noise at the center, 37 % valid pixels.
+The 7.5 cm stereo baseline is read from its factory calibration, not
+measured.
 
 ---
 
 ## 7. Power
 
-Current bench chain, exactly as validated on 2026-07-22:
+The bench chain, as assembled on 2026-09-01 and in use since (the wiring
+rules that go with it are in [wiring.md](wiring.md)):
+
+```
+mains -> ATX supply (MaxiTech 300U, rated 10 A on +12 V)   <- rear switch = EMERGENCY STOP
+           P4 +12 V -> 10 A fuse -> XT60 -> Y splitter -+-> UBEC 6 V -> V+ of 0x40 -> right arm
+                                                        +-> UBEC 6 V -> V+ of 0x43 -> left arm
+
+Jetson Orin Nano Super: its OWN wall adapter
+```
+
+**MEASURED, 2026-09-01:** 11.6 V at the ATX with nothing connected, inside
+the ATX +-5 % band (11.4 to 12.6 V) but below the 11.8 to 12.3 V we would
+have liked; 6.00 V on both V+ terminal blocks. Watch the 12 V under load:
+below 11.4 V sustained, add a load fan on 5 V.
+
+**Nothing but a UBEC feeds a servo.** The MG996R is rated to 7.2 V: not the
+12 V side, and not a battery straight on V+. The UBEC is not a convenience,
+it is the only thing between the supply and twelve dead servos.
+
+- **One UBEC per arm**, in a star from the ATX with separate returns, so a
+  stall on one arm cannot brown out the other. The ATX is the common root of
+  that star, and a star does not protect against the root collapsing (next
+  point).
+- **The Jetson never shares the servo supply.** On 2026-09-01 hot plugging
+  the servo branch (the input capacitors of both UBECs plus twelve servos)
+  sank the shared 12 V and hard-shut the Jetson. It has run on its own wall
+  adapter since, and nothing is ever hot plugged onto the servo branch.
+- **The ATX rear switch is the emergency stop.** It drops the 12 V, both
+  UBECs and their 6 V rails, and leaves the Jetson running. The driver
+  cannot see the rails drop (the boards' logic runs on the Jetson's 3.3 V),
+  so after an ATX stop it is still ARMED: disarm before the ATX comes back
+  on. See [safety.md](safety.md).
+- The Jetson and the servo rails share **ground** and nothing else.
+- The **L16** (about 650 mA) is off this bench. When the torso returns it
+  hangs off whichever UBEC is less loaded.
+- The **INA3221** (`0x41`), meant to monitor the rails, is off the bus since
+  2026-10-01: nothing worth measuring yet.
+- Twelve MG996R servos are the wild card in the power budget. In a compact
+  pose, or de-energised, they draw almost nothing; stalled they draw a lot.
+  The uncertainty stays large until measured under real load, and with the
+  INA3221 off the bus nothing on the bench measures current today.
+
+**Power-on twitch.** MG996R clones kick when V+ comes up. Always energise the
+rails with the arms at rest in a **compact pose**: on the hanging bench that
+is both arms hanging at rest, nothing under or around them. This is a safety
+rule, not a preference: see [safety.md](safety.md).
+
+### History: the July 2026 battery chain
+
+The bench chain from the first power-up, exactly as validated on
+2026-07-22, until the ATX replaced it on 2026-09-01:
 
 ```
 LiPo 2S  ->  switch + fuse  ->  UBEC 6 V  ->  PCA9685 V+ terminal  ->  servos
 ```
 
-**NEVER connect the LiPo directly to the servos.** A full 2S pack sits at
-8.4 V and the MG996R is rated to 7.2 V. The UBEC is not a convenience, it is
-the only thing between the pack and twelve dead servos.
-
-- **One UBEC today.** A **second one is planned, one per arm**, so a stall on
-  one arm cannot brown out the other. Until it is fitted, both arms and the
-  L16 share a single rail and that is a known weak point.
-- The **L16** (about 650 mA) hangs off whichever UBEC is less loaded.
-- The Pi has its own supply. It shares **ground** with the servo rail and
-  nothing else.
-- Twelve MG996R servos are the wild card in the power budget. In a compact
-  pose, or de-energised, they draw almost nothing; stalled they draw a lot.
-  The uncertainty stays large until measured under real load, which is one of
-  the things the v1.0 two hour run will finally answer.
-
-**Power-on twitch.** MG996R clones kick when V+ comes up. Always energise the
-rail with the arms in a **compact pose, resting on something**. This is a
-safety rule, not a preference: see [safety.md](safety.md).
+A single UBEC fed both arms and the L16, a weak point known at the time,
+and the Pi had its own supply. A full 2S pack sits at 8.4 V, above the
+7.2 V servo rating: that is why the rule above names batteries, and why the
+LiPo never went straight onto V+.
 
 ---
 
 ## 8. Bench session log
 
-The dated facts above come from real sessions. The short version:
+The dated facts above come from real sessions. Below is the short version
+of the first two; every session from 2026-09-01 on has its own entry in
+[log.md](log.md).
 
-**2026-07-22, first power-on of the full chain.**
+**2026-07-22, first power-on of the full chain** (the Pi and the LiPo of
+section 1, one board at `0x40`).
 
 - I2C from the Pi to the PCA9685 verified (`i2cdetect -y 1` shows `0x40`), and
   the whole chain validated **with no power to the servos first**: exactly

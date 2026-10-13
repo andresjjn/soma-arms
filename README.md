@@ -3,8 +3,9 @@
 **S**killed **O**perator via **M**imicry and **A**utonomy.
 
 An embodied AI library for two 6DOF aluminum arms with a powered torso lift.
-Real hardware: MG996R servos and an Actuonix L16 linear actuator on a PCA9685,
-driven from a Raspberry Pi 5 running ROS 2 Humble in Docker.
+Real hardware: MG996R servos and an Actuonix L16 linear actuator on two
+PCA9685 boards, driven from a Jetson Orin Nano Super running ROS 2 Humble in
+Docker.
 
 [![CI](https://github.com/andresjjn/soma-arms/actions/workflows/ci.yml/badge.svg)](https://github.com/andresjjn/soma-arms/actions/workflows/ci.yml)
 
@@ -22,14 +23,16 @@ with their own parent link.
 | Arms | 2 x 6DOF aluminum, ThanksBuyer / Red Sun Global frame, "Arm Only" variant |
 | Joints per arm | base yaw, shoulder, elbow, wrist pitch, wrist roll, geared gripper |
 | Arm servos | 12 x Tower Pro MG996R, 25T spline, 500 to 2500 us over 180 degrees |
-| Torso lift | Actuonix L16-140-63-6-R, 140 mm stroke, 20 mm/s, self locking |
-| Driver board | PCA9685, 16 channels, I2C at `0x40`, 50 Hz |
-| Compute | Raspberry Pi 5, ROS 2 Humble in Docker |
-| Head | Luxonis OAK-D Lite, on-camera pose estimation |
+| Torso lift | Actuonix L16-140-63-6-R, 140 mm stroke, 20 mm/s, self locking. Off the hanging bench until the printed torso |
+| Driver boards | 2 x PCA9685, 16 channels each, one I2C bus: `0x40` right arm and L16, `0x43` left arm, 50 Hz |
+| Servo power | ATX bench supply behind a 10 A fuse, one 6 V UBEC per arm |
+| Compute | Jetson Orin Nano Super 8 GB, JetPack 7.2, ROS 2 Humble in Docker, on its own wall adapter |
+| Camera | Luxonis OAK-D Lite, RGB and stereo depth, verified on the Jetson; from v0.3 fixed on the column looking down at the deck |
 
 Thirteen actuators on one I2C bus. Full part numbers, datasheets, the kit
 parts list and every measured value: **[docs/hardware.md](docs/hardware.md)**
-and **[docs/wiring.md](docs/wiring.md)**.
+and **[docs/wiring.md](docs/wiring.md)**. The first power-up, in July 2026,
+ran on a Raspberry Pi 5 and a 2S LiPo; hardware.md keeps that as history.
 
 Honest numbers, because they shape everything else: the frame is advertised
 for 25 kg.cm servos and the MG996R delivers about 10, so **useful payload is
@@ -48,9 +51,10 @@ else, and the full model is in **[docs/safety.md](docs/safety.md)**:
 2. **The lift is limited to 5 to 135 mm of its 140 mm stroke.** Holding a
    command against a stop wedged the lead screw once and it had to be freed by
    hand. It will not happen twice.
-3. **Energise the 6 V rail only with the arms folded and resting.** These
+3. **Energise the 6 V rails only with both arms at rest in a compact pose**:
+   on the hanging bench, hanging with nothing under or around them. These
    servos twitch at power-up.
-4. **The real emergency stop is the switch that feeds the servo rail**,
+4. **The real emergency stop is the switch that feeds the servo rails**,
    today the ATX rear switch. Keep it in reach.
 
 ---

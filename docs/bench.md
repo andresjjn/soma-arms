@@ -167,7 +167,7 @@ normally again.
 
 ## 6. On the Jetson
 
-The bench computer since August: a Jetson Orin Nano Super on WiFi, user
+The bench computer since 2026-07-30: a Jetson Orin Nano Super on WiFi, user
 `jetson`, the repository at `/home/jetson/Projects/soma/soma-arms`, the
 PCA9685 boards on header bus `i2c-7`. Its address comes from DHCP and
 changes (192.168.1.2 until early October, 192.168.1.11 on 2026-10-12; the

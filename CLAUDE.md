@@ -8,7 +8,8 @@ touching anything.
 SOMA (Skilled Operator via Mimicry and Autonomy) is an embodied AI library for
 two 6DOF aluminum arms on a torso with a powered lift. Real hardware, not a
 simulation exercise: MG996R servos and an Actuonix L16 linear actuator on a
-PCA9685, driven from a Raspberry Pi 5 running ROS 2 Humble in Docker.
+two PCA9685 boards, driven from a Jetson Orin Nano Super running ROS 2
+Humble in Docker (a Raspberry Pi 5 until 2026-07-30).
 
 The repository is **standalone**. It knows nothing about any mobile platform,
 and it must stay that way. Integration happens in the integrating project, by
@@ -152,8 +153,8 @@ them in. Full context in `docs/hardware.md`.
 | L16 soft limits | 5 to 135 mm, never 0 to 140 |
 | Servos | MG996R at about 10 kg.cm, **not** the "25KG" the manual advertises |
 | Payload | about 330 g at 30 cm of reach. Work in compact poses |
-| Power | LiPo 2S to switch and fuse to UBEC 6 V to V+. **Never the LiPo directly**, 8.4 V exceeds the 7.2 V servo rating |
-| I2C | Jetson Orin bus i2c-7, header pins 1/3/5/6. PCA #1 at `0x40` (12 servos), PCA #2 at `0x43` (A0+A1 bridged, left arm since 2026-08-12), INA3221 at `0x41` (A0 to VS). Verified live 2026-08-11. Prescale 121 for exactly 50.0 Hz. Pi era: bus 1 |
+| Power | ATX supply (its rear switch is the emergency stop) to 10 A fuse to XT60 to Y splitter to one 6 V UBEC per board, V+ of `0x40` and `0x43`. The Jetson runs on its own adapter, never on the servo supply (2026-09-01). **Nothing but a UBEC feeds a servo**: they are rated 7.2 V (the July bench's 2S LiPo was 8.4 V) |
+| I2C | Jetson Orin bus i2c-7, header pins 1/3/5/6. PCA #1 at `0x40` (right arm and L16), PCA #2 at `0x43` (A0+A1 bridged, left arm since 2026-08-12), INA3221 at `0x41` (A0 to VS, off the bus since 2026-10-01). Verified live 2026-08-11. Prescale 121 for exactly 50.0 Hz. Pi era: bus 1 |
 | Gripper | geared pair, the right finger is mimic and owns no channel |
 
 `servo_map.py` and the URDF hold the same physical facts. If you change one,
