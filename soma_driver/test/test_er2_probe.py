@@ -126,3 +126,38 @@ def test_main_json_keeps_a_parse_failure_visible(monkeypatch, capsys):
     import json
     report = json.loads(capsys.readouterr().out)
     assert report['points'] == [] and 'not JSON' in report['parse_error']
+
+
+def test_no_labels_asks_with_googles_own_pointing_prompt():
+    # Without labels the model finds and names things itself; the prompt is
+    # the one of the robotics overview, so results compare with the docs.
+    prompt = er2_probe.build_prompt([])
+    assert prompt == er2_probe.OPEN_PROMPT
+    assert 'no more than 10 items' in prompt and '[y, x]' in prompt and '0-1000' in prompt
+
+
+def test_main_runs_without_labels_and_annotates(monkeypatch, capsys, tmp_path):
+    monkeypatch.setenv('GEMINI_API_KEY', 'test-key')
+    seen, drawn = {}, {}
+    monkeypatch.setattr(er2_probe, 'query', lambda image_path, labels, model, key, thinking=None: (
+        seen.update(labels=labels) or
+        {'model': model, 'text': '[{"point": [500, 250], "label": "box"}]', 'latency_s': 1.0,
+         'size': (640, 480), 'usage': {}}))
+    monkeypatch.setattr(er2_probe, 'annotate',
+                        lambda image, points, out: drawn.update(image=image, points=points, out=out))
+    out_path = str(tmp_path / 'seen.jpg')
+    assert er2_probe.main(['frame.jpg', '--annotate', out_path]) == 0
+    assert seen['labels'] == []
+    assert drawn['out'] == out_path and drawn['points'][0]['label'] == 'box'
+
+
+def test_annotate_draws_on_a_copy_of_the_same_size(tmp_path):
+    Image = pytest.importorskip('PIL.Image')
+    src, out = tmp_path / 'frame.jpg', tmp_path / 'seen.jpg'
+    Image.new('RGB', (640, 480), (40, 40, 40)).save(src)
+    er2_probe.annotate(str(src), [{'point': [500, 250], 'label': 'box'}], str(out))
+    marked = Image.open(out)
+    assert marked.size == (640, 480)
+    # The point lands at x = 250/1000*640 = 160, y = 500/1000*480 = 240.
+    r, g, b = marked.convert('RGB').getpixel((160, 240))
+    assert r > 150 and g < 120

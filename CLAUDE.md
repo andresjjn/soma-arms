@@ -125,6 +125,7 @@ scripts/              smoke_test.sh, check_model_driver_sync.py,
                       check_test_results.py (fails CI when colcon test ran nothing),
                       workspace_map.py (reach map and deck drawing),
                       er2_probe.py (one pointing call to ER 2, key from the environment)
+                      oak_view.py (live OAK view on the Jetson desktop, s saves a frame)
                       jetson_driver.sh (recreate the Jetson driver container, gate 1 closed|open)
 ```
 

@@ -9,6 +9,8 @@ and from nowhere else; this repository never holds one.
     export GEMINI_API_KEY=...                 # an AI Studio auth key
     python3 scripts/er2_probe.py frame.jpg "wooden block" "empty pocket"
     python3 scripts/er2_probe.py frame.jpg block --thinking low --json
+    python3 scripts/er2_probe.py frame.jpg --annotate seen.jpg   # no labels:
+                                       # the model finds and names up to 10 items
 
 Prints the raw answer, the parsed points as normalized [y, x] in 0 to
 1000 and in pixels, the latency, and the token usage. The model id is
@@ -46,7 +48,17 @@ def api_key_from_env(environ=None) -> str | None:
     return None
 
 
+# The pointing prompt of Google's robotics overview, verbatim, for when
+# the model is asked to find and name things on its own.
+OPEN_PROMPT = ('Point to no more than 10 items in the image. The label returned '
+               'should be an identifying name for the object detected. The answer '
+               'should follow the json format: [{"point": <point>, "label": <label1>}, '
+               '...]. The points are in [y, x] format normalized to 0-1000.')
+
+
 def build_prompt(labels: list[str]) -> str:
+    if not labels:
+        return OPEN_PROMPT
     items = ', '.join(labels)
     return (f'Point to the following items in the image: {items}. '
             'Answer with a JSON list only, no code fence and no prose, one '
@@ -158,14 +170,39 @@ def query(image_path: str, labels: list[str], model: str, key: str,
     }
 
 
+def annotate(image_path: str, points: list[dict], out_path: str) -> None:
+    """Draw every point and its label on a copy of the image.
+
+    Pillow is imported here, like the SDK in query(), so the parsers stay
+    testable where it is not installed.
+    """
+    from PIL import Image, ImageDraw
+    img = Image.open(image_path).convert('RGB')
+    draw = ImageDraw.Draw(img)
+    r = max(6, img.width // 160)
+    for p in points:
+        x, y = to_pixels(p['point'], img.width, img.height)
+        draw.ellipse((x - r, y - r, x + r, y + r), outline=(255, 64, 64), width=max(2, r // 3))
+        draw.ellipse((x - 2, y - 2, x + 2, y + 2), fill=(255, 64, 64))
+        text = str(p.get('label', ''))
+        tx, ty = x + r + 4, y - r
+        box = draw.textbbox((tx, ty), text)
+        draw.rectangle((box[0] - 3, box[1] - 2, box[2] + 3, box[3] + 2), fill=(0, 0, 0))
+        draw.text((tx, ty), text, fill=(255, 255, 255))
+    img.save(out_path, quality=92)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('image', help='jpg, png or webp frame of the bench')
-    ap.add_argument('labels', nargs='+', help='what to point at')
+    ap.add_argument('labels', nargs='*',
+                    help='what to point at; none = find and name up to 10 items')
     ap.add_argument('--model', default=DEFAULT_MODEL)
     ap.add_argument('--thinking', choices=THINKING_LEVELS, default=None,
                     help='thinking level; the docs suggest low for pointing')
     ap.add_argument('--json', action='store_true', help='machine readable output')
+    ap.add_argument('--annotate', metavar='OUT', help='write a copy of the image '
+                    'with the points drawn on it (needs Pillow)')
     args = ap.parse_args(argv)
 
     key = api_key_from_env()
@@ -184,6 +221,8 @@ def main(argv=None) -> int:
         if result['size']:
             p['pixels'] = to_pixels(p['point'], *result['size'])
 
+    if args.annotate:
+        annotate(args.image, points, args.annotate)
     if args.json:
         print(json.dumps({**result, 'points': points, 'parse_error': parse_error}, indent=2))
         return 0
