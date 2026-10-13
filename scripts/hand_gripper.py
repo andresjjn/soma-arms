@@ -221,19 +221,21 @@ def joint_for(arm: str) -> str:
 
 
 # The present gesture (Andres's video, 2026-10-12): the hand opens and
-# closes, then the arm lifts to the front, gripper shut, and the wrist
-# rolls a little each way until the operator ends it. Numbers for either
-# arm in the hug convention (negative = forward), both verified on the
-# metal by the sign check. By the URDF's estimated masses, a level
-# forearm 50 deg forward asks the base for about 9.9 kg.cm, the MG996R's
-# measured limit; this pose asks about 7 (the designed wave's load) and
-# the elbow about 4. The elbow curls first, with the arm hanging, so the
-# path never crosses the level, loaded forearm; on the way down the base
-# goes first.
-PRESENT_ELBOW = -1.65      # forearm raised; 0.31 rad inside the left stop
-PRESENT_YAW = -0.52        # 30 deg forward
-ELBOW_RAMP_S = 2.0
-YAW_RAMP_S = 1.5
+# closes, then the whole arm swings to the front with the base, straight,
+# gripper shut, and the wrist rolls a little each way until the operator
+# ends it. Base and roll only: the elbow is never commanded.
+#
+# Why straight: the first version curled the elbow to -1.65 before lifting.
+# On the metal the left forearm folded in and jammed against the central
+# box, from the start of the curl, where the model has 45 mm to spare: at
+# large angles the elbow does not move as the model believes (the sign
+# check only proved its direction, at 0.25 rad). Until the elbow is
+# measured, the show leaves it alone. The base's direction is verified,
+# and by the URDF's estimated masses a straight arm 30 deg forward asks it
+# for about 5.7 kg.cm (6.0 with a 20 g object), 45 mm from the body.
+LIFT = 0.52                # base, rad forward (30 deg); --lift, at most 0.7
+LIFT_MAX = 0.7             # 40 deg: about 7.3 kg.cm, the designed wave's load
+YAW_RAMP_S = 2.5
 ROLL_HOME_S = 0.8
 SHOW_PAUSE_S = 0.4         # still, before the wrist starts to roll
 ROLL_AMPLITUDE = 0.25      # rad each way, about 14 deg
@@ -246,8 +248,9 @@ STREAM_HZ = 10
 def away_from_home(state: dict[str, float], arm: str, tolerance: float = 0.02):
     """The arm's joints (fingers aside) not at 0.0 on /joint_states, by name.
 
-    The Presenter plans its raise from 0.0: started anywhere else, its
-    first command would be a jump.
+    The Presenter plans its raise from 0.0 and leaves the other joints
+    where they are: started anywhere else, its first command would be a
+    jump, or the arm would lift bent.
     """
     names = [f'{arm}_arm_{j}_joint' for j in
              ('yaw', 'shoulder', 'elbow', 'wrist_pitch', 'wrist_roll')]
@@ -263,25 +266,28 @@ def min_jerk(a: float, b: float, tau: float) -> float:
 class Presenter:
     """The bridge's brain: follow the hand, and with `present`, show off.
 
-    Phases: follow (finger targets pass through), raise (elbow, then
-    base), show (the wrist rolls), home (wrist, base, elbow, in that
-    order), done. hand() takes a finger target from the tracker, tick()
+    Phases: follow (finger targets pass through), raise (the base swings
+    the straight arm forward), show (the wrist rolls), home (wrist, then
+    base), done. hand() takes a finger target from the tracker, tick()
     the clock, finish() the end of input; each returns the commands to
-    publish now, as {joint: position}. Only this arm's yaw, elbow, wrist
-    roll and driven finger are ever named; from the trigger on, the
-    finger is held at 0.0 and the hand is ignored.
+    publish now, as {joint: position}. Only this arm's base, wrist roll
+    and driven finger are ever named; from the trigger on, the finger is
+    held at 0.0 and the hand is ignored.
     """
 
     def __init__(self, arm: str, present: bool = False,
                  present_max_s: float = PRESENT_MAX_S,
-                 roll: float = ROLL_AMPLITUDE, period_s: float = ROLL_PERIOD_S) -> None:
+                 roll: float = ROLL_AMPLITUDE, period_s: float = ROLL_PERIOD_S,
+                 lift: float = LIFT) -> None:
         joint_for(arm)   # validates the arm
+        if not 0.0 < lift <= LIFT_MAX:
+            raise ValueError(f'lift must be in (0, {LIFT_MAX}] rad')
         self.joint = {k: f'{arm}_arm_{k}_joint'
-                      for k in ('yaw', 'elbow', 'wrist_roll', 'finger_l')}
+                      for k in ('yaw', 'wrist_roll', 'finger_l')}
         self.present, self.present_max_s = present, present_max_s
-        self.roll, self.period_s = roll, period_s
+        self.roll, self.period_s, self.lift = roll, period_s, lift
         self.phase = 'follow'
-        self.last = {'yaw': 0.0, 'elbow': 0.0, 'wrist_roll': 0.0, 'finger_l': None}
+        self.last = {'yaw': 0.0, 'wrist_roll': 0.0, 'finger_l': None}
         self._open_since: float | None = None
         self._was_open = False
         self._plan: list[tuple[float, float, str, float, float]] = []
@@ -303,8 +309,7 @@ class Presenter:
         out = self._set({'finger_l': value})
         if self.present and value <= 0.0 and self._was_open:
             self.phase = 'raise'
-            self._plan = self._ramps(now, [('elbow', PRESENT_ELBOW, ELBOW_RAMP_S),
-                                           ('yaw', PRESENT_YAW, YAW_RAMP_S)])
+            self._plan = self._ramps(now, [('yaw', -self.lift, YAW_RAMP_S)])
         elif value <= 0.0:
             self._was_open = False
         return out
@@ -336,10 +341,8 @@ class Presenter:
             return {}
         self.phase = 'home'
         self._plan = self._ramps(now, [('wrist_roll', 0.0, ROLL_HOME_S),
-                                       ('yaw', 0.0, YAW_RAMP_S),
-                                       ('elbow', 0.0, ELBOW_RAMP_S)],
-                                 full={'wrist_roll': self.roll, 'yaw': PRESENT_YAW,
-                                       'elbow': PRESENT_ELBOW})
+                                       ('yaw', 0.0, YAW_RAMP_S)],
+                                 full={'wrist_roll': self.roll, 'yaw': self.lift})
         return self._sample(now)
 
     def _ramps(self, now, legs, full=None):
@@ -377,11 +380,11 @@ class Presenter:
 
 
 def bridge(arm: str, present: bool = False, present_max_s: float = PRESENT_MAX_S,
-           roll: float = ROLL_AMPLITUDE, wait_s: float = 5.0) -> int:
+           roll: float = ROLL_AMPLITUDE, lift: float = LIFT, wait_s: float = 5.0) -> int:
     """Inside the driver's container: targets from stdin to /soma/command.
 
     Without `present` only the finger follows the hand. With it, the
-    Presenter adds the show (see PRESENT_YAW). The end of input, which is
+    Presenter adds the show (see LIFT). The end of input, which is
     what Ctrl-C on the operator's side becomes in here, walks the arm home
     before the bridge exits: it never leaves a raised arm to whoever comes
     next, and it never disarms (an unpowered raised arm falls).
@@ -393,7 +396,7 @@ def bridge(arm: str, present: bool = False, present_max_s: float = PRESENT_MAX_S
     from rclpy.signals import SignalHandlerOptions
     from sensor_msgs.msg import JointState
 
-    brain = Presenter(arm, present, present_max_s, roll)
+    brain = Presenter(arm, present, present_max_s, roll, lift=lift)
     rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
     node = rclpy.create_node('soma_hand_gripper')
     pub = node.create_publisher(JointState, 'soma/command', 10)
@@ -797,8 +800,11 @@ def parse_cli(argv: list[str]):
     ap.add_argument('--bridge', choices=ARMS, metavar='ARM',
                     help='inside the container: forward stdin targets to that arm')
     ap.add_argument('--present', action='store_true',
-                    help='with --bridge: open then close the hand and the arm lifts '
-                         'to the front and shows, until the end of input')
+                    help='with --bridge: open then close the hand and the straight arm '
+                         'swings to the front and shows, until the end of input')
+    ap.add_argument('--lift', type=float, default=LIFT,
+                    help=f'how far the base swings the arm forward, rad (default '
+                         f'%(default)s = 30 deg, at most {LIFT_MAX})')
     ap.add_argument('--present-max', type=float, default=PRESENT_MAX_S,
                     help='seconds the show may last before the arm goes home on its own '
                          '(default %(default)s, at most 60)')
@@ -830,13 +836,15 @@ def parse_cli(argv: list[str]):
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_cli(sys.argv[1:] if argv is None else argv)
-    if not 0.0 < args.present_max <= 60.0 or not 0.0 <= args.roll <= 0.5:
-        print('--present-max must be in (0, 60] s and --roll in [0, 0.5] rad',
-              file=sys.stderr)
+    if (not 0.0 < args.present_max <= 60.0 or not 0.0 <= args.roll <= 0.5
+            or not 0.0 < args.lift <= LIFT_MAX):
+        print(f'--present-max must be in (0, 60] s, --roll in [0, 0.5] rad and '
+              f'--lift in (0, {LIFT_MAX}] rad', file=sys.stderr)
         return 2
     if args.bridge:
         try:
-            return bridge(args.bridge, args.present, args.present_max, args.roll)
+            return bridge(args.bridge, args.present, args.present_max, args.roll,
+                          args.lift)
         except KeyboardInterrupt:   # before the loop: nothing was commanded
             return 130
     try:

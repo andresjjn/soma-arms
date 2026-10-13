@@ -494,3 +494,12 @@ change they forced.
   the level, loaded forearm (checked through the driver's own planner).
   The show goes home on its own after 30 s; the end of input walks it
   home before the bridge exits; it refuses to start off home.
+- Run on the metal by Andres: the left forearm folded in and jammed
+  against the central box from the start of the elbow curl (incident row
+  in `docs/safety.md`). The model gives that path 45 mm of clearance, so
+  the metal and the model disagree at large elbow angles; the elbow's
+  real angle per command is to be measured in small steps. The show now
+  lifts the straight arm with the base only (`--lift`, 0.52 rad = 30 deg
+  by default, at most 0.7): about 5.7 kg.cm on the base by the model,
+  45 mm from the body, and the wrist rolls +-0.25 rad. The elbow is
+  never commanded.
