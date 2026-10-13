@@ -429,3 +429,42 @@ change they forced.
   2 to 3 hours, one joint, and would also measure the gripper's contact.
 - Gate 1 is open on the Jetson at the end of the day, the driver
   disarmed. Handoff: `docs/next_session.md`.
+
+## 2026-10-12, night: one gripper follows one hand (camera only so far)
+
+- Decided by Andres: a bench experiment, one joint. One gripper opens in
+  proportion to how open his hand is, read by the OAK-D Lite. Not the
+  arm mimic, which stays post-1.0; not part of the library. Code:
+  `scripts/hand_gripper.py`, tests in `test_hand_gripper.py`.
+- How it reads the hand: Luxonis' MediaPipe palm detector and hand
+  landmarker run on the camera (RVC2, 8.0 fps measured, the depthai 3
+  venv). The opening is the thumb tip's distance to the mean of the four
+  fingertips over the palm's size. Two processes joined by a pipe: the
+  tracker on the host prints targets, a bridge inside the driver's
+  container publishes them to `/soma/command` for one finger joint. It
+  cannot arm; a lost hand sends nothing; the driver clamps and ramps.
+- What the first runs taught, each one now fixed and tested:
+  1. Two palms in most frames: the detector saw both of Andres's hands
+     (the other one held the phone). Taking the most confident one each
+     frame jumped between hands; the tracker now locks onto one hand by
+     its wrist's position and keeps the lock through a 1 s blink.
+  2. Readings of 2 to 5, even 19, for an open hand: a hand tilted toward
+     the lens shows a short palm, and the ratio over it inflates. The
+     palm's size is now the longer of its length and its scaled width;
+     readings above 2.5 are skipped as misreads.
+  3. The landmarker loses confidence on an upside-down hand (the crop is
+     never rotated): the pose that works is the palm to the camera,
+     fingers up, as if waving at the robot.
+  4. The depthai 3 venv has headless OpenCV, so the view is an MJPEG
+     page on the Jetson's localhost (8090), tunneled to the Mac. It
+     listened on the LAN in its first version; the camera looks at the
+     operator, so it is localhost only now.
+  5. The view froze after a few minutes: status lines went through `tee`
+     and SSH to a terminal that stopped reading, the pipe filled and the
+     blocking print stopped the camera loop. Status now goes through a
+     thread that drops lines; every frame goes to a log file instead.
+- Calibrated on Andres's hand, 270 s: a pinch reads 0.4 to 0.5, an open
+  hand 1.5 to 1.7. Defaults now 0.5 for gripper 0.0, 1.5 for 1.0.
+- Not checked yet: Andres says the two grippers hang about 15 cm apart,
+  more than the model's spacing suggests; to be measured with a ruler
+  before the `grippers_open` fix is sized.
