@@ -31,7 +31,7 @@ seems to require breaking them. If a rule blocks the work, stop and ask.
 Not "it follows from the task". Not "it is only a small move". Not "the last
 message implied it". Explicit, prior, for that specific motion. This includes
 arming the driver, running anything with `allow_real:=true`, and any command
-that could reach a real servo, including over SSH on the Pi.
+that could reach a real servo, including over SSH on the Jetson.
 
 ### 2. The node boots MOCK and DISARMED. Arming is an explicit service
 
@@ -55,8 +55,11 @@ When probing real end stops, move in small steps and never sustain a command.
 
 ### 4. Energise V+ only with the arms compact and resting
 
-MG996R clones twitch when the rail comes up. Both arms folded, resting on the
-bench, nothing fragile underneath, every time.
+MG996R clones twitch when the rail comes up. Both arms hanging at rest,
+nothing under or around them, every time. On the hanging bench the hang IS
+the compact pose: never fold the arms by hand before arming, because the
+first armed tick sends every joint to its hanging zero with no ramp, and a
+folded arm would jump (`TestWhatArmingSends`, docs/safety.md rule 2).
 
 No parameter or test can enforce this one. That is why it is written here.
 

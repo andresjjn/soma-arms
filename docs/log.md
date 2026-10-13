@@ -332,7 +332,12 @@ change they forced.
   Left arm, same session: 6 of 6 `ok`, report
   `calibration/sign_check_2026-10-12_left.json`, again one ARMED and one
   DISARMED with no fault. All 12 joints are sign-checked on the metal;
-  for the v0.2 tag only the wave on video is missing.
+  for the v0.2 tag only the wave on video is missing. The right arm was
+  checked twice: again at 23:55, in the left arm's armed window, while
+  Andres watched the roll from above; same six `ok`
+  (`calibration/sign_check_2026-10-12_right_rerun.json`). That rerun had
+  overwritten the first report on the Jetson (same file name); report
+  names now carry the time.
 - The model, checked against the metal: seen from above, a negative wrist
   roll turns the gripper inward, counterclockwise on the right arm and
   clockwise on the left (Andres; a first report of "clockwise" on the
