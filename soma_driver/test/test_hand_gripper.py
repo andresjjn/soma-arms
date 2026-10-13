@@ -35,8 +35,15 @@ PINCH = hand(thumb=(0.0, -1.95))     # thumb on the fingertips
 
 
 def test_importing_the_script_pulls_in_no_camera_ros_or_opencv():
-    for module in ('depthai', 'depthai_nodes', 'rclpy', 'cv2'):
-        assert module not in sys.modules
+    # In a fresh interpreter: in the ROS job other tests import rclpy first,
+    # so this process's sys.modules proves nothing about the script.
+    import subprocess
+    probe = ('import sys; sys.path.insert(0, sys.argv[1]); import hand_gripper; '
+             "print([m for m in ('depthai', 'depthai_nodes', 'rclpy', 'cv2') "
+             'if m in sys.modules])')
+    out = subprocess.run([sys.executable, '-c', probe, str(REPO / 'scripts')],
+                         capture_output=True, text=True, check=True)
+    assert out.stdout.strip() == '[]'
 
 
 def test_ratio_reads_open_high_and_pinch_low():
