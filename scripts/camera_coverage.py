@@ -33,6 +33,8 @@ import time
 
 OUT_DIR = '/tmp/soma_cam/coverage'
 CLOSER_MM = 40          # a pixel this much closer than the baseline changed
+COLOR_DELTA = 35        # gray levels: a pixel this much brighter or darker changed
+                        # (catches metal inside the stereo blind zone, no depth)
 MIN_BLOB = 0.002        # of the frame: smaller blobs are noise
 EDGE_PX = 3             # a blob this close to a border is cut by it
 SETTLE_READS = 2        # identical /joint_states reads before capturing
@@ -153,9 +155,21 @@ class Camera:
 
 def find_arm(base, depth):
     """The largest blob that came CLOSER_MM nearer than the baseline."""
+    return _largest_blob((base > 0) & (depth > 0) & (base - depth > CLOSER_MM))
+
+
+def find_by_color(base_rgb, rgb):
+    """The largest blob whose gray level moved by COLOR_DELTA (depth-blind)."""
     import cv2
     import numpy as np
-    changed = (base > 0) & (depth > 0) & (base - depth > CLOSER_MM)
+    gray = [cv2.GaussianBlur(cv2.cvtColor(im, cv2.COLOR_BGR2GRAY), (7, 7), 0)
+            for im in (base_rgb, rgb)]
+    return _largest_blob(cv2.absdiff(gray[0], gray[1]) > COLOR_DELTA)
+
+
+def _largest_blob(changed):
+    import cv2
+    import numpy as np
     changed = cv2.morphologyEx(changed.astype(np.uint8), cv2.MORPH_OPEN,
                                np.ones((5, 5), np.uint8))
     count, labels, stats, _ = cv2.connectedComponentsWithStats(changed)
@@ -163,18 +177,27 @@ def find_arm(base, depth):
         return None, None
     best = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
     x, y, w, h, area = (int(v) for v in stats[best])
-    if area < MIN_BLOB * depth.size:
+    if area < MIN_BLOB * changed.size:
         return None, None
     return (x, y, w, h), labels == best
 
 
-def report(name: str, rgb, depth, base, out_dir: str) -> dict:
+def report(name: str, rgb, depth, base, out_dir: str, base_rgb=None) -> dict:
     import cv2
     import numpy as np
     bbox, mask = find_arm(base, depth)
     h, w = depth.shape
     text, edges = verdict(bbox, w, h)
     row = {'pose': name, 'verdict': text, 'edges': edges}
+    if base_rgb is not None:
+        cbox, cmask = find_by_color(base_rgb, rgb)
+        ctext, cedges = verdict(cbox, w, h)
+        row['color'] = {'verdict': ctext, 'edges': cedges}
+        if cbox is not None:
+            cx, cy, cw, ch = cbox
+            row['color'].update(area=round(float(cmask.mean()), 4),
+                                bbox=[round(cx / w, 3), round(cy / h, 3),
+                                      round(cw / w, 3), round(ch / h, 3)])
     view = rgb.copy()
     if bbox is not None:
         near = depth[mask & (depth > 0)]
@@ -184,6 +207,10 @@ def report(name: str, rgb, depth, base, out_dir: str) -> dict:
                    nearest_mm=int(np.percentile(near, 5)), median_mm=int(np.median(near)))
         view[mask] = (0.5 * view[mask] + (0, 127, 0)).astype(view.dtype)
         cv2.rectangle(view, (x, y), (x + bw, y + bh), (0, 255, 255), 2)
+    if base_rgb is not None and row['color'].get('bbox'):
+        cx, cy, cw, ch = cbox
+        view[cmask] = (0.5 * view[cmask] + (127, 0, 127)).astype(view.dtype)
+        cv2.rectangle(view, (cx, cy), (cx + cw, cy + ch), (255, 0, 255), 2)
     cv2.putText(view, f'{name}: {text}', (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7,
                 (255, 255, 255), 2)
     cv2.imwrite(os.path.join(out_dir, f'{name}.jpg'), view)
@@ -209,16 +236,18 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.baseline:
             rgb, depth = cam.capture(3.0)
-            np.savez_compressed(base_path, depth=depth)
+            np.savez_compressed(base_path, depth=depth, rgb=rgb)
             cam.cv2.imwrite(os.path.join(args.out, 'baseline.jpg'), rgb)
             valid = depth[depth > 0]
             print(f'baseline saved: {valid.size / depth.size:.0%} valid depth, '
                   f'median {np.median(valid):.0f} mm')
             return 0
-        base = np.load(base_path)['depth']
+        saved = np.load(base_path)
+        base = saved['depth']
+        base_rgb = saved['rgb'] if 'rgb' in saved.files else None
         if args.pose:
             rgb, depth = cam.capture()
-            print(json.dumps(report(args.pose, rgb, depth, base, args.out)))
+            print(json.dumps(report(args.pose, rgb, depth, base, args.out, base_rgb)))
             return 0
         rows, last, seen, streak = [], None, None, 0
         print('watching /joint_states; play camera_check now. Ctrl-C ends.', flush=True)
@@ -233,7 +262,7 @@ def main(argv: list[str] | None = None) -> int:
             seen = name
             if streak >= SETTLE_READS and name != last:
                 rgb, depth = cam.capture()
-                row = report(name, rgb, depth, base, args.out)
+                row = report(name, rgb, depth, base, args.out, base_rgb)
                 rows.append(row)
                 last = name
                 print(json.dumps(row), flush=True)
