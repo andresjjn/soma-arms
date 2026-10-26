@@ -8,6 +8,7 @@ this bench hanging is the stretched pose, and it is the only one that
 needs no motion (rule 4).
 
     python3 scripts/camera_align.py
+    python3 scripts/camera_align.py --save 15    # new reference, 15 s to leave the frame
     # on the Mac: ssh -N -L 8091:localhost:8091 jetson, then open http://localhost:8091
 
 The view shows the reference as a ghost over the live frame, the frame's
@@ -296,6 +297,28 @@ def save_reference(frame, path: str, box) -> None:
           flush=True)
 
 
+def save_after(seconds: float, path: str) -> int:
+    """A reference with nobody in view: the countdown is the time to step out."""
+    if not 0 <= seconds <= 120:
+        print('the wait must be 0 to 120 s', file=sys.stderr)
+        return 2
+    device, read = open_camera()
+    try:
+        for left in range(round(seconds), 0, -1):
+            print(f'saving in {left} s: leave the frame', flush=True)
+            time.sleep(1.0)
+        frame, end = None, time.time() + 1.5            # exposure settling
+        while frame is None or time.time() < end:
+            fresh = read()
+            if fresh is not None:
+                frame = fresh
+            time.sleep(0.02)
+        save_reference(frame, path, DEFAULT_ROBOT_BOX)
+        return 0
+    finally:
+        device.close()
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--reference', default=REFERENCE + '.jpg',
@@ -303,7 +326,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument('--save-to', default=REFERENCE, help='where s writes, no extension')
     ap.add_argument('--port', type=int, default=PORT)
     ap.add_argument('--once', action='store_true', help='no view: print one reading and exit')
+    ap.add_argument('--save', type=float, metavar='SECONDS', default=None,
+                    help='no view: wait SECONDS (time to leave the frame), save the reference, exit')
     args = ap.parse_args(argv)
+
+    if args.save is not None:
+        return save_after(args.save, args.save_to)
 
     import cv2
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

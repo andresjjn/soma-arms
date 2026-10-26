@@ -118,3 +118,8 @@ def test_it_never_reaches_the_driver():
     source = (REPO / 'scripts' / 'camera_align.py').read_text()
     for word in ('docker', 'ros2', '/soma/arm', 'allow_real', 'rclpy'):
         assert word not in source
+
+
+def test_a_save_wait_out_of_range_is_refused_before_the_camera_opens(capsys):
+    assert ca.main(['--save', '500']) == 2
+    assert ca.main(['--save', '-1']) == 2
