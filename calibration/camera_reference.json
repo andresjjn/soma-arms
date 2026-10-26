@@ -1,0 +1,11 @@
+{
+ "date": "2026-10-26",
+ "frame": "540x960, RGB ISP 1080p at half scale, turned 90 deg counterclockwise",
+ "robot_box": [
+  0.265,
+  0.58,
+  0.47,
+  0.29
+ ],
+ "pose": "both arms hanging, driver disarmed"
+}

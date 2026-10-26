@@ -643,3 +643,15 @@ change they forced.
   morning's reference it says "scene not matched": the move was too big
   for features, which is what the ghost is for. A new reference is to be
   saved with the robot centered and the arms hanging.
+- The repair, in Andres's words: the right arm's wrist pitch (third servo
+  from the gripper up, robot's own right) had play because one horn had
+  been mounted reversed; it was turned and seated again. Its hanging
+  zero may have moved and is to be read before any motion that needs it.
+- New camera reference saved with `camera_align.py --save` at 17:20,
+  robot centered on the guide line, arms hanging, nobody in view. A
+  reading against it: camera 0.06 % / 0.08 deg, robot 0 mm, 0.0 % off
+  the center line, 151 features (37.6 %). A first reference with a
+  person beside the robot had matched only 57 features, 14 %: people in
+  the scene are noise for the camera reading. The committed copy has the
+  laptop screen blurred; screen content changes anyway, so matching
+  does not use it.
