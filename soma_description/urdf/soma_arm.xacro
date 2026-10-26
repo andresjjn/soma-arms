@@ -101,9 +101,9 @@
   <!-- ==================== the arm macro ==================== -->
   <xacro:macro name="soma_arm"
                params="prefix parent side:=1 *origin
-                       yaw_lower:=-2.6782 yaw_upper:=0.2749
+                       yaw_lower:=-2.6311 yaw_upper:=0.3220
                        shoulder_lower:=-0.4398 shoulder_upper:=2.3405
-                       elbow_lower:=-2.3955 elbow_upper:=0.6283
+                       elbow_lower:=-2.3955 elbow_upper:=0.5890
                        wrist_pitch_lower:=-1.8850 wrist_pitch_upper:=0.4869
                        wrist_roll_lower:=-1.7122 wrist_roll_upper:=1.1074">
 

@@ -91,8 +91,8 @@
 
   <!-- left arm: measured limits of 2026-08-03, hug sense side=+1 -->
   <xacro:soma_arm prefix="left_arm_" parent="bench_link" side="1"
-                  yaw_lower="-2.8903" yaw_upper="0.1649"
-                  shoulder_lower="-0.4791" shoulder_upper="2.1756"
+                  yaw_lower="-3.0159" yaw_upper="0.0393"
+                  shoulder_lower="-0.4477" shoulder_upper="2.2070"
                   elbow_lower="-1.9635" elbow_upper="0.9032"
                   wrist_pitch_lower="-1.6022" wrist_pitch_upper="1.2959"
                   wrist_roll_lower="-1.4687" wrist_roll_upper="1.2017">

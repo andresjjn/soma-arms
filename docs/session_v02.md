@@ -242,7 +242,7 @@ soma python3 -c "from soma_driver.servo_map import SERVO_MAP as M; print(M['righ
 
 Still armed from step 4. Step 5 with `--arm left` and the table below,
 then the decision of step 6, then step 8 with `left_arm_shoulder_joint`
-(its zero is 1075 us; use the one-liner for the pulses). The wave is
+(its zero is 1055 us since 2026-10-26; use the one-liner for the pulses). The wave is
 right-arm only. Then close.
 
 ```bash

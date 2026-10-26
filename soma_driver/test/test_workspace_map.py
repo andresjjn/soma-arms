@@ -112,8 +112,8 @@ def test_solve_returns_command_frame_values_inside_the_map(dims):
 
 def test_flipping_a_sign_mirrors_its_limits():
     signs = dict(wm.SIGNS, elbow=-1)
-    assert wm.limits('right', signs)['elbow'] == pytest.approx((-0.6283 + 0.1, 2.3955 - 0.1))
-    assert wm.limits('right')['elbow'] == pytest.approx((-2.3955 + 0.1, 0.6283 - 0.1))
+    assert wm.limits('right', signs)['elbow'] == pytest.approx((-0.5890 + 0.1, 2.3955 - 0.1))
+    assert wm.limits('right')['elbow'] == pytest.approx((-2.3955 + 0.1, 0.5890 - 0.1))
 
 
 def test_pockets_are_centered_on_the_run_or_refused():

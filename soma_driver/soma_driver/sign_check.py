@@ -159,7 +159,7 @@ def excursion(name: str, delta: float = DELTA, margin: float = MARGIN,
     Negative when `lower <= -(delta + margin)`, else positive when
     `upper >= delta + margin`, else the larger travel minus the margin.
     Never within `margin` of a stop: the right yaw, whose zero sits
-    0.2749 rad from its backward stop, goes to -0.25 (the old tool sent
+    0.3220 rad from its backward stop, goes to -0.25 (the old tool sent
     it to +0.25, 1.4 deg from that stop); the fingers, whose zero is the
     closed stop, open to +0.25.
     """

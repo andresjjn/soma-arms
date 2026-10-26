@@ -655,3 +655,22 @@ change they forced.
   the scene are noise for the camera reading. The committed copy has the
   laptop screen blurred; screen content changes anyway, so matching
   does not use it.
+- Correction: the repaired joint was the right ELBOW (fourth servo from
+  the gripper up), not the wrist pitch. Armed with the old map, its
+  forearm stood about 44 deg off the hang. Zeros re-captured with
+  `servo_workbench.py`, driver container stopped, arms hanging:
+  right elbow 935 -> 1425 us (the horn three teeth off), right yaw
+  720 -> 750, left yaw 2370 -> 2450, left shoulder 1075 -> 1055; the
+  rest hung straight at their old zeros. At 1425 the elbow kept only
+  93 deg of forward travel and `wave_close` (-2.09 rad) and
+  `wave_raise_2` (-1.83) fell outside it: the tests caught it. So the
+  horn was seated again, three teeth back, with the servo held at 945
+  us so the direction was not a guess, then fine-tuned to 935 us, its
+  October zero. Its forward end stays 2460 us (the 2500 captured is the
+  workbench clamp); its backward end takes the 560 us measured that day.
+  Record: `calibration/servo_calibration_2026-10-26.json`.
+- Andres's reading of the workbench (every joint moved at once): smooth,
+  no joint looked forced, the oscillation rare and only at zero, where
+  gravity torque crosses zero (the backlash limit cycle). The loose
+  elbow likely made it worse. Encouraging; the 10 kg.cm budget still
+  holds for extended poses.

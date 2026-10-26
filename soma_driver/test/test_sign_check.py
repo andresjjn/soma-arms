@@ -86,7 +86,7 @@ def test_no_excursion_within_a_tenth_of_a_radian_of_a_stop(name):
 
 
 def test_arm_joints_go_to_the_hug_side_and_fingers_open():
-    # The right yaw zero is 0.2749 rad from its backward stop: the old
+    # The right yaw zero is 0.3220 rad from its backward stop: the old
     # tool sent it to +0.25, 1.4 deg from that stop.
     assert sc.excursion('right_arm_yaw_joint') == -0.25
     for name in ALL:
@@ -190,7 +190,7 @@ def test_mirror_is_the_same_motion_under_the_opposite_sign(name):
 def test_servo_map_line_reproduces_the_right_elbow_row_exactly():
     line = sc.servo_map_line('right_arm_elbow_joint', SERVO_MAP['right_arm_elbow_joint'])
     assert line == ("    'right_arm_elbow_joint':       "
-                    'ServoSpec(12, 2460.0, 535.0, -2.3955, 0.6283, 2.5),')
+                    'ServoSpec(12, 2460.0, 560.0, -2.3955, 0.5890, 2.5),')
     source = (PACKAGE / 'servo_map.py').read_text().splitlines()
     assert any(row.startswith(line) for row in source)
 
@@ -318,11 +318,11 @@ def test_the_tool_has_no_way_to_arm_the_driver():
 
 def test_a_reversed_right_elbow_is_a_driver_fix_never_an_axis_flip():
     text = sc.summary([sc.Finding('right_arm_elbow_joint', -0.25, 'reversed')], RIGHT)
-    assert 'ServoSpec(12, 535.0, 2460.0, -0.6283, 2.3955, 2.5)' in text
+    assert 'ServoSpec(12, 560.0, 2460.0, -0.5890, 2.3955, 2.5)' in text
     assert 'driver' in text
     assert 'NOT an axis flip' in text
     assert '<axis' not in text
-    assert 'elbow_lower:=-0.6283 elbow_upper:=2.3955' in text
+    assert 'elbow_lower:=-0.5890 elbow_upper:=2.3955' in text
     assert 'stays at 935 us' in text
     # The wave of 2026-10-03 bends this elbow to -0.90 .. -2.09 rad, all
     # outside the mirrored band: it must be redesigned, never played.

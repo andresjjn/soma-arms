@@ -28,17 +28,20 @@ HALF_PI = math.pi / 2
 
 
 #: Mechanical zero of every joint, in microseconds, as re-captured on
-#: 2026-10-01 (fingers: the zero is CLOSED; the right yaw zero was not
-#: re-captured and keeps its 2026-08-03 value). Commanding 0.0 must land
-#: the pulse exactly here. Edited 2026-10-01 because the physical fact
-#: changed: the August zeros were superseded by a full re-capture.
+#: 2026-10-01 (fingers: the zero is CLOSED). Commanding 0.0 must land the
+#: pulse exactly here. Edited 2026-10-01 because the physical fact
+#: changed: the August zeros were superseded by a full re-capture. Edited
+#: 2026-10-26 for the same reason: the right elbow's horn was re-seated
+#: (back on 935), and with the arms hanging the right yaw (720 -> 750),
+#: the left yaw (2370 -> 2450) and the left shoulder (1075 -> 1055) were
+#: re-captured.
 MEASURED_ZERO_US = {
     'right_arm_finger_l_joint': 860, 'right_arm_wrist_roll_joint': 1705,
     'right_arm_wrist_pitch_joint': 1960, 'right_arm_elbow_joint': 935,
-    'right_arm_shoulder_joint': 990, 'right_arm_yaw_joint': 720,
+    'right_arm_shoulder_joint': 990, 'right_arm_yaw_joint': 750,
     'left_arm_finger_l_joint': 1080, 'left_arm_wrist_roll_joint': 1345,
     'left_arm_wrist_pitch_joint': 1605, 'left_arm_elbow_joint': 1205,
-    'left_arm_shoulder_joint': 1075, 'left_arm_yaw_joint': 2370,
+    'left_arm_shoulder_joint': 1055, 'left_arm_yaw_joint': 2450,
 }
 
 
@@ -77,11 +80,12 @@ class TestMeasuredCalibration:
         """Replaces test_left_yaw_zero_sits_at_its_end_stop, as that test
         demanded when the flag was fixed: in August the left yaw zero sat
         AT its 2500 us stop (upper == 0.0, no outward travel). The
-        2026-10-01 capture puts the zero at 2370 us, so the joint can
-        rotate outward again (about 9 deg)."""
+        2026-10-01 capture put the zero at 2370 us (about 9 deg outward);
+        the hanging re-capture of 2026-10-26 put it at 2450 us, 2.2 deg
+        from the stop. Still off it: the zero must never sit on the stop."""
         spec = SERVO_MAP['left_arm_yaw_joint']
-        assert spec.upper > 0.1
-        assert spec.command_to_us(0.0) == pytest.approx(2370.0, abs=0.5)
+        assert spec.upper > 0.03
+        assert spec.command_to_us(0.0) == pytest.approx(2450.0, abs=0.5)
 
 
 class TestL16Torso:
@@ -177,7 +181,7 @@ class TestGoldenRule:
         mock = MockPca9685()
         spec = SERVO_MAP['left_arm_shoulder_joint']
         us = mock.write(spec, 0.0)
-        assert us == pytest.approx(1075.0, abs=0.5)   # its measured zero
+        assert us == pytest.approx(1055.0, abs=0.5)   # its measured zero
         assert mock.last_us[spec.channel] == pytest.approx(us)
 
     def test_disable_all_clears_everything(self):
@@ -247,15 +251,15 @@ EXACT_SERVO_MAP = {
     'right_arm_finger_l_joint':    (15, 860.0, 2185.0, 0.0, 1.0, 2.5, 0x40),
     'right_arm_wrist_roll_joint':  (14, 615.0, 2410.0, -1.7122, 1.1074, 2.5, 0x40),
     'right_arm_wrist_pitch_joint': (13, 760.0, 2270.0, -1.8850, 0.4869, 2.5, 0x40),
-    'right_arm_elbow_joint':       (12, 2460.0, 535.0, -2.3955, 0.6283, 2.5, 0x40),
+    'right_arm_elbow_joint':       (12, 2460.0, 560.0, -2.3955, 0.5890, 2.5, 0x40),
     'right_arm_shoulder_joint':    (11, 710.0, 2480.0, -0.4398, 2.3405, 2.5, 0x40),
-    'right_arm_yaw_joint':         (10, 2425.0, 545.0, -2.6782, 0.2749, 2.5, 0x40),
+    'right_arm_yaw_joint':         (10, 2425.0, 545.0, -2.6311, 0.3220, 2.5, 0x40),
     'left_arm_finger_l_joint':     (9, 1080.0, 2130.0, 0.0, 1.0, 2.5, 0x43),
     'left_arm_wrist_roll_joint':   (8, 2280.0, 580.0, -1.4687, 1.2017, 2.5, 0x43),
     'left_arm_wrist_pitch_joint':  (7, 585.0, 2430.0, -1.6022, 1.2959, 2.5, 0x43),
     'left_arm_elbow_joint':        (6, 2455.0, 630.0, -1.9635, 0.9032, 2.5, 0x43),
-    'left_arm_shoulder_joint':     (5, 770.0, 2460.0, -0.4791, 2.1756, 2.5, 0x43),
-    'left_arm_yaw_joint':          (4, 530.0, 2475.0, -2.8903, 0.1649, 2.5, 0x43),
+    'left_arm_shoulder_joint':     (5, 770.0, 2460.0, -0.4477, 2.2070, 2.5, 0x43),
+    'left_arm_yaw_joint':          (4, 530.0, 2475.0, -3.0159, 0.0393, 2.5, 0x43),
     # The L16 keeps its 2026-07-22 anchors: its stops have not been
     # re-measured (that capture comes with the torso build).
     'torso_lift_joint':            (3, 1964.3, 1035.7, 0.005, 0.135, 0.020, 0x40),

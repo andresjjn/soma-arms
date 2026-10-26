@@ -92,8 +92,16 @@ HALF_PI = 1.5707963267948966
 # rule: smooth motion, never snap moves.
 #
 # Changes worth knowing against August: the left yaw zero moved off its
-# stop (2500 -> 2370 us): it can now rotate outward about 9 deg. The
-# right yaw zero was not re-captured; it keeps the August 720 us.
+# stop (2500 -> 2370 us on 2026-10-01). On 2026-10-26 the right elbow's
+# horn, found mounted reversed and loose, was seated again: first three
+# spline teeth off (zero 1425 us, 44 deg of forward travel lost, the wave
+# no longer fitted), then three teeth back with the servo held at 945 us
+# and fine-tuned by eye to 935 us, its October zero. Backward end 560 us
+# (captured that day, tighter than the 535 of October); forward end 2460
+# (the 2500 of the capture is the workbench's own clamp, not a stop). The
+# same session re-captured three zeros with the arms hanging: right yaw
+# 720 -> 750, left yaw 2370 -> 2450 (it is now 2.2 deg from its
+# backward end), left shoulder 1075 -> 1055.
 
 SERVO_MAP: dict[str, ServoSpec] = {
     # Right arm on board 0x40: channels 15 down to 10, gripper first
@@ -101,9 +109,9 @@ SERVO_MAP: dict[str, ServoSpec] = {
     'right_arm_finger_l_joint':    ServoSpec(15, 860.0, 2185.0, 0.0, 1.0, 2.5),   # F: 860 closed, 2185 open
     'right_arm_wrist_roll_joint':  ServoSpec(14, 615.0, 2410.0, -1.7122, 1.1074, 2.5),   # E, zero 1705
     'right_arm_wrist_pitch_joint': ServoSpec(13, 760.0, 2270.0, -1.8850, 0.4869, 2.5),   # D, zero 1960
-    'right_arm_elbow_joint':       ServoSpec(12, 2460.0, 535.0, -2.3955, 0.6283, 2.5),   # C, zero 935, inverted
+    'right_arm_elbow_joint':       ServoSpec(12, 2460.0, 560.0, -2.3955, 0.5890, 2.5),   # C, zero 935, inverted (horn re-seated 2026-10-26)
     'right_arm_shoulder_joint':    ServoSpec(11, 710.0, 2480.0, -0.4398, 2.3405, 2.5),   # B, zero 990
-    'right_arm_yaw_joint':         ServoSpec(10, 2425.0, 545.0, -2.6782, 0.2749, 2.5),   # A, zero 720, inverted (zero from 2026-08-03, not re-captured)
+    'right_arm_yaw_joint':         ServoSpec(10, 2425.0, 545.0, -2.6311, 0.3220, 2.5),   # A, zero 750, inverted
     # Left arm on board 0x43 (since 2026-08-12): channels 9 down to 4,
     # same order, mirrored signs. Pulses and limits are untouched on
     # purpose: they belong to the servos and their horns, not the board.
@@ -111,8 +119,8 @@ SERVO_MAP: dict[str, ServoSpec] = {
     'left_arm_wrist_roll_joint':  ServoSpec(8, 2280.0, 580.0, -1.4687, 1.2017, 2.5, address=0x43),   # E, zero 1345, inverted
     'left_arm_wrist_pitch_joint': ServoSpec(7, 585.0, 2430.0, -1.6022, 1.2959, 2.5, address=0x43),   # D, zero 1605
     'left_arm_elbow_joint':       ServoSpec(6, 2455.0, 630.0, -1.9635, 0.9032, 2.5, address=0x43),   # C, zero 1205, inverted
-    'left_arm_shoulder_joint':    ServoSpec(5, 770.0, 2460.0, -0.4791, 2.1756, 2.5, address=0x43),   # B, zero 1075
-    'left_arm_yaw_joint':         ServoSpec(4, 530.0, 2475.0, -2.8903, 0.1649, 2.5, address=0x43),   # A, zero 2370
+    'left_arm_shoulder_joint':    ServoSpec(5, 770.0, 2460.0, -0.4477, 2.2070, 2.5, address=0x43),   # B, zero 1055
+    'left_arm_yaw_joint':         ServoSpec(4, 530.0, 2475.0, -3.0159, 0.0393, 2.5, address=0x43),   # A, zero 2450
     # Torso: L16-140 on channel 3 (VERIFIED with power on, 2026-07-22).
     # Not on this bench: re-verify with power on when the torso returns.
     #
