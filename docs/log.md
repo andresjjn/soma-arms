@@ -606,4 +606,19 @@ change they forced.
 - Images and the record: `docs/media/camera/2026-10-26/`,
   `calibration/camera_marks_2026-10-26.json`. From now on useful bench
   images go into `docs/media/`, reviewed for privacy before committing.
+- Measured with a ruler, both arms armed and swung straight forward to
+  30 deg by the base (Andres's go-ahead, held under 2 minutes, lowered
+  in four steps): the closed gripper tips are 180 mm apart. The camera
+  had read about 186 mm on the desk marks; the model says 124.6 mm. A
+  likely cause, from `dimensions.yaml` itself: the model puts each arm's
+  plane on the disc's outer face (54.9 + 7.4 = 62.3 mm from the center),
+  but the arm is a 52.8 mm wide sandwich of plates mounted outboard of
+  the disc, so its mid-plane sits about 26.4 mm further out: 88.7 mm a
+  side, 177.4 mm between arms, close to the 180 measured. To confirm
+  with calipers before the URDF, `workspace_map.py` and the gripper
+  clearance analysis are corrected.
+- From the tripod the raised arms were not in the camera's view (twice,
+  the second time with a lamp moved away): either hidden under the box
+  or swinging toward the tripod, outside the frame. Which way the arms'
+  forward points relative to the camera is to be checked.
 
