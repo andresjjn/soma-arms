@@ -674,3 +674,8 @@ change they forced.
   gravity torque crosses zero (the backlash limit cycle). The loose
   elbow likely made it worse. Encouraging; the 10 kg.cm budget still
   holds for extended poses.
+- Sign check after the re-seat, gate 1 opened by relaunch, armed by
+  Andres: right wrist pitch ok at -0.25 rad (18:27; it was run first by a
+  miscount of skips, and it was also touched by the repair), right elbow
+  ok at -0.25 rad (18:30): the forearm curled forward, the hug way. The
+  re-seated horn kept its sign. Reports in `calibration/`.
