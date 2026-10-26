@@ -622,3 +622,24 @@ change they forced.
   or swinging toward the tripod, outside the frame. Which way the arms'
   forward points relative to the camera is to be checked.
 
+- Later the same day Andres fixed a loose elbow, and in doing so moved
+  the robot and the tripod. Against the reference image the scene sat
+  about 9 % of the frame further right and nearer (median depth 1.0 m
+  against 1.1 to 1.25 m), and the robot looked a few centimeters off its
+  marks. The lane mark record of the morning no longer applies; the
+  marks are still on the desk.
+- Before the next arming after the repair: if the elbow horn was seated
+  again, its hanging zero may have moved by a spline tooth, and the
+  first armed tick sends that joint to its zero with no ramp. Check that
+  joint on its own first.
+- New `scripts/camera_align.py`, so this does not cost a session again:
+  a live view (MJPEG on 8091, localhost) with the reference as a ghost,
+  the center line and the robot's box, and two readings in percent of
+  the frame. The camera reading is a similarity fit of ORB features of
+  the scene under RANSAC, the robot and the tripod's strip left out; the
+  robot reading is its reference crop found in the live frame minus the
+  camera's own shift. Checked with live and synthetic frames (2 % reads
+  2.0 %, 1 deg reads 0.99 deg, two live frames read 0.0 %). Against the
+  morning's reference it says "scene not matched": the move was too big
+  for features, which is what the ghost is for. A new reference is to be
+  saved with the robot centered and the arms hanging.
