@@ -1,0 +1,24 @@
+{
+  "date": "2026-10-26",
+  "camera": "OAK-D Lite on a tripod behind and above the robot, apart from it; height to be kept between sessions",
+  "frame": "RGB ISP 640x360 turned 90 deg counterclockwise (360x640); depth aligned to RGB, extended disparity, 3 s median",
+  "intrinsics_640x360": {"fx": 456.5, "fy": 456.3, "cx": 332.5, "cy": 173.6, "source": "device calibration (factory)"},
+  "marks": [
+    {"name": "far right", "px": [227.7, 236.1], "z_mm": 1225, "xyz_mm": [189.0, 145.3, 1225.0]},
+    {"name": "far left", "px": [154.6, 242.6], "z_mm": 1248, "xyz_mm": [174.7, -51.8, 1247.5]},
+    {"name": "near right", "px": [239.4, 326.9], "z_mm": 1106, "xyz_mm": [-49.2, 159.5, 1106.0]},
+    {"name": "near left", "px": [160.4, 334.4], "z_mm": 1143, "xyz_mm": [-69.8, -32.9, 1143.0]}
+  ],
+  "near_marks": "tip of each closed gripper, hanging",
+  "far_marks": "250 mm forward of the near ones, center to center (measured by Andres)",
+  "results": {
+    "lane_length_3d_mm": [266.6, 266.6],
+    "lane_length_true_mm": 250,
+    "depth_scale_error": "+6.6% at 1.1 to 1.25 m (depth confirms, it does not position)",
+    "between_lanes_3d_mm": [197.0, 198.9],
+    "between_lanes_corrected_for_scale_mm": 186,
+    "pixels_along_lane": [91.6, 92.0],
+    "mm_per_px_along_lane_640x360": 2.7,
+    "mm_per_px_along_lane_full_res": 0.9
+  }
+}

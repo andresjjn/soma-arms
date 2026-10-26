@@ -580,3 +580,30 @@ change they forced.
   SOMA. It is a development tool, read only, with no way to reach the
   robot; SOMA's own agent at v0.5 will call ER 2 through its own adapter.
 
+## 2026-10-26, bench: the camera on a tripod, measured on four lane marks
+
+- The OAK-D Lite came off the mast and onto a tripod behind and above
+  the robot, apart from it, looking forward and down over the lanes. A
+  mast view had the arms leave the frame and the robot inside the stereo
+  blind zone; from the tripod the robot sits at 60 to 68 cm, the desk in
+  front at 1.1 to 1.4 m, 73 to 74% valid depth. The tripod may move
+  between sessions: the reference view is
+  `docs/media/camera/2026-10-26/reference_tripod.jpg`, same height.
+- Andres taped four blue marks on the desk: under each closed gripper
+  tip, and 250 mm forward of each (center to center). With the camera's
+  factory intrinsics and the aligned depth, the marks' 3D positions give
+  266.6 mm for both 250 mm runs: depth reads +6.6% at 1.1 to 1.25 m, so
+  depth confirms and the homography positions, as the plan says. Along a
+  lane, 250 mm is 92 px in the 640x360 frame, about 0.9 mm per pixel at
+  full resolution: room for the 5 mm acceptance of v0.3. The view is
+  oblique (about 28 deg to the desk); higher and steeper would help.
+- Not matching: the two near marks are 197 mm apart in 3D (about 186 mm
+  after the depth scale), Andres estimated about 15 cm, and the model
+  puts the arm planes 124.6 mm apart. To measure with a ruler before the
+  deck or the workspace map are trusted.
+- The OAK reported one device crash when a live viewer was cut; the next
+  capture worked. Watch it.
+- Images and the record: `docs/media/camera/2026-10-26/`,
+  `calibration/camera_marks_2026-10-26.json`. From now on useful bench
+  images go into `docs/media/`, reviewed for privacy before committing.
+

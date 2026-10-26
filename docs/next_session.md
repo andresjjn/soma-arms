@@ -20,9 +20,12 @@ logged.
 
 ## Pending, in order
 
-1. Re-aim the camera toward the robot; check it by moving a disarmed arm
-   by hand (then let it hang), then rerun `camera_check` with
-   `scripts/camera_coverage.py --watch` (depth plus color difference).
+1. Camera: validated on a tripod on 2026-10-26 with four lane marks
+   (`calibration/camera_marks_2026-10-26.json`). Re-aim against
+   `docs/media/camera/2026-10-26/reference_tripod.jpg`. Open: measure with
+   a ruler the distance between the two near marks (the camera says about
+   186 mm between lanes, the model 124.6 mm); if confirmed, the model's
+   lateral arm position is wrong and the workspace map with it.
 2. Measure magnitudes with `soma_joint_probe` (written 2026-10-26, not
    yet run on the metal): elbows first with `--most 0.6` watching the
    central box, then bases, wrist pitches, shoulders; `--report` into
