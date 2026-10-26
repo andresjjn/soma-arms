@@ -35,6 +35,7 @@ setup(
             'arm_controller = soma_driver.arm_controller_node:main',
             'soma_primitives = soma_driver.primitives_cli:main',
             'soma_sign_check = soma_driver.sign_check_cli:main',
+            'soma_joint_probe = soma_driver.joint_probe_cli:main',
         ],
     },
 )

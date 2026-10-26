@@ -560,3 +560,23 @@ change they forced.
   is in frame or cut by an edge. A smoke run showed why nobody may be in
   view: a person moving reads as "closer than the baseline".
 
+## 2026-10-26: the joint probe, written at the desk (nothing moved)
+
+- `soma_joint_probe` measures how far a planar joint really turns per
+  radian commanded, since every joint's radians are still the nominal
+  2000 us = 180 deg. One joint at a time with the rest at 0.0, so the
+  inclination of the link it drives, read from the vertical with a phone
+  level, is the joint's angle. It reads 0.0 first (the zero error), then
+  walks a staircase forward (0.2 rad stairs by default, up to a ceiling
+  per joint: base 0.70, shoulder 0.4, elbow and wrist 1.0, always 0.1
+  rad inside the captured stop), and walks back down the same stairs on
+  q, x (close to something), Ctrl-C, end of input or any error. A line
+  through the readings gives the real scale, the zero error and the
+  residual, and from them the real microseconds per radian. Pure module
+  with tests; the CLI reuses the sign check's node and home check, and
+  never arms. Not run on the metal yet.
+- `gemini-bridge` exists outside this repository (its own repo): an MCP
+  server that lets Claude delegate to Gemini, including ER 2 pointing for
+  SOMA. It is a development tool, read only, with no way to reach the
+  robot; SOMA's own agent at v0.5 will call ER 2 through its own adapter.
+
