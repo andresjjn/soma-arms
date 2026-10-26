@@ -679,3 +679,20 @@ change they forced.
   miscount of skips, and it was also touched by the repair), right elbow
   ok at -0.25 rad (18:30): the forearm curled forward, the hug way. The
   re-seated horn kept its sign. Reports in `calibration/`.
+- First `soma_joint_probe` runs, elbows, shoulder at 0, phone level on
+  the forearm, stairs of 0.2 rad to -0.6:
+  - right, 18:33 and 18:37: 0, 14, 23, then 57 deg at -0.6 both times.
+    Not the elbow: gravity can only leave a joint short of its command,
+    never 23 deg past it, and 90 - 34.4 = 55.6. The level app switched
+    its reference past about 45 deg of phone tilt. Those two fits are
+    void; the files stay as the record of the trap.
+  - right, 18:40 and 18:44: 5, 13/14, 23/22, 32 deg. Scale 0.794 and
+    0.777, worst residual 0.7 deg: about 810 us/rad, not the nominal
+    636.6. The forearm reads +5 deg at command 0 (Andres: the zero by
+    eye is not quite vertical).
+  - left, 18:46: 0, 10, 21, 32 deg. Scale 0.934, residual 0.4 deg, about
+    682 us/rad.
+  - The two elbows differ by 16 % in travel for the same command (27 deg
+    against 32 deg from 0 to -0.6): a zero offset shifts readings, it
+    cannot shrink travel. The scale belongs to each servo, not to the
+    model: SERVO_MAP needs one scale per joint, not one US_PER_RAD.
