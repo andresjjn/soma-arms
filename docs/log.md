@@ -888,3 +888,12 @@ center to fingertip with the arm hanging limp (about 339 if straight).
   the base near 142 deg, blending, the idle arm limp). Committed at 720
   px H.264 (1.5 MB): no people in frame, and the terminal on the monitor,
   readable at 4K, is not at 720. Tag `v0.2`.
+- Disc to closed tip, right arm hanging: about 293 mm; disc to plate 335
+  on both (hard to reach the center); tip to plate 38. They agree with
+  each other (335 - 38 = 297): the disc height is not the problem, the
+  arm is not straight, or a link is not what the model says; about 45 mm
+  are missing against the 338.7 mm chain. New `scripts/arm_side_view.py`
+  to find where: the OAK from the side, blue tape on each axis screw,
+  each link's tilt and each joint's angle; "down" from the OAK's own
+  BMI270 IMU through the factory IMU-to-camera rotation (camera x = IMU
+  y, y = IMU x, z = -IMU z), so no plumb line and any mounting works.

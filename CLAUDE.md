@@ -135,6 +135,7 @@ scripts/              smoke_test.sh, check_model_driver_sync.py,
                       camera_coverage.py (does the camera see the arm: depth against the empty bench)
                       camera_align.py (camera and robot against the reference, in percent, view on 8091)
                       pwm_clock_check.py (a board's real PWM frequency and pulse width, read on a Jetson GPIO)
+                      arm_side_view.py (the arm's real joint angles from the side, down from the OAK's IMU)
 ```
 
 Packages that arrive with their milestone, and not before: `soma_agent`
@@ -176,7 +177,7 @@ you if you forgot.
 ## The tests are the specification
 
 24 tests came over from the bench driver, and the suite has grown since
-(698 passing plus 23 skipped as of 2026-10-26 on a machine without ROS,
+(739 passing plus 23 skipped as of 2026-10-27 on a machine without ROS,
 xacro or the mujoco wheel; the skipped ones need `rclpy`, which the ROS
 job of CI has, or xacro or mujoco, which the unit job installs). They encode every hardware contract. If a
 change breaks one, the change is wrong until proven otherwise. Never edit a
