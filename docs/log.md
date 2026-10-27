@@ -731,3 +731,23 @@ change they forced.
   0 (the left ones 0): the right elbow's zero holds the forearm about
   5 deg forward, and the gripper reading carries it. A zero correction
   of about 65 us toward the hang, to be applied with the scales.
+- Evening, desk only (Andres chose not to touch power or logic wiring
+  late at night; `pwm_clock_check.py` is written and waits for a day
+  session). The probe's scales went into SERVO_MAP and the xacro: each
+  planar joint keeps its measured pulses and zero, and its radian limits
+  are the nominal ones times its scale, so every command in radians is a
+  real angle. Consequences the tests caught:
+  - The wave's in-swing (right elbow -2.09) no longer fitted: the right
+    elbow reaches -1.94 rad real. Redrawn with the same base angle and
+    the same 28 deg swing, moved down: up -1.60, open -1.35, close -1.84.
+    Physically the new close curls further than the old one would have
+    (-2.09 nominal was 1.69 rad real). To verify with `wave --step`.
+  - The right arm holds a level gripper over less of the plane: the
+    workspace test's point moved from (0.05, 0.06) to (0.08, 0.06). The
+    reach map and the deck drawing are stale until regenerated (v0.3).
+  - Every other angle in the repo is now real too: on the right arm a
+    command reaches about 1/0.83 more metal than before, e.g. the hand
+    show's LIFT_MAX 0.79 is now 45 deg of base, not about 38 (the model
+    puts a straight arm at 45 deg near 8.0 kg.cm).
+  - Not applied yet: the right elbow zero (+5 deg forward at command 0),
+    to be confirmed on the metal first.

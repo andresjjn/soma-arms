@@ -99,21 +99,24 @@ def test_a_tool_tilt_lengthens_the_lane(dims):
 
 
 def test_solve_returns_command_frame_values_inside_the_map(dims):
-    q = wm.solve((0.05, 0.06), 0.0, 'right', dims, yaw_step_deg=2.0)
+    # (0.05, 0.06) was reachable on nominal radians; with the measured
+    # scales of 2026-10-26 the right arm reaches less, and (0.08, 0.06) is
+    # the nearby point it still holds level.
+    q = wm.solve((0.08, 0.06), 0.0, 'right', dims, yaw_step_deg=2.0)
     assert q is not None
     for joint, value in zip(wm.JOINTS, q):
         spec = SERVO_MAP[f'right_arm_{joint}_joint']
         assert spec.lower + 0.1 <= value <= spec.upper - 0.1, joint
     pts, phi = wm.fk(q, dims)     # under the +1 hypothesis command == model
-    assert math.dist(pts[-1], (0.05, 0.06)) < 1e-9
+    assert math.dist(pts[-1], (0.08, 0.06)) < 1e-9
     assert abs(phi) < 1e-9
     assert wm.solve((0.4, 0.06), 0.0, 'right', dims, yaw_step_deg=2.0) is None
 
 
 def test_flipping_a_sign_mirrors_its_limits():
     signs = dict(wm.SIGNS, elbow=-1)
-    assert wm.limits('right', signs)['elbow'] == pytest.approx((-0.5890 + 0.1, 2.3955 - 0.1))
-    assert wm.limits('right')['elbow'] == pytest.approx((-2.3955 + 0.1, 0.5890 - 0.1))
+    assert wm.limits('right', signs)['elbow'] == pytest.approx((-0.4771 + 0.1, 1.9404 - 0.1))
+    assert wm.limits('right')['elbow'] == pytest.approx((-1.9404 + 0.1, 0.4771 - 0.1))
 
 
 def test_pockets_are_centered_on_the_run_or_refused():

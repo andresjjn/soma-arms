@@ -250,16 +250,16 @@ class TestI2CRetry:
 EXACT_SERVO_MAP = {
     'right_arm_finger_l_joint':    (15, 860.0, 2185.0, 0.0, 1.0, 2.5, 0x40),
     'right_arm_wrist_roll_joint':  (14, 615.0, 2410.0, -1.7122, 1.1074, 2.5, 0x40),
-    'right_arm_wrist_pitch_joint': (13, 760.0, 2270.0, -1.8850, 0.4869, 2.5, 0x40),
-    'right_arm_elbow_joint':       (12, 2460.0, 560.0, -2.3955, 0.5890, 2.5, 0x40),
-    'right_arm_shoulder_joint':    (11, 710.0, 2480.0, -0.4398, 2.3405, 2.5, 0x40),
-    'right_arm_yaw_joint':         (10, 2425.0, 545.0, -2.6311, 0.3220, 2.5, 0x40),
+    'right_arm_wrist_pitch_joint': (13, 760.0, 2270.0, -1.5645, 0.4041, 2.5, 0x40),
+    'right_arm_elbow_joint':       (12, 2460.0, 560.0, -1.9404, 0.4771, 2.5, 0x40),
+    'right_arm_shoulder_joint':    (11, 710.0, 2480.0, -0.3826, 2.0362, 2.5, 0x40),
+    'right_arm_yaw_joint':         (10, 2425.0, 545.0, -2.1838, 0.2673, 2.5, 0x40),
     'left_arm_finger_l_joint':     (9, 1080.0, 2130.0, 0.0, 1.0, 2.5, 0x43),
     'left_arm_wrist_roll_joint':   (8, 2280.0, 580.0, -1.4687, 1.2017, 2.5, 0x43),
-    'left_arm_wrist_pitch_joint':  (7, 585.0, 2430.0, -1.6022, 1.2959, 2.5, 0x43),
-    'left_arm_elbow_joint':        (6, 2455.0, 630.0, -1.9635, 0.9032, 2.5, 0x43),
-    'left_arm_shoulder_joint':     (5, 770.0, 2460.0, -0.4477, 2.2070, 2.5, 0x43),
-    'left_arm_yaw_joint':          (4, 530.0, 2475.0, -3.0159, 0.0393, 2.5, 0x43),
+    'left_arm_wrist_pitch_joint':  (7, 585.0, 2430.0, -1.4740, 1.1922, 2.5, 0x43),
+    'left_arm_elbow_joint':        (6, 2455.0, 630.0, -1.8850, 0.8671, 2.5, 0x43),
+    'left_arm_shoulder_joint':     (5, 770.0, 2460.0, -0.4701, 2.3173, 2.5, 0x43),
+    'left_arm_yaw_joint':          (4, 530.0, 2475.0, -2.6238, 0.0342, 2.5, 0x43),
     # The L16 keeps its 2026-07-22 anchors: its stops have not been
     # re-measured (that capture comes with the torso build).
     'torso_lift_joint':            (3, 1964.3, 1035.7, 0.005, 0.135, 0.020, 0x40),
@@ -316,10 +316,11 @@ class TestSoftLimitClamp:
         assert spec.clamp(0.07) == pytest.approx(0.07)
 
     def test_clamp_holds_arm_servos_inside_the_measured_range(self):
-        # Limits re-captured 2026-10-01 (August: -1.5708 .. 0.7854).
+        # Limits re-captured 2026-10-01 (August: -1.5708 .. 0.7854), in
+        # real radians since the probe of 2026-10-26 (scale 0.96).
         spec = SERVO_MAP['left_arm_elbow_joint']
-        assert spec.clamp(math.pi) == pytest.approx(0.9032)
-        assert spec.clamp(-math.pi) == pytest.approx(-1.9635)
+        assert spec.clamp(math.pi) == pytest.approx(0.8671)
+        assert spec.clamp(-math.pi) == pytest.approx(-1.8850)
 
     def test_clamp_and_command_to_us_agree(self):
         for name, spec in SERVO_MAP.items():

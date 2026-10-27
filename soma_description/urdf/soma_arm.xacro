@@ -101,10 +101,10 @@
   <!-- ==================== the arm macro ==================== -->
   <xacro:macro name="soma_arm"
                params="prefix parent side:=1 *origin
-                       yaw_lower:=-2.6311 yaw_upper:=0.3220
-                       shoulder_lower:=-0.4398 shoulder_upper:=2.3405
-                       elbow_lower:=-2.3955 elbow_upper:=0.5890
-                       wrist_pitch_lower:=-1.8850 wrist_pitch_upper:=0.4869
+                       yaw_lower:=-2.1838 yaw_upper:=0.2673
+                       shoulder_lower:=-0.3826 shoulder_upper:=2.0362
+                       elbow_lower:=-1.9404 elbow_upper:=0.4771
+                       wrist_pitch_lower:=-1.5645 wrist_pitch_upper:=0.4041
                        wrist_roll_lower:=-1.7122 wrist_roll_upper:=1.1074">
 
     <!-- mount to the parent link, at the disc seat on the bench box -->

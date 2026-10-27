@@ -89,12 +89,12 @@
     </inertial>
   </link>
 
-  <!-- left arm: measured limits of 2026-08-03, hug sense side=+1 -->
+  <!-- left arm: measured pulse ends, radians scaled by the probe of 2026-10-26, hug sense side=+1 -->
   <xacro:soma_arm prefix="left_arm_" parent="bench_link" side="1"
-                  yaw_lower="-3.0159" yaw_upper="0.0393"
-                  shoulder_lower="-0.4477" shoulder_upper="2.2070"
-                  elbow_lower="-1.9635" elbow_upper="0.9032"
-                  wrist_pitch_lower="-1.6022" wrist_pitch_upper="1.2959"
+                  yaw_lower="-2.6238" yaw_upper="0.0342"
+                  shoulder_lower="-0.4701" shoulder_upper="2.3173"
+                  elbow_lower="-1.8850" elbow_upper="0.8671"
+                  wrist_pitch_lower="-1.4740" wrist_pitch_upper="1.1922"
                   wrist_roll_lower="-1.4687" wrist_roll_upper="1.2017">
     <origin xyz="0 ${mount_ly/2} ${mount_h}" rpy="${-pi/2} ${pi/2} 0"/>
   </xacro:soma_arm>

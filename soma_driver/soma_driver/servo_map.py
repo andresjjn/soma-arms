@@ -103,24 +103,33 @@ HALF_PI = 1.5707963267948966
 # 720 -> 750, left yaw 2370 -> 2450 (it is now 2.2 deg from its
 # backward end), left shoulder 1075 -> 1055.
 
+# Scales (2026-10-26, soma_joint_probe, a phone level, loaded points
+# only): every planar joint turns LESS or more than the nominal 2000 us =
+# 180 deg. Each row keeps its measured pulses and zero; its radian limits
+# are the nominal ones times the joint's scale, so a command in radians
+# is a real angle. Right arm (board 0x40) 0.81 to 0.87, left (0x43) 0.87
+# to 1.05: a pattern that follows the board, to be checked with
+# scripts/pwm_clock_check.py. About +-5 % each, +-9 % the shoulders.
+# scripts/apply_calibration.py still proposes nominal limits.
+
 SERVO_MAP: dict[str, ServoSpec] = {
     # Right arm on board 0x40: channels 15 down to 10, gripper first
     # (measured wiring, re-proven 2026-10-01).
     'right_arm_finger_l_joint':    ServoSpec(15, 860.0, 2185.0, 0.0, 1.0, 2.5),   # F: 860 closed, 2185 open
     'right_arm_wrist_roll_joint':  ServoSpec(14, 615.0, 2410.0, -1.7122, 1.1074, 2.5),   # E, zero 1705
-    'right_arm_wrist_pitch_joint': ServoSpec(13, 760.0, 2270.0, -1.8850, 0.4869, 2.5),   # D, zero 1960
-    'right_arm_elbow_joint':       ServoSpec(12, 2460.0, 560.0, -2.3955, 0.5890, 2.5),   # C, zero 935, inverted (horn re-seated 2026-10-26)
-    'right_arm_shoulder_joint':    ServoSpec(11, 710.0, 2480.0, -0.4398, 2.3405, 2.5),   # B, zero 990
-    'right_arm_yaw_joint':         ServoSpec(10, 2425.0, 545.0, -2.6311, 0.3220, 2.5),   # A, zero 750, inverted
+    'right_arm_wrist_pitch_joint': ServoSpec(13, 760.0, 2270.0, -1.5645, 0.4041, 2.5),   # D, zero 1960, scale 0.83
+    'right_arm_elbow_joint':       ServoSpec(12, 2460.0, 560.0, -1.9404, 0.4771, 2.5),   # C, zero 935, inverted (horn re-seated 2026-10-26), scale 0.81
+    'right_arm_shoulder_joint':    ServoSpec(11, 710.0, 2480.0, -0.3826, 2.0362, 2.5),   # B, zero 990, scale 0.87
+    'right_arm_yaw_joint':         ServoSpec(10, 2425.0, 545.0, -2.1838, 0.2673, 2.5),   # A, zero 750, inverted, scale 0.83
     # Left arm on board 0x43 (since 2026-08-12): channels 9 down to 4,
-    # same order, mirrored signs. Pulses and limits are untouched on
-    # purpose: they belong to the servos and their horns, not the board.
+    # same order, mirrored signs. Pulses are untouched on purpose: they
+    # belong to the servos and their horns, not the board.
     'left_arm_finger_l_joint':    ServoSpec(9, 1080.0, 2130.0, 0.0, 1.0, 2.5, address=0x43),   # F: 1080 closed, 2130 open
     'left_arm_wrist_roll_joint':  ServoSpec(8, 2280.0, 580.0, -1.4687, 1.2017, 2.5, address=0x43),   # E, zero 1345, inverted
-    'left_arm_wrist_pitch_joint': ServoSpec(7, 585.0, 2430.0, -1.6022, 1.2959, 2.5, address=0x43),   # D, zero 1605
-    'left_arm_elbow_joint':       ServoSpec(6, 2455.0, 630.0, -1.9635, 0.9032, 2.5, address=0x43),   # C, zero 1205, inverted
-    'left_arm_shoulder_joint':    ServoSpec(5, 770.0, 2460.0, -0.4477, 2.2070, 2.5, address=0x43),   # B, zero 1055
-    'left_arm_yaw_joint':         ServoSpec(4, 530.0, 2475.0, -3.0159, 0.0393, 2.5, address=0x43),   # A, zero 2450
+    'left_arm_wrist_pitch_joint': ServoSpec(7, 585.0, 2430.0, -1.4740, 1.1922, 2.5, address=0x43),   # D, zero 1605, scale 0.92
+    'left_arm_elbow_joint':       ServoSpec(6, 2455.0, 630.0, -1.8850, 0.8671, 2.5, address=0x43),   # C, zero 1205, inverted, scale 0.96
+    'left_arm_shoulder_joint':    ServoSpec(5, 770.0, 2460.0, -0.4701, 2.3173, 2.5, address=0x43),   # B, zero 1055, scale 1.05
+    'left_arm_yaw_joint':         ServoSpec(4, 530.0, 2475.0, -2.6238, 0.0342, 2.5, address=0x43),   # A, zero 2450, scale 0.87
     # Torso: L16-140 on channel 3 (VERIFIED with power on, 2026-07-22).
     # Not on this bench: re-verify with power on when the torso returns.
     #
