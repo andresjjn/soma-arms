@@ -129,6 +129,51 @@ POSES.update({f'elbow_reach_{round(-100 * e)}': _wave_pose(yaw=_WAVE_YAW, elbow=
               for e in _REACH_STAIRS})
 
 
+# The hello (2026-10-26, Andres's idea): the right arm rises with the
+# elbow folding on the way, waves the hand at the top by rolling the
+# wrist in and out five times while the gripper opens and closes, and
+# comes down unfolding. Designed against the bench, not against the eye:
+#  - Not truly vertical: the right base ends 0.1 rad inside its real
+#    reach (-2.18). Base -2.0 and shoulder -0.25 put the upper arm about
+#    130 deg forward, the elbow -0.5 the forearm about 160 deg, and the
+#    wrist pitch -0.35 the hand upright. Short of vertical on purpose:
+#    gravity keeps loading one side of the gear play at the top, so the
+#    limit cycle of the hanging zero has nowhere to live.
+#  - The fold carries the load: by the URDF masses a straight arm at 90
+#    deg asks the base for 11.4 kg.cm, above the 10 a MG996R gives. The
+#    rise curls the elbow to -1.0 by the time the base is at -1.0, the
+#    worst point of the path, about 9.4 kg.cm, under the 9.7 the wave asks
+#    and has held. At the top the base holds about 6.6. (A point-mass
+#    model fitted to that 11.4; relative, not a measurement.)
+#  - The fold stays 0.3 rad short of ELBOW_REACH_CLEAN, measured with
+#    the base LOWER (-0.87), where the body is closer; no step moves a
+#    joint more than 1 rad.
+#  - Flowing: every dwell is the travel time plus 0.1 s, so the motion
+#    never stops to wait, and each step is one minimum-jerk move of
+#    several joints at once.
+_HELLO_TOP = dict(yaw=-2.0, shoulder=-0.25, elbow=-0.5, wrist_pitch=-0.35)
+_HELLO_ROLL = 0.45         # +-26 deg: in to out is 0.9 rad, under the 1 rad step rule
+POSES.update({
+    'hello_rise': _right(yaw=-1.0, shoulder=0.0, elbow=-1.0, wrist_pitch=0.0,
+                         wrist_roll=0.0, finger_l=0.0),
+    'hello_lift': _right(yaw=-1.6, shoulder=-0.15, elbow=-1.0, wrist_pitch=-0.2,
+                         wrist_roll=0.0, finger_l=0.0),
+    'hello_top': _right(**_HELLO_TOP, wrist_roll=0.0, finger_l=0.0),
+    'hello_out': _right(**_HELLO_TOP, wrist_roll=_HELLO_ROLL, finger_l=1.0),
+    'hello_in': _right(**_HELLO_TOP, wrist_roll=-_HELLO_ROLL, finger_l=0.0),
+})
+
+
+def _flowing(poses: tuple[str, ...], hold_s: float = 0.1) -> tuple[tuple[str, float], ...]:
+    """Each pose with a dwell of exactly its travel time plus `hold_s`."""
+    state, out = dict(HOME), []
+    for pose in poses:
+        targets = POSES[pose]
+        out.append((pose, round(settle_time_s(targets, state) + hold_s, 2)))
+        state.update(targets)
+    return tuple(out)
+
+
 def _camera_sweep(side: str) -> tuple[tuple[str, float], ...]:
     """Up 15, 30, 40 deg and back down the same way; 3 s at each pose up
     (the coverage capture needs 2 s of still frames)."""
@@ -207,3 +252,10 @@ def settle_time_s(targets: dict[str, float],
             dist = max(abs(target - spec.lower), abs(target - spec.upper))
         worst = max(worst, 1.875 * dist / spec.max_rate)
     return worst
+
+
+# The hello flows: its dwells come from the travel times (_flowing), so it
+# is defined once settle_time_s exists.
+SEQUENCES['hello'] = _flowing(('home', 'hello_rise', 'hello_lift', 'hello_top')
+                              + ('hello_out', 'hello_in') * 5
+                              + ('hello_top', 'hello_lift', 'hello_rise', 'home'))

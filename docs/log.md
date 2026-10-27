@@ -762,3 +762,14 @@ change they forced.
   -0.87. The forearm now swings between about horizontal and 30 deg above
   it, a lower wave than designed: the body sets the ceiling. Pinned by
   `test_the_wave_keeps_a_tenth_of_a_radian_short_of_the_measured_clean_curl`.
+- The redrawn wave ran clean on the metal (Andres, about 19:45). Then a
+  new sequence on his idea, `hello`: the right arm rises folding the
+  elbow, waves the hand at the top (wrist roll +-0.45 rad five times, the
+  gripper opening on every out) and comes down unfolding, 12.8 s. Every
+  dwell is the travel time plus 0.1 s so it flows. Designed against the
+  bench: base -2.0 (0.1 inside the right base's real reach), not truly
+  vertical so gravity keeps one side of the gear play loaded; the elbow
+  folded to -1.0 before the base passes the horizontal, about 9.4 kg.cm
+  on the base by a point-mass model fitted to the 11.4 of a straight arm
+  (the wave, about 9.7 by the same model, has held); the fold 0.3 rad
+  short of the measured clean curl. Not run on the metal yet.
