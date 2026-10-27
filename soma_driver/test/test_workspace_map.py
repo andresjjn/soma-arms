@@ -31,14 +31,14 @@ def runs(z_mm, side, dims, **kw):
     return wm.reach_runs(z_mm / 1000.0, side, dims, **COARSE, **kw)
 
 
-def test_home_fingertips_sit_mount_h_minus_the_chain_above_the_plate(dims):
-    # 5.7 mm on 2026-08-05 (photos agreed). Re-measured chain 2026-10-27:
-    # 32.7 + 80 + 76 + 150 = 338.7 mm under a 343 mm disc, 4.3 mm. The bench
-    # read 38.7 mm that day: mount_h is to be re-measured (disc to tip with
-    # the arm hanging tells whether the arm or the height changed).
+def test_home_fingertip_height_is_predicted_within_3_mm_of_the_bench(dims):
+    # 2026-10-27, measured with the arm hanging: the closed tip 38 mm over
+    # the plate. The FK has the clavicle rising 15.6 mm to the shoulder
+    # (clavicle_angle) and the rest hanging straight: 327.2 + 15.6 - 306.
     pts, phi = wm.fk((0.0, 0.0, 0.0, 0.0), dims)
-    assert pts[-1][0] == pytest.approx(0.0, abs=1e-9)
-    assert pts[-1][1] == pytest.approx(dims['mount_h'] - 0.3387, abs=1e-6)
+    assert pts[1][1] - dims['mount_h'] == pytest.approx(0.0156, abs=5e-4)   # shoulder above the disc
+    assert pts[-1][1] == pytest.approx(0.038, abs=0.003)
+    assert pts[-1][0] == pytest.approx(pts[1][0], abs=1e-9)                # hangs below the shoulder
     assert phi == 0.0
 
 
@@ -83,13 +83,18 @@ def test_plate_level_reach_is_a_narrow_band_around_the_axis(dims):
     assert len(r) == 1
     a, b = r[0]
     assert a <= 0 <= b
-    assert max(abs(a), abs(b)) <= 45
+    # Since 2026-10-27 (the clavicle rises 15.6 mm and the disc sits at
+    # 327.2) the hanging tip is 37 mm up: reaching 10 mm folds the yaw and
+    # the band grows to about -85 .. +60 mm.
+    assert max(abs(a), abs(b)) <= 100
 
 
 def test_reach_widens_from_the_plate_up_to_fifty_mm(dims):
+    # The left arm: the right's short yaw and wrist bands make its lane
+    # lopsided since the 2026-10-27 geometry (front reach gone by 50 mm).
     widths = []
     for z in (10, 20, 30, 50):
-        r = runs(z, 'right', dims)
+        r = runs(z, 'left', dims)
         assert len(r) == 1, z
         widths.append(r[0][1] - r[0][0])
     assert widths == sorted(widths) and len(set(widths)) == 4
@@ -108,16 +113,16 @@ def test_a_tool_tilt_lengthens_the_lane(dims):
 
 
 def test_solve_returns_command_frame_values_inside_the_map(dims):
-    # (0.05, 0.06) was reachable on nominal radians; with the measured
-    # scales of 2026-10-26 the right arm reaches less, and (0.08, 0.06) is
-    # the nearby point it still holds level.
-    q = wm.solve((0.08, 0.06), 0.0, 'right', dims, yaw_step_deg=2.0)
+    # (0.05, 0.06) was reachable on nominal radians; real radians
+    # (2026-10-26) and the rising clavicle (2026-10-27) shrank the right
+    # arm's level reach: (0.03, 0.03) is a point it still holds level.
+    q = wm.solve((0.03, 0.03), 0.0, 'right', dims, yaw_step_deg=2.0)
     assert q is not None
     for joint, value in zip(wm.JOINTS, q):
         spec = SERVO_MAP[f'right_arm_{joint}_joint']
         assert spec.lower + 0.1 <= value <= spec.upper - 0.1, joint
     pts, phi = wm.fk(q, dims)     # under the +1 hypothesis command == model
-    assert math.dist(pts[-1], (0.08, 0.06)) < 1e-9
+    assert math.dist(pts[-1], (0.03, 0.03)) < 1e-9
     assert abs(phi) < 1e-9
     assert wm.solve((0.4, 0.06), 0.0, 'right', dims, yaw_step_deg=2.0) is None
 

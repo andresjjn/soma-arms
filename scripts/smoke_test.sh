@@ -93,7 +93,7 @@ require_z() {
 echo '--- initial pose (both arms hanging at zero) ---'
 Z0=$(read_z)
 require_z "$Z0"
-echo "  tool0 z initial = ${Z0} (expected ~0.005: fingertips nearly touch the plate)"
+echo "  tool0 z initial = ${Z0} (expected ~0.038: the measured 38 mm, 2026-10-27)"
 
 echo '--- command: left elbow to -2.5 rad, clamped to its -1.8850 soft limit ---'
 # Three samples, not --once: --once exits 0.1 s after its only sample, and
@@ -121,8 +121,8 @@ z0, z1 = float(sys.argv[1]), float(sys.argv[2])
 # the kinematic chain and the soft-limit clamp.
 import math
 lift = 0.2251 * (1 - math.cos(1.8850))
-assert abs(z0 - 0.0052) < 0.005, f'initial z {z0} != 0.0052'
-assert abs(z1 - (0.0052 + lift)) < 0.005, f'final z {z1} != {0.0052 + lift:.4f}'
+assert abs(z0 - 0.0377) < 0.005, f'initial z {z0} != 0.0377'
+assert abs(z1 - (0.0377 + lift)) < 0.005, f'final z {z1} != {0.0377 + lift:.4f}'
 assert abs((z1 - z0) - lift) < 0.005, f'elbow bend did not lift the tool {1000*lift:.0f} mm'
 print(f'\nSMOKE TEST OK: the left elbow lifted tool0 {1000*(z1-z0):.1f} mm, confirmed by TF')
 EOF

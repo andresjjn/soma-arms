@@ -92,10 +92,13 @@ def fk(q: tuple[float, float, float, float], dims: dict[str, float]
     """Joint points D, S, E, W and the fingertip T, plus the tool angle."""
     pts = [(0.0, dims['mount_h'])]
     phi = 0.0
-    for angle, length in zip(q, link_lengths(dims)):
+    for i, (angle, length) in enumerate(zip(q, link_lengths(dims))):
         phi += angle
+        # The clavicle alone leaves the disc at its mounting angle (a DH
+        # theta offset); the shoulder's zero takes it back out.
+        seg = phi + dims['clavicle_angle'] if i == 0 else phi
         x, z = pts[-1]
-        pts.append((x - length * math.sin(phi), z - length * math.cos(phi)))
+        pts.append((x - length * math.sin(seg), z - length * math.cos(seg)))
     return pts, phi
 
 
@@ -114,8 +117,8 @@ def ik(target: tuple[float, float], phi_tool: float, q1: float,
     clav, a, b, tool = link_lengths(dims)
     wx = target[0] + tool * math.sin(phi_tool)
     wz = target[1] + tool * math.cos(phi_tool)
-    sx = -clav * math.sin(q1)
-    sz = dims['mount_h'] - clav * math.cos(q1)
+    sx = -clav * math.sin(q1 + dims['clavicle_angle'])
+    sz = dims['mount_h'] - clav * math.cos(q1 + dims['clavicle_angle'])
     dx, dz = wx - sx, wz - sz
     c3 = (dx * dx + dz * dz - a * a - b * b) / (2 * a * b)
     if abs(c3) > 1.0:

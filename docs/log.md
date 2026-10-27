@@ -897,3 +897,21 @@ center to fingertip with the arm hanging limp (about 339 if straight).
   each link's tilt and each joint's angle; "down" from the OAK's own
   BMI270 IMU through the factory IMU-to-camera rotation (camera x = IMU
   y, y = IMU x, z = -IMU z), so no plumb line and any mounting works.
+- The 45 mm, found. Tape: plate to the central box's top edge 370, so
+  the disc axis is at 327.2 (half the 85.6 box below), the closed tip 38
+  over the plate, disc to tip 295. The OAK from the side, with Andres's
+  tape marks on the disc center, the shoulder center, under the box, the
+  wrist and the tip (scale from the wrist-to-tip 152 = tool 150, the box
+  top-to-tip 332 = 370 - 38 checked the depth scale): the shoulder axis
+  sits 15.6 mm ABOVE the disc axis and behind it; from the shoulder the
+  arm hangs straight, 160 mm to the wrist (80 + 76 = 156) and 150 more
+  to the tip; disc to tip 294. The clavicle does not hang: it leaves the
+  disc at 118.5 deg from straight down, backward (asin(15.6/32.7) = 28.5
+  deg over the horizontal), and the shoulder's zero takes that back out.
+  Not a wrong zero and not a wrong link: a mounting angle the model
+  lacked, a DH theta offset. Applied: `clavicle_angle` 2.068 rad in
+  dimensions.yaml, the xacro (shoulder origin turned, frame turned back)
+  and `workspace_map.py` (fk, ik); `mount_h` 343 -> 327.2. The FK now puts
+  the hanging tip 36.8 mm over the plate against 38 measured (pinned by
+  a test, 3 mm). The reach map changed with it: the right lane loses its
+  front reach above about 40 mm (its short yaw and wrist bands).

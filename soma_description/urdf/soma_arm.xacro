@@ -62,6 +62,7 @@
   <xacro:property name="wrist_len"      value="0.0663"/>  <!-- wrist pitch to gripper mount face -->
   <xacro:property name="gripper_base_h" value="0.0178"/>  <!-- mount face to finger gear axes -->
   <xacro:property name="finger_len"     value="0.0650"/>  <!-- gear axis to fingertip -->
+  <xacro:property name="clavicle_angle" value="2.068"/>   <!-- rad: clavicle direction at the hanging zero, from down, backward (DH theta offset) -->
   <xacro:property name="tool_closed_len" value="0.150"/>  <!-- wrist pitch axis to fingertip, closed, one reading (the IK tool) -->
   <xacro:property name="tool_open_len"  value="0.100"/>   <!-- wrist pitch axis to the farthest point, fully open -->
   <xacro:property name="plane_offset"   value="0.02725"/> <!-- working plane outboard of the disc face: a DH d -->
@@ -152,7 +153,12 @@
       <child link="${prefix}upper_arm_link"/>
       <!-- z: the disc face plus the plane offset, so the planar chain and
            the fingertip work in the measured lane (2026-10-27). -->
-      <origin xyz="${clavicle_len} 0 ${disc_h + plane_offset}"/>
+      <!-- The clavicle leaves the disc at clavicle_angle (measured 2026-10-27:
+           the shoulder axis sits 15.6 mm above the disc axis, behind it). The
+           frame turns back by the same angle, so the upper arm still hangs
+           straight down at a zero shoulder. -->
+      <origin xyz="${clavicle_len*cos(clavicle_angle)} ${side*clavicle_len*sin(clavicle_angle)} ${disc_h + plane_offset}"
+              rpy="0 0 ${-side*clavicle_angle}"/>
       <axis xyz="0 0 ${side}"/>
       <limit lower="${shoulder_lower}" upper="${shoulder_upper}" effort="${effort_nm}" velocity="${vel_rads}"/>
     </joint>
