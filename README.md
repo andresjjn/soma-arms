@@ -166,7 +166,7 @@ docker/             headless ROS 2 Humble image for building and validating
 CI runs on every push: the pure Python test suite, a full ROS 2 Humble build,
 `check_urdf` on all three models, a consistency check between the URDF and the
 driver, and an end to end run where the mock driver bends the left elbow
-and TF confirms the fingertip rising 311 mm.
+and TF confirms the fingertip rising 295 mm.
 
 ```bash
 bash scripts/smoke_test.sh   # the same thing, locally, inside a ROS environment

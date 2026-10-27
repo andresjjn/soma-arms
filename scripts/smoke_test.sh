@@ -95,7 +95,7 @@ Z0=$(read_z)
 require_z "$Z0"
 echo "  tool0 z initial = ${Z0} (expected ~0.006: fingertips nearly touch the plate)"
 
-echo '--- command: left elbow to -2.5 rad, clamped to its -1.9635 soft limit ---'
+echo '--- command: left elbow to -2.5 rad, clamped to its -1.8850 soft limit ---'
 # Three samples, not --once: --once exits 0.1 s after its only sample, and
 # a driver that has not matched the publisher yet drops it (DDS discovery
 # is not symmetric). The likely cause of the one end to end failure, run
@@ -106,7 +106,7 @@ sleep 5
 
 Z1=$(read_z)
 require_z "$Z1"
-echo "  tool0 z final = ${Z1} (expected ~0.317)"
+echo "  tool0 z final = ${Z1} (expected ~0.300)"
 
 kill $RSP $DRV 2>/dev/null || true
 
@@ -115,11 +115,12 @@ import sys
 z0, z1 = float(sys.argv[1]), float(sys.argv[2])
 # Hanging chain below the elbow: fore 0.075 + wrist 0.0664 + gripper to
 # tool0 0.0836 = L = 0.225 m. The -2.5 rad command overshoots and must
-# clamp at the measured limit (-1.9635 rad, calibration of 2026-10-01),
-# so the tool rises L * (1 - cos 1.9635) = 0.311 m: the lift proves both
+# clamp at the measured limit (-1.8850 rad: the calibration of 2026-10-01
+# in real radians, scale 0.96 from the joint probe of 2026-10-26), so the
+# tool rises L * (1 - cos 1.8850) = 0.295 m: the lift proves both
 # the kinematic chain and the soft-limit clamp.
 import math
-lift = 0.225 * (1 - math.cos(1.9635))
+lift = 0.225 * (1 - math.cos(1.8850))
 assert abs(z0 - 0.0057) < 0.005, f'initial z {z0} != 0.0057'
 assert abs(z1 - (0.0057 + lift)) < 0.005, f'final z {z1} != {0.0057 + lift:.4f}'
 assert abs((z1 - z0) - lift) < 0.005, f'elbow bend did not lift the tool {1000*lift:.0f} mm'

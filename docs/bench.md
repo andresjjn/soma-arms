@@ -23,7 +23,7 @@ safety rules. The ROS node tests skip automatically when `rclpy` is missing.
 
 Build, unit tests, all three xacro models through `check_urdf`, and an end to
 end run where the mock driver bends the left elbow while TF confirms the
-fingertip rising 311 mm:
+fingertip rising 295 mm:
 
 ```bash
 bash scripts/smoke_test.sh

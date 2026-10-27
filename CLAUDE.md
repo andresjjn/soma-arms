@@ -201,7 +201,7 @@ bash scripts/smoke_test.sh
 
 Build, unit tests, all three xacro models through `check_urdf`, and an end to
 end run where the mock driver bends the left elbow and TF confirms the
-fingertip rising 311 mm.
+fingertip rising 295 mm.
 
 When adding a safety behaviour, add the test with it. A rule with no test is a
 rule that will be refactored away by someone in a hurry.
