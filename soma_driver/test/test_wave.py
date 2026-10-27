@@ -108,3 +108,10 @@ def test_elbow_reach_stops_short_of_the_curl_that_touched_the_body():
     for p, _ in seq:
         if p.startswith('elbow_reach_'):
             assert pose_targets(p)['right_arm_yaw_joint'] == POSES['wave_raise_1']['right_arm_yaw_joint']
+
+
+def test_the_wave_keeps_a_tenth_of_a_radian_short_of_the_measured_clean_curl():
+    from soma_driver.primitives import ELBOW_REACH_CLEAN
+    assert ELBOW_REACH_CLEAN == pytest.approx(-1.30)
+    for pose in WAVE_POSES:
+        assert POSES[pose]['right_arm_elbow_joint'] >= ELBOW_REACH_CLEAN + 0.1 - 1e-9, pose

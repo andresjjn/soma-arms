@@ -756,3 +756,9 @@ change they forced.
   forearm into the robot's body. Stopped, unwound home, every joint read
   0.0 at 19:30. Incident row in `docs/safety.md`. New diagnostic
   sequence `elbow_reach` to find where the curl really touches.
+- `elbow_reach` in step mode (19:38): the last clean stair is -1.30 rad
+  (74 deg of curl, base -0.87); Andres quit there. The wave was redrawn
+  under it: half -0.50, up -0.95, open -0.70, close -1.20, the base still
+  -0.87. The forearm now swings between about horizontal and 30 deg above
+  it, a lower wave than designed: the body sets the ceiling. Pinned by
+  `test_the_wave_keeps_a_tenth_of_a_radian_short_of_the_measured_clean_curl`.

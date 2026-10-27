@@ -32,8 +32,9 @@ The wave (designed 2026-10-03, not yet run on the metal):
     it with `soma_primitives wave --step` the first time.
   - No loaded link is held vertical: at yaw -0.87 the shoulder sits 50 deg
     off the gravitational zero where the backlash limit cycle of
-    2026-10-01 lives, and the raised forearm swings between about 53 and
-    25 deg off vertical. Holds are short.
+    2026-10-01 lives, and the forearm swings between about horizontal and
+    30 deg above it: the body sets that ceiling (elbow_reach, 2026-10-26).
+    Holds are short.
   - Every number is a real angle since 2026-10-26: the joint probe's
     scales are in SERVO_MAP.
 """
@@ -65,14 +66,17 @@ def _wave_pose(yaw: float, elbow: float, finger: float = 0.0) -> dict[str, float
 # nominal radians; redrawn 2026-10-26 in real radians, after the joint
 # probe found the right elbow at 0.81 of nominal: it reaches -1.94 rad, so
 # the old in-swing (-2.09) no longer fitted. Same base angle (no extra
-# load on the base), same swing of about 28 deg, moved down so the
-# in-swing sits on the 0.1 rad margin.
+# load on the base), same swing of about 28 deg. That first redraw
+# (in-swing -1.84, up -1.60) folded the forearm into the body at -1.60;
+# `elbow_reach` then found -1.30 the last clean stair in this posture
+# (ELBOW_REACH_CLEAN), so the in-swing sits 0.1 rad short of it.
+ELBOW_REACH_CLEAN = -1.30   # measured 2026-10-26, base at _WAVE_YAW
 _WAVE_PROBE_YAW = -0.25     # first move of the base: it MUST swing forward
 _WAVE_YAW = -0.87           # 50 deg forward, the arm raised with the base
-_WAVE_ELBOW_HALF = -0.90    # halfway curl: no step may move a joint > 1 rad
-_WAVE_ELBOW_UP = -1.60      # forearm up, about 38 deg off vertical
-_WAVE_ELBOW_OPEN = -1.35    # out-swing, hand opens (about 53 deg off)
-_WAVE_ELBOW_CLOSE = -1.84   # in-swing, hand closes (about 25 deg off)
+_WAVE_ELBOW_HALF = -0.50    # halfway curl
+_WAVE_ELBOW_UP = -0.95      # forearm about 14 deg above horizontal
+_WAVE_ELBOW_OPEN = -0.70    # out-swing, hand opens
+_WAVE_ELBOW_CLOSE = -1.20   # in-swing, hand closes (forearm about 30 deg up)
 
 def _straight(side: str, yaw: float) -> dict[str, float]:
     """One arm swung forward by the base alone, every other joint of that
@@ -119,6 +123,7 @@ POSES.update({f'cam_{side}_{deg}': _straight(side, yaw)
 # of 0.1 rad that stop short of the -1.60 that touched; in step mode the
 # operator measures the gap before every ENTER and quits when it is
 # small. The last clean stair, minus a margin, is the wave's new floor.
+# Result, 2026-10-26: -1.30 (ELBOW_REACH_CLEAN).
 _REACH_STAIRS = (-1.0, -1.1, -1.2, -1.3, -1.4, -1.5)
 POSES.update({f'elbow_reach_{round(-100 * e)}': _wave_pose(yaw=_WAVE_YAW, elbow=e)
               for e in _REACH_STAIRS})
