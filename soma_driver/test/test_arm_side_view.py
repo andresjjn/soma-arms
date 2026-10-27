@@ -14,16 +14,15 @@ sys.path.insert(0, str(REPO / 'scripts'))
 
 import arm_side_view as sv  # noqa: E402
 
-# This unit's factory IMU -> CAM_A rotation (2026-10-27), rounded.
-ROT = [[0.0066, 0.99995, 0.0074], [0.9999, -0.0067, 0.0118], [0.0119, 0.0073, -0.9999]]
+ROT = sv.IMU_TO_CAM
 
 
-def test_a_level_upright_camera_sees_down_as_image_down():
-    # Upright and level: up is camera -y. In the IMU frame that is -x.
-    up_cam = sv.imu_to_camera((-9.81, 0.0, 0.0), ROT)
+def test_the_upright_reading_of_2026_10_27_sees_down_as_image_down():
+    # The camera stood level beside the robot, which stood upright in the frame.
+    up_cam = sv.imu_to_camera((-0.079, 9.694, -0.464), ROT)
     dx, dy = sv.image_down(up_cam)
     assert dx == pytest.approx(0.0, abs=0.01) and dy == pytest.approx(1.0, abs=1e-3)
-    assert sv.camera_pitch_deg(up_cam) == pytest.approx(0.0, abs=1.0)
+    assert abs(sv.camera_pitch_deg(up_cam)) < 5
 
 
 def test_a_camera_rolled_a_quarter_turn_sees_down_sideways():
@@ -36,9 +35,11 @@ def test_looking_straight_down_has_no_down_in_the_picture():
         sv.image_down((0.0, 0.0, -9.81))
 
 
-def test_the_tripod_reading_of_2026_10_27_is_a_steep_look_down():
+def test_the_tripod_reading_of_2026_10_27_is_a_steep_look_down_rolled_a_quarter():
     up = sv.imu_to_camera((4.015, 0.81, 8.866), ROT)
     assert sv.camera_pitch_deg(up) < -55
+    dx, dy = sv.image_down(up)
+    assert dx < -0.95          # down on the raw frame's left: the turn oak_view undid
 
 
 def test_a_straight_hanging_arm_reads_zero_everywhere():

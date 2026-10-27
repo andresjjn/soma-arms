@@ -19,9 +19,9 @@ the disc center if it can be reached. Nothing else blue in the frame.
     python3 scripts/arm_side_view.py --forward right      # the robot's front is on the image right
 
 "Down" comes from the OAK's own IMU (a BMI270 on this unit): the
-accelerometer at rest reads the reaction to gravity, which the factory
-calibration rotates into the color camera's frame; its projection on the
-image plane is down in the picture, however the camera is mounted. Its
+accelerometer at rest reads the reaction to gravity; rotated into the
+color camera's frame (IMU_TO_CAM), its projection on the image plane is
+down in the picture, however the camera is mounted. Its
 part along the optical axis is the camera's pitch; past PITCH_WARN_DEG the
 perspective starts to bend vertical links and the script says so.
 
@@ -45,6 +45,15 @@ REF_MM = 80.0                # shoulder to elbow, caliper 2026-10-27
 MIN_BLOB_PX = 30
 NAMES_4 = ('shoulder', 'elbow', 'wrist', 'tip')
 NAMES_5 = ('disc',) + NAMES_4
+# IMU axes to color camera axes (x right, y down, z forward), MEASURED on
+# this unit on 2026-10-27 in two poses: upright and level, the
+# accelerometer read (-0.08, +9.69, -0.46), so camera y = -IMU y; looking
+# steeply down from the tripod it read (4.0, 0.8, 8.9), so camera z =
+# -IMU z; a right-handed frame leaves camera x = IMU x, and the tripod
+# reading then puts up on the right of the raw frame, the quarter turn
+# the software used to undo. The factory IMU-to-camera extrinsics read as
+# a swap of x and y, in some other axis convention: not used.
+IMU_TO_CAM = ((1.0, 0.0, 0.0), (0.0, -1.0, 0.0), (0.0, 0.0, -1.0))
 
 
 def imu_to_camera(accel_imu, rot) -> tuple[float, float, float]:
@@ -101,7 +110,7 @@ def order_down(points, down) -> list[tuple[float, float]]:
 
 
 def capture(seconds: float = 1.5):
-    """(rgb frame, mean IMU accel in the IMU frame, IMU to camera rotation)."""
+    """(rgb frame, mean IMU accel in the IMU frame)."""
     import depthai as dai
     p = dai.Pipeline()
     cam = p.create(dai.node.ColorCamera)
@@ -116,8 +125,6 @@ def capture(seconds: float = 1.5):
         x.setStreamName(name)
         out.link(x.input)
     with dai.Device(p) as dev:
-        ext = dev.readCalibration().getImuToCameraExtrinsics(dai.CameraBoardSocket.CAM_A)
-        rot = [row[:3] for row in ext[:3]]
         q_rgb, q_imu = dev.getOutputQueue('rgb', 2, False), dev.getOutputQueue('imu', 50, False)
         samples, frame, end = [], None, time.time() + seconds
         while time.time() < end or frame is None or not samples:
@@ -130,7 +137,7 @@ def capture(seconds: float = 1.5):
                 frame = f.getCvFrame()
             time.sleep(0.005)
     accel = tuple(sum(s[i] for s in samples) / len(samples) for i in range(3))
-    return frame, accel, rot
+    return frame, accel
 
 
 def parse_roi(text: str | None) -> tuple[float, float, float, float] | None:
@@ -176,8 +183,8 @@ def main(argv: list[str] | None = None) -> int:
     roi = parse_roi(args.roi)
     import cv2
     os.makedirs(args.out, exist_ok=True)
-    frame, accel, rot = capture()
-    up = imu_to_camera(accel, rot)
+    frame, accel = capture()
+    up = imu_to_camera(accel, IMU_TO_CAM)
     down = image_down(up)
     pitch = camera_pitch_deg(up)
     print(f'camera pitch {pitch:+.1f} deg (level within {PITCH_WARN_DEG:g} for clean angles), '
