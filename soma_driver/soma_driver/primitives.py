@@ -140,12 +140,14 @@ POSES.update({f'elbow_reach_{round(-100 * e)}': _wave_pose(yaw=_WAVE_YAW, elbow=
 #    so the limit cycle of the hanging zero has nowhere to live.
 #  - Third form. First: base -2.0, elbow -0.5, rolling the wrist (clean).
 #    Second: the palm waving on the wrist pitch, elbow -0.35 (clean).
-#    Third, Andres's call: the elbow nearly straight, waving between
-#    +0.15 and -0.45 with the hand in line. The hand sits LOWER than in
-#    the second form (tip about 240 mm above the shoulder against 290):
-#    the straight arm points the forearm diagonally. The out-swing stops
-#    at +0.15 because +0.30 would ask the base about 9.3 kg.cm, five
-#    times, against the 9.7 the wave has held; +0.15 is about 8.8.
+#    Third: the elbow nearly straight, waving +0.15 .. -0.45 (clean,
+#    looked better, the forearm still leaning forward). Fourth, Andres's
+#    call: the forearm pointing at the ceiling while it waves. The elbow
+#    swings -0.25 .. -0.75, the forearm about 150 .. 178 deg: it stops
+#    just short of vertical, because past it the gravity torque on the
+#    elbow changes sign mid-swing, the same zero crossing that drives the
+#    gear-play limit cycle. The base holds about 6 kg.cm up there, the
+#    least of the four forms; the tip about 290 mm above the shoulder.
 #  - The fold carries the load: by the URDF masses a straight arm at 90
 #    deg asks the base for 11.4 kg.cm, above the 10 a MG996R gives. The
 #    rise curls the elbow to -1.0 by the time the base is at -1.0, the
@@ -159,8 +161,8 @@ POSES.update({f'elbow_reach_{round(-100 * e)}': _wave_pose(yaw=_WAVE_YAW, elbow=
 #    never stops to wait, and each step is one minimum-jerk move of
 #    several joints at once.
 _HELLO_TOP = dict(yaw=-2.08, shoulder=-0.28, wrist_pitch=0.0, wrist_roll=0.0)
-_HELLO_ELBOW = -0.15        # the forearm about 146 deg, nearly in line
-_HELLO_SWING = 0.30         # +-17 deg of forearm: out +0.15, in -0.45
+_HELLO_ELBOW = -0.50        # the forearm about 164 deg
+_HELLO_SWING = 0.25         # +-14 deg: out -0.25 (about 150), in -0.75 (about 178)
 POSES.update({
     'hello_rise': _right(yaw=-1.0, shoulder=0.0, elbow=-1.0, wrist_pitch=0.0,
                          wrist_roll=0.0, finger_l=0.0),

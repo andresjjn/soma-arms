@@ -45,8 +45,8 @@ def test_the_elbow_is_folded_before_the_base_passes_the_horizontal():
 
 
 def test_five_elbow_swings_with_the_hand_opening_on_every_out():
-    # Andres: the arm nearly straight at the top, the elbow waves the
-    # forearm side to side, the wrist stays in line.
+    # Andres: at the top the elbow waves the forearm, pointing at the
+    # ceiling, the wrist stays in line.
     poses = [p for p, _ in HELLO]
     assert poses.count('hello_out') == 5 and poses.count('hello_in') == 5
     top, out, inn = POSES['hello_top'], POSES['hello_out'], POSES['hello_in']
@@ -60,9 +60,14 @@ def test_five_elbow_swings_with_the_hand_opening_on_every_out():
             assert pose[f'right_arm_{joint}_joint'] == top[f'right_arm_{joint}_joint']
 
 
-def test_the_out_swing_stops_where_the_base_load_stays_under_what_the_wave_held():
-    # +0.30 would be about 9.3 kg.cm on the base by the model; +0.15 about 8.8.
-    assert POSES['hello_out']['right_arm_elbow_joint'] <= 0.15 + 1e-9
+def test_the_forearm_never_crosses_the_vertical_while_it_waves():
+    # Base + shoulder + elbow is the forearm's angle from hanging; past pi
+    # the elbow's gravity torque flips sign mid-swing (gear play).
+    for pose in ('hello_top', 'hello_out', 'hello_in'):
+        q = POSES[pose]
+        forearm = -(q['right_arm_yaw_joint'] + q['right_arm_shoulder_joint']
+                    + q['right_arm_elbow_joint'])
+        assert forearm < 3.14159 - 0.03, pose
 
 
 def test_the_top_is_as_high_as_the_base_and_shoulder_go():

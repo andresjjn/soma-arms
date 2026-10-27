@@ -787,3 +787,8 @@ change they forced.
   shoulder against 290) and the base at about 8.8 kg.cm at the out-swing
   (+0.30 would have been 9.3). Run without step mode at Andres's request:
   the rise and the fall are the paths already proven.
+- `hello`, third form ran clean and looked better. Fourth form, Andres's
+  call: the forearm pointing at the ceiling while it waves. Elbow
+  -0.25 .. -0.75 around -0.50 (forearm about 150 .. 178 deg), stopping
+  short of vertical so the elbow's gravity torque never flips mid-swing.
+  Base about 6 kg.cm at the top.
