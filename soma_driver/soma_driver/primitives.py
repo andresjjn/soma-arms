@@ -354,6 +354,12 @@ POSES.update({
                              wrist_roll=0.0, finger_l=0.0),
     'hello_left_lift': _left(yaw=-1.8, shoulder=0.1, elbow=-0.8, wrist_pitch=-0.2,
                              wrist_roll=0.0, finger_l=0.0),
+    # The rise with the shoulder 0.25 rad more open, for the way down only:
+    # flowing (blended), the forearm came down folded toward the body.
+    # Upper arm 57 -> 43 deg, forearm 115 -> 100; the base holds 9.6 kg.cm
+    # instead of 9.9 (the crossing peak rises 0.2, to about 10.3).
+    'hello_left_fall': _left(yaw=-1.0, shoulder=0.25, elbow=-1.0, wrist_pitch=0.0,
+                             wrist_roll=0.0, finger_l=0.0),
 })
 # Flowing (Andres, after it ran: no pauses between steps). 0.7: each pose
 # is left at 70 % of its travel, where a minimum-jerk segment has covered
@@ -363,6 +369,7 @@ SEQUENCES['hello_left'] = _flowing(
     ('home', 'hello_left_rise', 'hello_left_lift', 'hello_left_1', 'hello_left_2')
     + ('hello_left_3', 'hello_left_4') * 5
     # Down: the rise played backwards, through the top (Andres: the way
-    # up works, so the way down is the same road).
-    + ('hello_left_1', 'hello_left_lift', 'hello_left_rise', 'home'),
+    # up works, so the way down is the same road), the low waypoint with
+    # the shoulder a little more open (hello_left_fall).
+    + ('hello_left_1', 'hello_left_lift', 'hello_left_fall', 'home'),
     blend=BLENDED['hello_left'])

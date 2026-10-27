@@ -849,3 +849,7 @@ change they forced.
   rad, the wrist pitch); the gripper may overshoot its closed stop by 0.02
   in the plan, where the pulse saturates. 10.8 s became 7.0 s, the wave
   keeps its full amplitude.
+- Flowing `hello_left` ran well; on the way down the forearm came close
+  to the body, the shoulder too closed. The low waypoint of the descent
+  only (`hello_left_fall`) is the rise with the shoulder 0.25 rad more
+  open: upper arm 57 -> 43 deg, base 9.6 kg.cm held instead of 9.9.

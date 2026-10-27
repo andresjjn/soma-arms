@@ -49,7 +49,12 @@ def test_it_ends_home_closed():
     assert SEQ[-1][0] == 'home' and HOME['left_arm_finger_l_joint'] == 0.0
 
 
-def test_the_way_down_is_the_way_up_backwards():
+def test_the_way_down_is_the_way_up_backwards_with_the_shoulder_a_little_open():
     poses = [p for p, _ in SEQ]
     up = poses[:poses.index('hello_left_1') + 1]
-    assert poses[-len(up):] == list(reversed(up))
+    down = [('hello_left_rise' if p == 'hello_left_fall' else p) for p in poses[-len(up):]]
+    assert down == list(reversed(up))
+    rise, fall = POSES['hello_left_rise'], POSES['hello_left_fall']
+    for name in rise:
+        delta = 0.25 if name == 'left_arm_shoulder_joint' else 0.0
+        assert fall[name] == pytest.approx(rise[name] + delta), name
