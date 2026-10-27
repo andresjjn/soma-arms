@@ -44,19 +44,25 @@ def test_the_elbow_is_folded_before_the_base_passes_the_horizontal():
     assert POSES['hello_rise']['right_arm_elbow_joint'] <= -0.9
 
 
-def test_five_palm_swings_with_the_hand_opening_on_every_out():
-    # Andres: the palm waves with the wrist pitch (the third servo from the
-    # gripper), the roll stays put.
+def test_five_elbow_swings_with_the_hand_opening_on_every_out():
+    # Andres: the arm nearly straight at the top, the elbow waves the
+    # forearm side to side, the wrist stays in line.
     poses = [p for p, _ in HELLO]
     assert poses.count('hello_out') == 5 and poses.count('hello_in') == 5
     top, out, inn = POSES['hello_top'], POSES['hello_out'], POSES['hello_in']
     assert out['right_arm_finger_l_joint'] == 1.0 and inn['right_arm_finger_l_joint'] == 0.0
-    pitch = 'right_arm_wrist_pitch_joint'
-    assert out[pitch] - top[pitch] == pytest.approx(top[pitch] - inn[pitch])
+    elbow = 'right_arm_elbow_joint'
+    assert out[elbow] - top[elbow] == pytest.approx(top[elbow] - inn[elbow])
     for pose in (top, out, inn):
         assert pose['right_arm_wrist_roll_joint'] == 0.0
-        for joint in ('yaw', 'shoulder', 'elbow'):
+        assert pose['right_arm_wrist_pitch_joint'] == 0.0
+        for joint in ('yaw', 'shoulder'):
             assert pose[f'right_arm_{joint}_joint'] == top[f'right_arm_{joint}_joint']
+
+
+def test_the_out_swing_stops_where_the_base_load_stays_under_what_the_wave_held():
+    # +0.30 would be about 9.3 kg.cm on the base by the model; +0.15 about 8.8.
+    assert POSES['hello_out']['right_arm_elbow_joint'] <= 0.15 + 1e-9
 
 
 def test_the_top_is_as_high_as_the_base_and_shoulder_go():

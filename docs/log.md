@@ -780,3 +780,10 @@ change they forced.
   truly vertical is out of reach on this bench), elbow -0.35, the palm
   swinging -0.025 .. -0.675 on the pitch, five times with the gripper.
   Base 5.7 to 7.0 kg.cm at the top by the model.
+- `hello`, second form ran clean too. Third form on Andres's call: at
+  the top the elbow nearly straight (-0.15) and waving the forearm
+  +0.15 .. -0.45 five times with the gripper, the wrist in line. The
+  model puts the hand lower than the second form (about 240 mm above the
+  shoulder against 290) and the base at about 8.8 kg.cm at the out-swing
+  (+0.30 would have been 9.3). Run without step mode at Andres's request:
+  the rise and the fall are the paths already proven.

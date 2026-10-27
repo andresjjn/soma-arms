@@ -130,24 +130,27 @@ POSES.update({f'elbow_reach_{round(-100 * e)}': _wave_pose(yaw=_WAVE_YAW, elbow=
 
 
 # The hello (2026-10-26, Andres's idea): the right arm rises with the
-# elbow folding on the way, waves the palm at the top by swinging the
-# wrist pitch five times while the gripper opens and closes, and comes
-# down unfolding. Designed against the bench, not against the eye:
+# elbow folding on the way, opens the elbow at the top and waves the
+# forearm with it five times while the gripper opens and closes, and
+# comes down. Designed against the bench, not against the eye:
 #  - As high as the metal goes: base -2.08 and shoulder -0.28 sit 0.1
 #    rad inside their real reach and put the upper arm about 135 deg
 #    forward, the most these two joints can give (truly vertical is out
-#    of reach). The elbow, opened to -0.35, puts the forearm about 155
-#    deg and the wrist pitch the hand upright. Gravity still loads one
-#    side of the gear play at the top, so the limit cycle of the hanging
-#    zero has nowhere to live. First version (base -2.0, elbow -0.5,
-#    rolling the wrist) ran clean; Andres asked for higher, a more open
-#    elbow and the palm waving.
+#    of reach). Gravity still loads one side of the gear play at the top,
+#    so the limit cycle of the hanging zero has nowhere to live.
+#  - Third form. First: base -2.0, elbow -0.5, rolling the wrist (clean).
+#    Second: the palm waving on the wrist pitch, elbow -0.35 (clean).
+#    Third, Andres's call: the elbow nearly straight, waving between
+#    +0.15 and -0.45 with the hand in line. The hand sits LOWER than in
+#    the second form (tip about 240 mm above the shoulder against 290):
+#    the straight arm points the forearm diagonally. The out-swing stops
+#    at +0.15 because +0.30 would ask the base about 9.3 kg.cm, five
+#    times, against the 9.7 the wave has held; +0.15 is about 8.8.
 #  - The fold carries the load: by the URDF masses a straight arm at 90
 #    deg asks the base for 11.4 kg.cm, above the 10 a MG996R gives. The
 #    rise curls the elbow to -1.0 by the time the base is at -1.0, the
 #    worst point of the path, about 9.4 kg.cm, under the 9.7 the wave asks
-#    and has held. At the top the base holds 5.7 to 7.0 as the palm
-#    swings. (A point-mass
+#    and has held. (A point-mass
 #    model fitted to that 11.4; relative, not a measurement.)
 #  - The fold stays 0.3 rad short of ELBOW_REACH_CLEAN, measured with
 #    the base LOWER (-0.87), where the body is closer; no step moves a
@@ -155,17 +158,17 @@ POSES.update({f'elbow_reach_{round(-100 * e)}': _wave_pose(yaw=_WAVE_YAW, elbow=
 #  - Flowing: every dwell is the travel time plus 0.1 s, so the motion
 #    never stops to wait, and each step is one minimum-jerk move of
 #    several joints at once.
-_HELLO_TOP = dict(yaw=-2.08, shoulder=-0.28, elbow=-0.35, wrist_roll=0.0)
-_HELLO_PITCH = -0.35        # the hand upright at the top
-_HELLO_SWING = 0.325        # +-19 deg of palm: out -0.025, in -0.675
+_HELLO_TOP = dict(yaw=-2.08, shoulder=-0.28, wrist_pitch=0.0, wrist_roll=0.0)
+_HELLO_ELBOW = -0.15        # the forearm about 146 deg, nearly in line
+_HELLO_SWING = 0.30         # +-17 deg of forearm: out +0.15, in -0.45
 POSES.update({
     'hello_rise': _right(yaw=-1.0, shoulder=0.0, elbow=-1.0, wrist_pitch=0.0,
                          wrist_roll=0.0, finger_l=0.0),
     'hello_lift': _right(yaw=-1.6, shoulder=-0.15, elbow=-0.9, wrist_pitch=-0.2,
                          wrist_roll=0.0, finger_l=0.0),
-    'hello_top': _right(**_HELLO_TOP, wrist_pitch=_HELLO_PITCH, finger_l=0.0),
-    'hello_out': _right(**_HELLO_TOP, wrist_pitch=_HELLO_PITCH + _HELLO_SWING, finger_l=1.0),
-    'hello_in': _right(**_HELLO_TOP, wrist_pitch=_HELLO_PITCH - _HELLO_SWING, finger_l=0.0),
+    'hello_top': _right(**_HELLO_TOP, elbow=_HELLO_ELBOW, finger_l=0.0),
+    'hello_out': _right(**_HELLO_TOP, elbow=_HELLO_ELBOW + _HELLO_SWING, finger_l=1.0),
+    'hello_in': _right(**_HELLO_TOP, elbow=_HELLO_ELBOW - _HELLO_SWING, finger_l=0.0),
 })
 
 
