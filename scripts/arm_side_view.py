@@ -133,7 +133,17 @@ def capture(seconds: float = 1.5):
     return frame, accel, rot
 
 
-def blue_markers(frame, expected: int):
+def parse_roi(text: str | None) -> tuple[float, float, float, float] | None:
+    """'x0,y0,x1,y1' in fractions of the frame, or None for all of it."""
+    if not text:
+        return None
+    vals = tuple(float(v) for v in text.split(','))
+    if len(vals) != 4 or not (0 <= vals[0] < vals[2] <= 1 and 0 <= vals[1] < vals[3] <= 1):
+        raise ValueError('roi is x0,y0,x1,y1 with 0 <= x0 < x1 <= 1 and 0 <= y0 < y1 <= 1')
+    return vals
+
+
+def blue_markers(frame, expected: int, roi=None):
     """Centers of the `expected` largest blue blobs, or fewer if not found."""
     import cv2
     import numpy as np
@@ -142,6 +152,12 @@ def blue_markers(frame, expected: int):
     # (2026-10-27: a blue note read hue 100 to 105 at low saturation).
     mask = cv2.inRange(hsv, (90, 70, 50), (130, 255, 255))
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    if roi is not None:                  # keep only the arm's region
+        h, w = mask.shape
+        keep = np.zeros_like(mask)
+        x0, y0, x1, y1 = round(roi[0] * w), round(roi[1] * h), round(roi[2] * w), round(roi[3] * h)
+        keep[y0:y1, x0:x1] = mask[y0:y1, x0:x1]
+        mask = keep
     count, _, stats, cents = cv2.connectedComponentsWithStats(mask)
     blobs = sorted(((stats[i, cv2.CC_STAT_AREA], tuple(cents[i])) for i in range(1, count)
                     if stats[i, cv2.CC_STAT_AREA] >= MIN_BLOB_PX), reverse=True)
@@ -154,16 +170,20 @@ def main(argv: list[str] | None = None) -> int:
                     help="which side of the image the robot's front is on")
     ap.add_argument('--markers', type=int, choices=(4, 5), default=4,
                     help='4: shoulder, elbow, wrist, tip; 5: the disc center too')
+    ap.add_argument('--roi', help='x0,y0,x1,y1 in fractions: look for markers only there')
     ap.add_argument('--out', default=OUT_DIR)
     args = ap.parse_args(argv)
+    roi = parse_roi(args.roi)
     import cv2
     os.makedirs(args.out, exist_ok=True)
     frame, accel, rot = capture()
     up = imu_to_camera(accel, rot)
     down = image_down(up)
     pitch = camera_pitch_deg(up)
+    print(f'camera pitch {pitch:+.1f} deg (level within {PITCH_WARN_DEG:g} for clean angles), '
+          f'down in the picture ({down[0]:+.3f}, {down[1]:+.3f})', flush=True)
     names = NAMES_5 if args.markers == 5 else NAMES_4
-    found, mask = blue_markers(frame, len(names))
+    found, mask = blue_markers(frame, len(names), roi)
     stamp = time.strftime('%Y-%m-%d_%H%M%S')
     cv2.imwrite(os.path.join(args.out, f'{stamp}_raw.jpg'), frame)
     cv2.imwrite(os.path.join(args.out, f'{stamp}_mask.png'), mask)

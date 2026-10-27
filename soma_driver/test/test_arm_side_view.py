@@ -82,3 +82,11 @@ def test_it_never_reaches_the_driver():
     source = (REPO / 'scripts' / 'arm_side_view.py').read_text()
     for word in ('docker', 'ros2', '/soma/arm', 'allow_real', 'rclpy'):
         assert word not in source
+
+
+def test_roi_parses_fractions_and_refuses_nonsense():
+    assert sv.parse_roi('0.3,0.1,0.8,1') == (0.3, 0.1, 0.8, 1.0)
+    assert sv.parse_roi(None) is None
+    for bad in ('0.8,0,0.3,1', '0,0,1', '0,0,1.5,1'):
+        with pytest.raises(ValueError):
+            sv.parse_roi(bad)
