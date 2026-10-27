@@ -773,3 +773,10 @@ change they forced.
   on the base by a point-mass model fitted to the 11.4 of a straight arm
   (the wave, about 9.7 by the same model, has held); the fold 0.3 rad
   short of the measured clean curl. Not run on the metal yet.
+- `hello` ran clean in its first form. Andres asked for a higher arm, a
+  more open elbow and the palm waving with the wrist pitch instead of the
+  roll. Second form: base -2.08 and shoulder -0.28 (0.1 inside their real
+  reach: the upper arm at about 135 deg, as high as these two joints go;
+  truly vertical is out of reach on this bench), elbow -0.35, the palm
+  swinging -0.025 .. -0.675 on the pitch, five times with the gripper.
+  Base 5.7 to 7.0 kg.cm at the top by the model.
