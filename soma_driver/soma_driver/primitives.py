@@ -133,11 +133,9 @@ POSES.update({f'elbow_reach_{round(-100 * e)}': _wave_pose(yaw=_WAVE_YAW, elbow=
 # elbow folding on the way, opens the elbow at the top and waves the
 # forearm with it five times while the gripper opens and closes, and
 # comes down. Designed against the bench, not against the eye:
-#  - As high as the metal goes: base -2.08 and shoulder -0.28 sit 0.1
-#    rad inside their real reach and put the upper arm about 135 deg
-#    forward, the most these two joints can give (truly vertical is out
-#    of reach). Gravity still loads one side of the gear play at the top,
-#    so the limit cycle of the hanging zero has nowhere to live.
+#  - The base at the top of its reach (-2.08, 0.1 inside the real -2.18).
+#    Gravity still loads one side of the gear play at the top, so the
+#    limit cycle of the hanging zero has nowhere to live.
 #  - Third form. First: base -2.0, elbow -0.5, rolling the wrist (clean).
 #    Second: the palm waving on the wrist pitch, elbow -0.35 (clean).
 #    Third: the elbow nearly straight, waving +0.15 .. -0.45 (clean,
@@ -146,23 +144,28 @@ POSES.update({f'elbow_reach_{round(-100 * e)}': _wave_pose(yaw=_WAVE_YAW, elbow=
 #    swings -0.25 .. -0.75, the forearm about 150 .. 178 deg: it stops
 #    just short of vertical, because past it the gravity torque on the
 #    elbow changes sign mid-swing, the same zero crossing that drives the
-#    gear-play limit cycle. The base holds about 6 kg.cm up there, the
-#    least of the four forms; the tip about 290 mm above the shoulder.
+#    gear-play limit cycle. Fifth, Andres's call: the SHOULDER opened
+#    outward (it sat folded at -0.28) so the wave stands farther from the
+#    body, upper arm about 110 deg (shoulder +0.16), the forearm still
+#    about 150 .. 176 deg. The more the shoulder opens, the more the
+#    elbow must fold to keep the forearm up, and the fold has a measured
+#    end (clean at -1.30, touched at -1.60, likely the forearm on its own
+#    arm: the forearm was moving away from the box). A horizontal upper
+#    arm would need -1.54; 110 deg needs -1.15, 0.15 short of clean.
 #  - The fold carries the load: by the URDF masses a straight arm at 90
 #    deg asks the base for 11.4 kg.cm, above the 10 a MG996R gives. The
 #    rise curls the elbow to -1.0 by the time the base is at -1.0, the
 #    worst point of the path, about 9.4 kg.cm, under the 9.7 the wave asks
 #    and has held. (A point-mass
 #    model fitted to that 11.4; relative, not a measurement.)
-#  - The fold stays 0.3 rad short of ELBOW_REACH_CLEAN, measured with
-#    the base LOWER (-0.87), where the body is closer; no step moves a
-#    joint more than 1 rad.
+#  - The fold stays at least 0.15 rad short of ELBOW_REACH_CLEAN; no step
+#    moves a joint more than 1 rad.
 #  - Flowing: every dwell is the travel time plus 0.1 s, so the motion
 #    never stops to wait, and each step is one minimum-jerk move of
 #    several joints at once.
-_HELLO_TOP = dict(yaw=-2.08, shoulder=-0.28, wrist_pitch=0.0, wrist_roll=0.0)
-_HELLO_ELBOW = -0.50        # the forearm about 164 deg
-_HELLO_SWING = 0.25         # +-14 deg: out -0.25 (about 150), in -0.75 (about 178)
+_HELLO_TOP = dict(yaw=-2.08, shoulder=0.16, wrist_pitch=0.0, wrist_roll=0.0)
+_HELLO_ELBOW = -0.925       # the forearm about 163 deg
+_HELLO_SWING = 0.225        # +-13 deg: out -0.70 (about 150), in -1.15 (about 176)
 POSES.update({
     'hello_rise': _right(yaw=-1.0, shoulder=0.0, elbow=-1.0, wrist_pitch=0.0,
                          wrist_roll=0.0, finger_l=0.0),

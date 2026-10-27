@@ -33,9 +33,10 @@ def test_every_arm_value_keeps_a_tenth_inside_the_real_limits():
             assert spec.lower + 0.1 <= value <= spec.upper - 0.1, f'{pose}.{name}'
 
 
-def test_the_fold_stays_well_short_of_where_the_body_was_measured():
+def test_the_fold_stays_short_of_where_the_forearm_was_measured_clean():
+    # 0.3 until the fifth form; 0.15 since the open shoulder needs the fold.
     for pose in POSE_NAMES:
-        assert POSES[pose]['right_arm_elbow_joint'] >= ELBOW_REACH_CLEAN + 0.3 - 1e-9, pose
+        assert POSES[pose]['right_arm_elbow_joint'] >= ELBOW_REACH_CLEAN + 0.15 - 1e-9, pose
 
 
 def test_the_elbow_is_folded_before_the_base_passes_the_horizontal():
@@ -70,11 +71,11 @@ def test_the_forearm_never_crosses_the_vertical_while_it_waves():
         assert forearm < 3.14159 - 0.03, pose
 
 
-def test_the_top_is_as_high_as_the_base_and_shoulder_go():
+def test_the_base_tops_out_and_the_shoulder_opens_outward():
     top = POSES['hello_top']
-    for joint in ('yaw', 'shoulder'):
-        name = f'right_arm_{joint}_joint'
-        assert top[name] == pytest.approx(SERVO_MAP[name].lower + 0.1, abs=0.01)
+    name = 'right_arm_yaw_joint'
+    assert top[name] == pytest.approx(SERVO_MAP[name].lower + 0.1, abs=0.01)
+    assert top['right_arm_shoulder_joint'] > 0.0   # opened, not folded in
 
 
 def test_it_flows_every_dwell_is_its_travel_time_plus_a_tenth():

@@ -792,3 +792,13 @@ change they forced.
   -0.25 .. -0.75 around -0.50 (forearm about 150 .. 178 deg), stopping
   short of vertical so the elbow's gravity torque never flips mid-swing.
   Base about 6 kg.cm at the top.
+- `hello`, fourth form: Andres pointed at the shoulder, folded in at
+  -0.28 at the top. Fifth form: the shoulder opened outward to +0.16
+  (upper arm about 110 deg), the elbow waving -0.70 .. -1.15 (forearm
+  about 150 .. 176 deg). A horizontal upper arm was asked for in spirit
+  but would need the elbow at -1.54, past the curl measured clean (-1.30)
+  and near the one that touched (-1.60). Rereading that contact: at
+  `wave_raise_2` the forearm was moving up and forward, away from the
+  box; the likelier contact is the forearm on its own arm, which depends
+  on the fold, not on the posture. The hello's fold margin went from 0.3
+  to 0.15 rad. First run of the new top in step mode is advised.
