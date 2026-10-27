@@ -915,3 +915,26 @@ center to fingertip with the arm hanging limp (about 339 if straight).
   the hanging tip 36.8 mm over the plate against 38 measured (pinned by
   a test, 3 mm). The reach map changed with it: the right lane loses its
   front reach above about 40 mm (its short yaw and wrist bands).
+- Vertical rise of the shoulder axis over the disc axis, read by Andres:
+  about 6.8 mm ("no way to measure it exactly"); horizontal 31.5. With
+  the 32.7 clavicle that is a rise of 7 to 9 mm, not the 15.6 the tape
+  strips gave the camera. The FK keeps the camera's angle for now (it
+  predicts the hanging tip at 36.8 against 38); with a 7 to 9 mm rise it
+  would say 29 to 33. A 5 to 9 mm residual that rough measurements
+  cannot split: it goes to a least-squares fit on the tape-cross trials
+  (mount_h, clavicle_angle, the base and shoulder scales).
+- No CAD for the kit exists that we could find. It looks like the
+  ARM-21N2 family (CHUNYE): its listings give "head 66 mm" and "forearm
+  156 mm", matching our caliper's wrist 66.3 and upper arm + forearm
+  80 + 76: an independent check of those links, nothing on the clavicle.
+- Physics of the first reach test, left lane, gripper vertical, by the
+  model: reaching under the hanging tip (37 mm) needs the base to swing
+  the clavicle down, so every pose there pairs a big base angle (-0.85
+  to -1.65 rad) with a big opposite shoulder angle (+0.7 to +1.2). Loads
+  are small (base at most 4.7 kg.cm, shoulder 4.6). The error budget is
+  not: gravity sag through the measured gear play drops the tip 2 to 10
+  mm (systematic, predictable), and the scale uncertainty of the joint
+  probe (5 % a joint, 9 % the shoulder) moves it 6 to 40 mm at 1 sigma,
+  growing with the joint angles. Best ground: tip 30 mm over the plate,
+  x from -30 to 0 (about 2 mm of sag, 6 mm of scale). Far from home the
+  5 mm target needs the scales fitted from the trials, not the phone.
