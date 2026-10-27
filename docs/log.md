@@ -827,3 +827,9 @@ change they forced.
   the calibrated map: all inside the soft band with the 0.1 margin, the
   base at most 7.8 kg.cm by the model. Two waypoints fold the elbow
   while the base passes the horizontal. 10.8 s.
+- `hello_left` ran (Andres: "Genial"). The way down felt forced against
+  the body: it paused at the rise waypoint with the forearm folded in,
+  about 9.9 kg.cm on the base. New way down: it still crosses the
+  horizontal folded (straight, the base would see about 10.9, past the
+  servo), the shoulder opening 0.1, 0.3, 0.6, then the elbow opens below
+  the horizontal and the arm comes home away from the body (about 5.8).
