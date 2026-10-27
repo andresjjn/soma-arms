@@ -93,7 +93,7 @@ require_z() {
 echo '--- initial pose (both arms hanging at zero) ---'
 Z0=$(read_z)
 require_z "$Z0"
-echo "  tool0 z initial = ${Z0} (expected ~0.006: fingertips nearly touch the plate)"
+echo "  tool0 z initial = ${Z0} (expected ~0.005: fingertips nearly touch the plate)"
 
 echo '--- command: left elbow to -2.5 rad, clamped to its -1.8850 soft limit ---'
 # Three samples, not --once: --once exits 0.1 s after its only sample, and
@@ -113,16 +113,16 @@ kill $RSP $DRV 2>/dev/null || true
 python3 - "$Z0" "$Z1" <<'EOF'
 import sys
 z0, z1 = float(sys.argv[1]), float(sys.argv[2])
-# Hanging chain below the elbow: fore 0.075 + wrist 0.0664 + gripper to
-# tool0 0.0836 = L = 0.225 m. The -2.5 rad command overshoots and must
+# Hanging chain below the elbow (caliper, 2026-10-27): fore 0.076 + wrist
+# 0.0663 + gripper to tool0 0.0828 = L = 0.2251 m. The -2.5 rad command overshoots and must
 # clamp at the measured limit (-1.8850 rad: the calibration of 2026-10-01
 # in real radians, scale 0.96 from the joint probe of 2026-10-26), so the
 # tool rises L * (1 - cos 1.8850) = 0.295 m: the lift proves both
 # the kinematic chain and the soft-limit clamp.
 import math
-lift = 0.225 * (1 - math.cos(1.8850))
-assert abs(z0 - 0.0057) < 0.005, f'initial z {z0} != 0.0057'
-assert abs(z1 - (0.0057 + lift)) < 0.005, f'final z {z1} != {0.0057 + lift:.4f}'
+lift = 0.2251 * (1 - math.cos(1.8850))
+assert abs(z0 - 0.0052) < 0.005, f'initial z {z0} != 0.0052'
+assert abs(z1 - (0.0052 + lift)) < 0.005, f'final z {z1} != {0.0052 + lift:.4f}'
 assert abs((z1 - z0) - lift) < 0.005, f'elbow bend did not lift the tool {1000*lift:.0f} mm'
 print(f'\nSMOKE TEST OK: the left elbow lifted tool0 {1000*(z1-z0):.1f} mm, confirmed by TF')
 EOF

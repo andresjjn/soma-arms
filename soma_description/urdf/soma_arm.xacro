@@ -51,17 +51,20 @@
 -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-  <!-- ============ dimensions, MEASURED 2026-08-05 ============
+  <!-- ============ dimensions, MEASURED 2026-08-05, re-measured 2026-10-27 ============
        Every literal here has a provenance row in config/dimensions.yaml;
        test_dimensions_sync.py keeps the two in agreement. -->
   <xacro:property name="disc_r"         value="0.02455"/> <!-- slew disc, the one that rotates -->
-  <xacro:property name="disc_h"         value="0.0074"/>  <!-- disc protrusion from its box -->
-  <xacro:property name="clavicle_len"   value="0.033"/>   <!-- disc center to shoulder axis -->
-  <xacro:property name="upper_len"      value="0.0793"/>  <!-- shoulder to elbow -->
-  <xacro:property name="fore_len"       value="0.075"/>   <!-- elbow to wrist pitch -->
-  <xacro:property name="wrist_len"      value="0.0664"/>  <!-- wrist pitch to gripper mount face -->
-  <xacro:property name="gripper_base_h" value="0.0179"/>  <!-- mount face to finger gear axes -->
-  <xacro:property name="finger_len"     value="0.0657"/>  <!-- gear axis to fingertip -->
+  <xacro:property name="disc_h"         value="0.0097"/>  <!-- disc protrusion from its box -->
+  <xacro:property name="clavicle_len"   value="0.0327"/>   <!-- disc center to shoulder axis -->
+  <xacro:property name="upper_len"      value="0.0800"/>  <!-- shoulder to elbow -->
+  <xacro:property name="fore_len"       value="0.0760"/>   <!-- elbow to wrist pitch -->
+  <xacro:property name="wrist_len"      value="0.0663"/>  <!-- wrist pitch to gripper mount face -->
+  <xacro:property name="gripper_base_h" value="0.0178"/>  <!-- mount face to finger gear axes -->
+  <xacro:property name="finger_len"     value="0.0650"/>  <!-- gear axis to fingertip -->
+  <xacro:property name="tool_closed_len" value="0.150"/>  <!-- wrist pitch axis to fingertip, closed, one reading (the IK tool) -->
+  <xacro:property name="tool_open_len"  value="0.100"/>   <!-- wrist pitch axis to the farthest point, fully open -->
+  <xacro:property name="plane_offset"   value="0.02725"/> <!-- working plane outboard of the disc face: a DH d -->
   <xacro:property name="finger_sep"     value="0.0257"/>  <!-- between the two gear axes -->
   <xacro:property name="plate_w"        value="0.0319"/>  <!-- link plate width -->
   <xacro:property name="plate_t"        value="0.0528"/>  <!-- arm sandwich outer width -->
@@ -147,7 +150,9 @@
     <joint name="${prefix}shoulder_joint" type="revolute">
       <parent link="${prefix}turntable_link"/>
       <child link="${prefix}upper_arm_link"/>
-      <origin xyz="${clavicle_len} 0 ${disc_h}"/>
+      <!-- z: the disc face plus the plane offset, so the planar chain and
+           the fingertip work in the measured lane (2026-10-27). -->
+      <origin xyz="${clavicle_len} 0 ${disc_h + plane_offset}"/>
       <axis xyz="0 0 ${side}"/>
       <limit lower="${shoulder_lower}" upper="${shoulder_upper}" effort="${effort_nm}" velocity="${vel_rads}"/>
     </joint>

@@ -3,8 +3,9 @@
 
 Both arms hang from the central box with their four big joints (yaw,
 shoulder, elbow, wrist pitch) on parallel horizontal axes, so each arm is
-a planar 4R chain in its own vertical plane, 62.3 mm outboard of the bench
-centerline (mount_ly / 2 + disc_h). The fingertip center sits on the roll
+a planar 4R chain in its own vertical plane, 81 mm outboard of the bench
+centerline (tip_lane_y, measured 2026-10-27 as half the 162 mm between the
+closed tips: the disc face plus a plane offset). The fingertip center sits on the roll
 axis and never leaves that plane: the work of each arm is a LANE, a strip
 of the deck under its plane, and this script says how long that lane is.
 
@@ -57,7 +58,9 @@ def load_dimensions(path: Path = DIMENSIONS) -> dict[str, float]:
     for section in ('arm', 'bench'):
         for name, entry in doc[section]['dimensions'].items():
             dims[name] = float(entry['value'])
-    dims['tool_len'] = dims['wrist_len'] + dims['gripper_base_h'] + dims['finger_len']
+    # The tool is the one direct reading, closed (2026-10-27): the parts add
+    # to 149.1 mm, the caliper across the whole tool reads 150.0.
+    dims['tool_len'] = dims['tool_closed_len']
     return dims
 
 
@@ -66,8 +69,8 @@ def link_lengths(dims: dict[str, float]) -> tuple[float, float, float, float]:
 
 
 def lane_y(side: str, dims: dict[str, float]) -> float:
-    """Lateral position of the arm's plane in the bench frame, meters."""
-    y = dims['mount_ly'] / 2 + dims['disc_h']
+    """Lateral position of the closed fingertip's lane, meters (measured)."""
+    y = dims['tip_lane_y']
     return y if side == 'left' else -y
 
 

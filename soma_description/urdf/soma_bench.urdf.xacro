@@ -33,8 +33,9 @@
   <!-- ============ bench dimensions, measured 2026-08-05 ============
        Provenance for every literal: config/dimensions.yaml, bench section. -->
   <xacro:property name="mount_lx"     value="0.0811"/>  <!-- central box front-back -->
-  <xacro:property name="mount_ly"     value="0.1098"/>  <!-- disc seat to disc seat -->
+  <xacro:property name="mount_ly"     value="0.0881"/>  <!-- disc seat to disc seat -->
   <xacro:property name="mount_lz"     value="0.0856"/>  <!-- central box top-bottom -->
+  <xacro:property name="tip_lane_y"   value="0.081"/>   <!-- closed tip lane, half the 162 mm between tips -->
   <xacro:property name="mount_h"      value="0.343"/>   <!-- disc axis over the plate -->
   <xacro:property name="plate_lx"     value="0.220"/>
   <xacro:property name="plate_ly"     value="0.280"/>

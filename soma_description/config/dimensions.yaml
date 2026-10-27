@@ -26,13 +26,16 @@ arm:
   file: soma_description/urdf/soma_arm.xacro
   dimensions:
     disc_r:         {value: 0.02455, status: measured, source: caliper, date: 2026-08-05, measure: slew disc diameter 49.1 mm / 2 (the INNER disc that rotates with the arm; the outer ring is decorative)}
-    disc_h:         {value: 0.0074,  status: measured, source: caliper, date: 2026-08-05, measure: disc protrusion, from its outer face to the box it sits on}
-    clavicle_len:   {value: 0.033,   status: measured, source: caliper, date: 2026-08-05, measure: straight line, disc center screw to shoulder horn center screw (Andres named it the clavicle)}
-    upper_len:      {value: 0.0793,  status: measured, source: caliper, date: 2026-08-05, measure: shoulder horn screw center to elbow horn screw center}
-    fore_len:       {value: 0.075,   status: measured, source: caliper, date: 2026-08-05, measure: elbow horn screw center to wrist pitch horn screw center}
-    wrist_len:      {value: 0.0664,  status: measured, source: caliper, date: 2026-08-05, measure: wrist pitch axis to the gripper mounting face (the face carrying the gripper servo connector)}
-    gripper_base_h: {value: 0.0179,  status: measured, source: caliper, date: 2026-08-05, measure: gripper mounting face to the finger gear axes}
-    finger_len:     {value: 0.0657,  status: measured, source: caliper, date: 2026-08-05, measure: finger gear axis to fingertip}
+    disc_h:         {value: 0.0097,  status: measured, source: caliper, date: 2026-10-27, measure: disc protrusion, from the box face to the disc outer face (7.4 on 2026-08-05)}
+    clavicle_len:   {value: 0.0327,  status: measured, source: caliper, date: 2026-10-27, measure: straight line, disc center screw to shoulder horn center screw (Andres named it the clavicle; 33.0 on 2026-08-05)}
+    upper_len:      {value: 0.0800,  status: measured, source: caliper, date: 2026-10-27, measure: shoulder horn screw center to elbow horn screw center (79.3 on 2026-08-05)}
+    fore_len:       {value: 0.0760,  status: measured, source: caliper, date: 2026-10-27, measure: elbow horn screw center to wrist pitch horn screw center (75.0 on 2026-08-05)}
+    wrist_len:      {value: 0.0663,  status: measured, source: caliper, date: 2026-10-27, measure: wrist pitch axis to the gripper mounting face (66.4 on 2026-08-05)}
+    gripper_base_h: {value: 0.0178,  status: measured, source: caliper, date: 2026-10-27, measure: gripper mounting face to the finger gear axes (17.9 on 2026-08-05)}
+    finger_len:     {value: 0.0650,  status: measured, source: caliper, date: 2026-10-27, measure: finger gear axis to fingertip (65.7 on 2026-08-05)}
+    tool_closed_len: {value: 0.150, status: measured, source: caliper, date: 2026-10-27, measure: wrist pitch axis to fingertip, gripper CLOSED, in one reading; the parts above add to 149.1 and the direct reading wins (the IK tool length, the TCP for going to points)}
+    tool_open_len:   {value: 0.100, status: measured, source: caliper, date: 2026-10-27, measure: wrist pitch axis to the farthest point, gripper fully OPEN (100 to 100.5); open, the pinions stand out further than the fingers. The TCP moves about 50 mm with the opening; for a grasp, measure it at the grasp opening}
+    plane_offset:    {value: 0.02725, status: measured, source: derived, date: 2026-10-27, measure: outboard shift of the arm's working plane from the disc outer face (a Denavit-Hartenberg d along the parallel axes; changes the lane, never x or z). tip_lane_y - mount_ly/2 - disc_h = 81 - 44.05 - 9.7 mm. The plane is not single along the arm (about 90.5 at the shoulder); the tip's is the one the IK needs}
     finger_sep:     {value: 0.0257,  status: measured, source: caliper, date: 2026-08-05, measure: distance between the two finger gear axes}
     plate_w:        {value: 0.0319,  status: measured, source: caliper, date: 2026-08-05, measure: link plate width, seen from the robot front}
     plate_t:        {value: 0.0528,  status: measured, source: caliper, date: 2026-08-05, measure: outer width of the arm sandwich at its widest, shoulder to elbow}
@@ -52,8 +55,9 @@ bench:
   file: soma_description/urdf/soma_bench.urdf.xacro
   dimensions:
     mount_lx:     {value: 0.0811, status: measured, source: caliper, date: 2026-08-05, measure: central box, outer side front-to-back}
-    mount_ly:     {value: 0.1098, status: measured, source: caliper, date: 2026-08-05, measure: central box width, disc seat face to disc seat face}
+    mount_ly:     {value: 0.0881, status: measured, source: caliper, date: 2026-10-27, measure: central box width under the discs, derived: disc outer face to disc outer face 107.5 minus twice the 9.7 protrusion (109.8 on 2026-08-05, measured as seat to seat)}
     mount_lz:     {value: 0.0856, status: measured, source: caliper, date: 2026-08-05, measure: central box, outer side top-to-bottom}
+    tip_lane_y:   {value: 0.081,  status: measured, source: caliper, date: 2026-10-27, measure: half the distance between the two closed gripper tips with both arms hanging (162 mm); each arm's lane, the y the IK works on. The 180 of 2026-10-26 (ruler, arms raised) is discarded}
     mount_h:      {value: 0.343,  status: measured, source: tape measure, date: 2026-08-05, measure: disc center (the J1 axis line) to the base plate top surface, vertical}
     plate_lx:     {value: 0.220,  status: measured, source: tape measure, date: 2026-08-05, measure: base plate, front-to-back}
     plate_ly:     {value: 0.280,  status: measured, source: tape measure, date: 2026-08-05, measure: base plate, left-to-right}

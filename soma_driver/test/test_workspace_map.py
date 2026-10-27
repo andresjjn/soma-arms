@@ -31,18 +31,24 @@ def runs(z_mm, side, dims, **kw):
     return wm.reach_runs(z_mm / 1000.0, side, dims, **COARSE, **kw)
 
 
-def test_home_fingertips_sit_5_7_mm_above_the_plate(dims):
-    # The README and the smoke test already claim this number.
+def test_home_fingertips_sit_mount_h_minus_the_chain_above_the_plate(dims):
+    # 5.7 mm on 2026-08-05 (photos agreed). Re-measured chain 2026-10-27:
+    # 32.7 + 80 + 76 + 150 = 338.7 mm under a 343 mm disc, 4.3 mm. The bench
+    # read 38.7 mm that day: mount_h is to be re-measured (disc to tip with
+    # the arm hanging tells whether the arm or the height changed).
     pts, phi = wm.fk((0.0, 0.0, 0.0, 0.0), dims)
     assert pts[-1][0] == pytest.approx(0.0, abs=1e-9)
-    assert pts[-1][1] == pytest.approx(0.0057, abs=1e-4)
+    assert pts[-1][1] == pytest.approx(dims['mount_h'] - 0.3387, abs=1e-6)
     assert phi == 0.0
 
 
-def test_the_left_elbow_bend_of_the_smoke_test_lifts_the_tool_311_mm(dims):
+def test_the_left_elbow_bend_of_the_smoke_test_lifts_the_tool_296_mm(dims):
+    # The smoke test clamps the left elbow at its real limit, -1.8850 rad;
+    # forearm 76 + direct tool 150 = 226 mm swing up by 1 - cos. (The URDF
+    # builds the tool from its parts, 149.1 mm, and TF there reads 1 mm less.)
     rest, _ = wm.fk((0.0, 0.0, 0.0, 0.0), dims)
-    bent, _ = wm.fk((0.0, 0.0, -1.9635, 0.0), dims)
-    assert bent[-1][1] - rest[-1][1] == pytest.approx(0.311, abs=1e-3)
+    bent, _ = wm.fk((0.0, 0.0, -1.8850, 0.0), dims)
+    assert bent[-1][1] - rest[-1][1] == pytest.approx(0.296, abs=1e-3)
 
 
 def test_ik_round_trip_recovers_every_configuration(dims):
@@ -64,8 +70,11 @@ def test_unreachable_targets_give_no_branch(dims):
 
 
 def test_lanes_are_symmetric_and_outboard_of_the_box(dims):
-    assert wm.lane_y('left', dims) == pytest.approx(0.0623, abs=1e-6)
-    assert wm.lane_y('right', dims) == pytest.approx(-0.0623, abs=1e-6)
+    # 162 mm between the closed tips, both arms hanging (2026-10-27).
+    assert wm.lane_y('left', dims) == pytest.approx(0.081, abs=1e-6)
+    assert wm.lane_y('right', dims) == pytest.approx(-0.081, abs=1e-6)
+    # The model's own geometry lands on the same lane: box, disc, offset.
+    assert dims['mount_ly'] / 2 + dims['disc_h'] + dims['plane_offset'] == pytest.approx(0.081)
     assert wm.lane_y('left', dims) > dims['mount_ly'] / 2
 
 
@@ -133,7 +142,7 @@ def test_markdown_table_has_one_row_per_deck(dims):
     assert '| 40 | 60 |' in table
 
 
-def test_svg_is_well_formed_with_two_lanes_124_6_mm_apart(dims):
+def test_svg_is_well_formed_with_two_lanes_162_mm_apart(dims):
     svg = wm.render_svg(dims, {'left': [(-120, 130)], 'right': [(-120, 120)]},
                         {'left': [-70.0, 0.0, 70.0], 'right': None}, 46, 40)
     root = ET.fromstring(svg)
@@ -141,6 +150,6 @@ def test_svg_is_well_formed_with_two_lanes_124_6_mm_apart(dims):
     lanes = root.findall(".//s:line[@class='lane']", ns)
     assert len(lanes) == 2
     y = {ln.get('id'): float(ln.get('y1')) for ln in lanes}
-    assert y['left_lane_0'] - y['right_lane_0'] == pytest.approx(-124.6, abs=0.2)
+    assert y['left_lane_0'] - y['right_lane_0'] == pytest.approx(-162.0, abs=0.2)
     assert len(root.findall(".//s:rect[@class='pocket']", ns)) == 3
     assert root.get('width').endswith('mm')

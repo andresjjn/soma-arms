@@ -853,3 +853,30 @@ change they forced.
   to the body, the shoulder too closed. The low waypoint of the descent
   only (`hello_left_fall`) is the rise with the shoulder 0.25 rad more
   open: upper arm 57 -> 43 deg, base 9.6 kg.cm held instead of 9.9.
+
+## 2026-10-27, dimensions re-measured for the inverse kinematics
+
+Andres re-measured the right arm with a new digital caliper (the left is
+its mirror) before trusting the IK (`scripts/workspace_map.py`). Chain:
+clavicle 32.7 (33.0), upper 80.0 (79.3), fore 76.0 (75.0), wrist 66.3
+(66.4), gripper base 17.8 (17.9), finger 65.0 (65.7) mm. The tool read in
+one go, wrist pitch axis to fingertip: 150.0 closed (the parts add to
+149.1; the direct reading is the IK's tool), about 100 fully open (the
+pinions stand out past the fingers; the TCP moves about 50 mm with the
+opening). Disc outer faces 107.5 apart, each disc 9.7 proud of the box
+(7.4 in August), so the box is about 88.1 under the discs (109.8 then).
+Closed tips 162 apart, arms hanging: the lane is 81 mm, not the 62.3 the
+model had (disc face) nor the 180 of 2026-10-26 (discarded).
+
+Applied: dimensions.yaml and the xacro (measured, caliper, 2026-10-27);
+a `plane_offset` of 27.25 mm along the parallel axes (a DH d: it moves
+the lane, never x or z) at the shoulder origin, so the model's planar
+chain works in the measured lane; `workspace_map.py` uses the measured
+lane and the direct tool. `mount_h` (343) is NOT changed: Andres read
+about 335 for the disc and 38.7 mm from the closed tip to the plate,
+while 338.7 mm of chain under a 335 disc would put the tip under the
+plate. The arm cannot be folded 30 to 45 deg unseen, and the right elbow
+read +5 deg at zero the day before (under 1 mm of tip height), so the
+likelier change is the disc height: the system was moved on 2026-10-26
+and the column belongs to a monitor stand. One reading decides it: disc
+center to fingertip with the arm hanging limp (about 339 if straight).
