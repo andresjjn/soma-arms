@@ -177,14 +177,33 @@ POSES.update({
 })
 
 
-def _flowing(poses: tuple[str, ...], hold_s: float = 0.1) -> tuple[tuple[str, float], ...]:
-    """Each pose with a dwell of exactly its travel time plus `hold_s`."""
+def _flowing(poses: tuple[str, ...], hold_s: float = 0.1,
+             blend: float | None = None) -> tuple[tuple[str, float], ...]:
+    """Each pose with a dwell of its travel time plus `hold_s`.
+
+    With `blend` (0..1) every pose but the last is left at that fraction
+    of its travel instead: the next target reaches the driver while the
+    joints still move, and trajectory.py replans from the current position
+    and velocity, so the arm flows through the pose instead of stopping on
+    it (a rest-to-rest minimum-jerk segment always ends at zero speed).
+    The arm then passes NEAR each intermediate pose, cutting the corner;
+    the last pose (home) is always reached and held.
+    """
     state, out = dict(HOME), []
-    for pose in poses:
+    for i, pose in enumerate(poses):
         targets = POSES[pose]
-        out.append((pose, round(settle_time_s(targets, state) + hold_s, 2)))
+        travel = settle_time_s(targets, state)
+        last = i == len(poses) - 1
+        dwell = travel + hold_s if blend is None or last else max(travel * blend, 0.2)
+        out.append((pose, round(dwell, 2)))
         state.update(targets)
     return tuple(out)
+
+
+# Sequences that flow through their poses (see _flowing's blend), with the
+# fraction of each travel after which the next pose is sent. The contract
+# tests check these against a tick-by-tick simulation of the driver.
+BLENDED: dict[str, float] = {}
 
 
 def _camera_sweep(side: str) -> tuple[tuple[str, float], ...]:
@@ -336,9 +355,14 @@ POSES.update({
     'hello_left_lift': _left(yaw=-1.8, shoulder=0.1, elbow=-0.8, wrist_pitch=-0.2,
                              wrist_roll=0.0, finger_l=0.0),
 })
+# Flowing (Andres, after it ran: no pauses between steps). 0.7: each pose
+# is left at 70 % of its travel, where a minimum-jerk segment has covered
+# about 84 % of the way.
+BLENDED['hello_left'] = 0.7
 SEQUENCES['hello_left'] = _flowing(
     ('home', 'hello_left_rise', 'hello_left_lift', 'hello_left_1', 'hello_left_2')
     + ('hello_left_3', 'hello_left_4') * 5
     # Down: the rise played backwards, through the top (Andres: the way
     # up works, so the way down is the same road).
-    + ('hello_left_1', 'hello_left_lift', 'hello_left_rise', 'home'))
+    + ('hello_left_1', 'hello_left_lift', 'hello_left_rise', 'home'),
+    blend=BLENDED['hello_left'])

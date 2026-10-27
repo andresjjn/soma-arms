@@ -836,3 +836,16 @@ change they forced.
 - Andres preferred the plain answer: the way down is the way up played
   backwards (4, 1, lift, rise, home), the road already proven on the
   metal. The opened descent was dropped before it ran.
+- `hello_left` with the reversed descent ran fine. Andres asked for no
+  pauses between steps. The pauses were not the dwells (travel + 0.1 s)
+  but the segments themselves: a rest-to-rest minimum-jerk segment ends
+  at zero speed on every pose. The driver already replans from the
+  current position and velocity (trajectory.py), so `_flowing` gained a
+  `blend`: each pose is sent on at 70 % of its travel and the arm flows
+  through it; only home is reached and held. The dwell contract test now
+  admits this only for sequences declared in BLENDED, and a new test runs
+  the driver's own planner tick by tick over the sequence: arm joints stay
+  in their soft band and within 0.1 rad of their poses' span (worst 0.019
+  rad, the wrist pitch); the gripper may overshoot its closed stop by 0.02
+  in the plan, where the pulse saturates. 10.8 s became 7.0 s, the wave
+  keeps its full amplitude.

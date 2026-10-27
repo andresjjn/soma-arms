@@ -10,7 +10,8 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from soma_driver.primitives import (  # noqa: E402
+from soma_driver.primitives import (
+    BLENDED,  # noqa: E402
     COMMANDED_JOINTS, HOME, OFF_BENCH, POSES, SEQUENCES,
     pose_targets, sequence_steps, settle_time_s)
 from soma_driver.servo_map import MIMIC_JOINTS, SERVO_MAP  # noqa: E402
@@ -81,11 +82,22 @@ class TestSequences:
 
     @pytest.mark.parametrize('seq', sorted(SEQUENCES))
     def test_every_dwell_covers_the_travel_time(self, seq):
-        """Every dwell must outlast the worst-case minimum-jerk travel."""
+        """Every dwell must outlast the worst-case minimum-jerk travel.
+
+        Except in a sequence declared in BLENDED (2026-10-26): there the
+        next pose is sent at a declared fraction of the travel, on purpose,
+        so the arm flows instead of stopping on every pose. Even then the
+        LAST step (home) must be reached; and TestBlendedSequences runs
+        the driver's own planner over the whole sequence to prove the
+        corner cutting stays inside the soft band and the poses' span."""
+        blend = BLENDED.get(seq)
+        steps = SEQUENCES[seq]
         current = dict(HOME)
-        for pose, dwell in SEQUENCES[seq]:
+        for i, (pose, dwell) in enumerate(steps):
             targets = pose_targets(pose)
-            assert dwell >= settle_time_s(targets, current), (
+            travel = settle_time_s(targets, current)
+            needed = travel if blend is None or i == len(steps) - 1 else travel * blend
+            assert dwell >= needed - 0.011, (
                 f'{seq}: dwell {dwell}s after {pose} shorter than the ramp')
             current.update(targets)
 
@@ -110,3 +122,46 @@ class TestAccessors:
             pose_targets('backflip')
         with pytest.raises(KeyError):
             sequence_steps('backflip')
+
+
+class TestBlendedSequences:
+    """A flowing sequence, simulated tick by tick with the driver's own
+    planner (trajectory.JointMotion, the clamp of servo_map), exactly as
+    the player would feed it: publish, sleep the dwell, publish the next.
+    Corner cutting must keep every ARM joint inside its soft band and
+    within 0.1 rad of the span its own poses cover, and the sequence must
+    end settled at home. A finger's replanned curve may overshoot its
+    closed stop by a little: the pulse saturates there (command_to_us
+    clamps), the same allowance test_player makes for fingers, so a
+    finger is judged by the pulse it would send."""
+
+    DT = 0.02
+
+    @pytest.mark.parametrize('seq', sorted(BLENDED))
+    def test_the_flow_stays_inside_what_the_poses_describe(self, seq):
+        from soma_driver.trajectory import JointMotion
+        motion = {n: JointMotion(HOME[n], SERVO_MAP[n].max_rate) for n in HOME}
+        span = {n: [HOME[n], HOME[n]] for n in HOME}
+        for pose, dwell in SEQUENCES[seq]:
+            for name, value in pose_targets(pose).items():
+                motion[name].set_target(SERVO_MAP[name].clamp(value))
+                span[name] = [min(span[name][0], value), max(span[name][1], value)]
+            for _ in range(round(dwell / self.DT)):
+                for name, m in motion.items():
+                    q = m.step(self.DT)
+                    spec = SERVO_MAP[name]
+                    if 'finger' in name:
+                        lo_us, hi_us = sorted((spec.min_us, spec.max_us))
+                        assert lo_us <= spec.command_to_us(q) <= hi_us
+                        continue
+                    assert spec.lower - 1e-9 <= q <= spec.upper + 1e-9, (seq, pose, name)
+                    lo, hi = span[name]
+                    assert lo - 0.1 <= q <= hi + 0.1, (seq, pose, name, q)
+        for name, m in motion.items():
+            for _ in range(200):
+                m.step(self.DT)
+            assert m.position == pytest.approx(HOME[name], abs=1e-6), name
+
+    @pytest.mark.parametrize('seq', sorted(BLENDED))
+    def test_a_blend_is_a_fraction(self, seq):
+        assert 0.5 <= BLENDED[seq] < 1.0
