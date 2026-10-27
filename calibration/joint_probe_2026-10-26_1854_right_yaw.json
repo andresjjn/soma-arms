@@ -1,0 +1,37 @@
+{
+  "arm": "right",
+  "joint": "yaw",
+  "targets": [
+    0.0,
+    -0.2,
+    -0.4,
+    -0.6
+  ],
+  "points": [
+    {
+      "commanded_rad": 0.0,
+      "measured_deg": 3.0
+    },
+    {
+      "commanded_rad": -0.2,
+      "measured_deg": 3.0
+    },
+    {
+      "commanded_rad": -0.4,
+      "measured_deg": 15.0
+    },
+    {
+      "commanded_rad": -0.6,
+      "measured_deg": 24.0
+    }
+  ],
+  "stopped": "",
+  "fit": {
+    "scale": 0.6545,
+    "offset_deg": 0.0,
+    "max_residual_deg": 4.5,
+    "points": 4,
+    "us_per_rad_real": 972.7
+  },
+  "date": "2026-10-26T23:56:23"
+}

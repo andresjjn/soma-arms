@@ -696,3 +696,38 @@ change they forced.
     against 32 deg from 0 to -0.6): a zero offset shifts readings, it
     cannot shrink travel. The scale belongs to each servo, not to the
     model: SERVO_MAP needs one scale per joint, not one US_PER_RAD.
+- The other six planar joints, same procedure (19:00 to 19:07). Some
+  runs read negative: the phone was turned, not the joint (every one of
+  these joints passed its sign check); magnitudes only below. Fitted
+  twice: through every point, and through the loaded points only
+  (without the hanging 0.0). The loaded fits are tighter (residuals 0.0
+  to 1.0 deg) and run 2 to 8 deg below the origin: with the link hanging,
+  gravity torque is zero and the joint rests anywhere in its gear play;
+  once loaded, gravity holds it against one side. The hanging point is
+  inside the play, so it biases a fit through it, and the loaded lag
+  measures the play: largest at the bases (3 to 8 deg, the whole arm on
+  them), smallest at the wrists (about 1 deg). This is the play behind
+  the oscillation at zero.
+
+  | joint | scale, loaded points | runs |
+  |---|---|---|
+  | right yaw | 0.83 (0.83, 0.83, 0.92) | 3 |
+  | right shoulder | 0.87 | 1, 11.5 deg of span |
+  | right elbow | 0.81 (0.83, 0.79) | 2 |
+  | right wrist pitch | 0.83 | 1 |
+  | left yaw | 0.87 | 1 |
+  | left shoulder | 1.05 | 1, 11.5 deg of span |
+  | left elbow | 0.96 | 1 |
+  | left wrist pitch | 0.92 | 1 |
+
+  A 1 deg phone over 23 deg of span is about +-5 % per scale, +-9 % for
+  the shoulders. The right arm reads 0.81 to 0.87 on every joint, the
+  left 0.87 to 1.05: the pattern follows the board (right on 0x40, left
+  on 0x43) more than the servo. A PCA9685 whose oscillator runs fast
+  shortens every pulse on that board by the same factor; prescale 121
+  assumes 25 MHz and was never checked against a meter. To measure the
+  PWM frequency of each board before any scale goes into SERVO_MAP.
+- The right forearm and the right gripper both read +5 deg at command
+  0 (the left ones 0): the right elbow's zero holds the forearm about
+  5 deg forward, and the gripper reading carries it. A zero correction
+  of about 65 us toward the hang, to be applied with the scales.

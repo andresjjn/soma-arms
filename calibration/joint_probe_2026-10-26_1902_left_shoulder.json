@@ -1,0 +1,23 @@
+{
+  "arm": "left",
+  "joint": "shoulder",
+  "targets": [
+    0.0,
+    -0.1,
+    -0.2,
+    -0.3
+  ],
+  "points": [
+    {
+      "commanded_rad": 0.0,
+      "measured_deg": 0.0
+    },
+    {
+      "commanded_rad": -0.1,
+      "measured_deg": -3.0
+    }
+  ],
+  "stopped": "quit",
+  "fit": null,
+  "date": "2026-10-27T00:03:19"
+}
