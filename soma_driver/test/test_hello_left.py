@@ -49,11 +49,7 @@ def test_it_ends_home_closed():
     assert SEQ[-1][0] == 'home' and HOME['left_arm_finger_l_joint'] == 0.0
 
 
-def test_on_the_way_down_the_shoulder_opens_and_the_elbow_opens_last():
-    down = [p for p, _ in SEQ][-4:-1]
-    assert down == ['hello_left_lift', 'hello_left_down_1', 'hello_left_down_2']
-    shoulders = [POSES[p]['left_arm_shoulder_joint'] for p in down]
-    assert shoulders == sorted(shoulders) and shoulders[-1] >= 0.5
-    assert POSES['hello_left_down_2']['left_arm_elbow_joint'] > -0.5
-    # it crosses the horizontal folded: the base above -1.4 sees the elbow in
-    assert POSES['hello_left_down_1']['left_arm_elbow_joint'] <= -0.9
+def test_the_way_down_is_the_way_up_backwards():
+    poses = [p for p, _ in SEQ]
+    up = poses[:poses.index('hello_left_1') + 1]
+    assert poses[-len(up):] == list(reversed(up))

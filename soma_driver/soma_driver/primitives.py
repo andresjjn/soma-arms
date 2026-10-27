@@ -335,19 +335,10 @@ POSES.update({
                              wrist_roll=0.0, finger_l=0.0),
     'hello_left_lift': _left(yaw=-1.8, shoulder=0.1, elbow=-0.8, wrist_pitch=-0.2,
                              wrist_roll=0.0, finger_l=0.0),
-    # The way down (Andres, after the first run: it felt forced against the
-    # body; the old fall stopped at hello_left_rise, forearm folded toward
-    # the body, about 9.9 kg.cm on the base). It still crosses the
-    # horizontal folded (a straight arm there would ask about 10.9, past
-    # the servo), the shoulder opening all the way: 0.1, 0.3, 0.6; then,
-    # below the horizontal, the elbow opens and the arm comes down away
-    # from the body at about 5.8.
-    'hello_left_down_1': _left(yaw=-1.3, shoulder=0.3, elbow=-1.0, wrist_pitch=-0.1,
-                               wrist_roll=0.0, finger_l=0.0),
-    'hello_left_down_2': _left(yaw=-0.9, shoulder=0.6, elbow=-0.3, wrist_pitch=0.0,
-                               wrist_roll=0.0, finger_l=0.0),
 })
 SEQUENCES['hello_left'] = _flowing(
     ('home', 'hello_left_rise', 'hello_left_lift', 'hello_left_1', 'hello_left_2')
     + ('hello_left_3', 'hello_left_4') * 5
-    + ('hello_left_lift', 'hello_left_down_1', 'hello_left_down_2', 'home'))
+    # Down: the rise played backwards, through the top (Andres: the way
+    # up works, so the way down is the same road).
+    + ('hello_left_1', 'hello_left_lift', 'hello_left_rise', 'home'))

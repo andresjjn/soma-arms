@@ -833,3 +833,6 @@ change they forced.
   horizontal folded (straight, the base would see about 10.9, past the
   servo), the shoulder opening 0.1, 0.3, 0.6, then the elbow opens below
   the horizontal and the arm comes home away from the body (about 5.8).
+- Andres preferred the plain answer: the way down is the way up played
+  backwards (4, 1, lift, rise, home), the road already proven on the
+  metal. The opened descent was dropped before it ran.
