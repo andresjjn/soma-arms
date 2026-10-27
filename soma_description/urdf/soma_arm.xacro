@@ -154,11 +154,11 @@
       <!-- z: the disc face plus the plane offset, so the planar chain and
            the fingertip work in the measured lane (2026-10-27). -->
       <!-- The clavicle leaves the disc at clavicle_angle (measured 2026-10-27:
-           the shoulder axis sits 15.6 mm above the disc axis, behind it). The
-           frame turns back by the same angle, so the upper arm still hangs
-           straight down at a zero shoulder. -->
-      <origin xyz="${clavicle_len*cos(clavicle_angle)} ${side*clavicle_len*sin(clavicle_angle)} ${disc_h + plane_offset}"
-              rpy="0 0 ${-side*clavicle_angle}"/>
+           the shoulder axis sits 15.6 mm above the disc axis, behind it).
+           Only the origin moves: the frame keeps the turntable's
+           orientation, so the upper arm still hangs straight down at a
+           zero shoulder. -->
+      <origin xyz="${clavicle_len*cos(clavicle_angle)} ${side*clavicle_len*sin(clavicle_angle)} ${disc_h + plane_offset}"/>
       <axis xyz="0 0 ${side}"/>
       <limit lower="${shoulder_lower}" upper="${shoulder_upper}" effort="${effort_nm}" velocity="${vel_rads}"/>
     </joint>
