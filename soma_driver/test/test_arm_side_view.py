@@ -91,3 +91,16 @@ def test_roi_parses_fractions_and_refuses_nonsense():
     for bad in ('0.8,0,0.3,1', '0,0,1', '0,0,1.5,1'):
         with pytest.raises(ValueError):
             sv.parse_roi(bad)
+
+
+def test_depth_lengths_reproduce_the_tape_check_of_2026_10_27():
+    # box top to closed tip: 857 px at 530 mm, fx 1369.5; tape 370 - 38 = 332
+    assert sv.mm_lengths([(1000, 172), (1121, 1021)], 530, 1369.5)[0] == pytest.approx(332, abs=1.5)
+
+
+def test_picks_are_distinct_and_complete():
+    assert sv.parse_pick('3,0,5,1', 4) == [3, 0, 5, 1]
+    assert sv.parse_pick(None, 4) is None
+    for bad in ('1,2,3', '1,1,2,3', '-1,0,2,3'):
+        with pytest.raises(ValueError):
+            sv.parse_pick(bad, 4)

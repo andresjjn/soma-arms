@@ -109,8 +109,27 @@ def order_down(points, down) -> list[tuple[float, float]]:
     return sorted(points, key=lambda p: p[0] * down[0] + p[1] * down[1])
 
 
-def capture(seconds: float = 1.5):
-    """(rgb frame, mean IMU accel in the IMU frame)."""
+def mm_lengths(points, z_mm: float, fx: float) -> list[float]:
+    """Link lengths in mm for markers on a plane z_mm from the camera.
+
+    Validated on 2026-10-27: the box top to the closed tip read 857 px at
+    530 mm (fx 1369.5 at 1920 px), 332 mm; tape: 370 - 38 = 332 mm."""
+    return [math.dist(a, b) * z_mm / fx for a, b in zip(points, points[1:])]
+
+
+def parse_pick(text: str | None, count: int) -> list[int] | None:
+    """'3,0,5,1' : candidate numbers chosen by hand, top of the arm first."""
+    if not text:
+        return None
+    picks = [int(v) for v in text.split(',')]
+    if len(picks) != count or len(set(picks)) != count or min(picks) < 0:
+        raise ValueError(f'pick {count} distinct candidate numbers')
+    return picks
+
+
+def capture(seconds: float = 2.0):
+    """(rgb frame, mean IMU accel in the IMU frame, depth in mm aligned to
+    the color camera at 640x360, (fx, cx, cy) of the color camera at 1920x1080)."""
     import depthai as dai
     p = dai.Pipeline()
     cam = p.create(dai.node.ColorCamera)
@@ -120,14 +139,31 @@ def capture(seconds: float = 1.5):
     imu.enableIMUSensor(dai.IMUSensor.ACCELEROMETER_RAW, 100)
     imu.setBatchReportThreshold(1)
     imu.setMaxBatchReports(10)
-    for name, out in (('rgb', cam.isp), ('imu', imu.out)):
+    left, right = p.create(dai.node.MonoCamera), p.create(dai.node.MonoCamera)
+    for mono, socket in ((left, dai.CameraBoardSocket.CAM_B), (right, dai.CameraBoardSocket.CAM_C)):
+        mono.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
+        mono.setBoardSocket(socket)
+    stereo = p.create(dai.node.StereoDepth)
+    stereo.setLeftRightCheck(True)
+    stereo.setExtendedDisparity(True)
+    stereo.setDepthAlign(dai.CameraBoardSocket.CAM_A)
+    stereo.setOutputSize(640, 360)
+    left.out.link(stereo.left)
+    right.out.link(stereo.right)
+    for name, out in (('rgb', cam.isp), ('imu', imu.out), ('depth', stereo.depth)):
         x = p.create(dai.node.XLinkOut)
         x.setStreamName(name)
         out.link(x.input)
     with dai.Device(p) as dev:
+        k = dev.readCalibration().getCameraIntrinsics(dai.CameraBoardSocket.CAM_A, 1920, 1080)
+        intr = (k[0][0], k[0][2], k[1][2])
         q_rgb, q_imu = dev.getOutputQueue('rgb', 2, False), dev.getOutputQueue('imu', 50, False)
-        samples, frame, end = [], None, time.time() + seconds
-        while time.time() < end or frame is None or not samples:
+        q_depth = dev.getOutputQueue('depth', 4, False)
+        samples, frame, depths, end = [], None, [], time.time() + seconds
+        while time.time() < end or frame is None or not samples or not depths:
+            d = q_depth.tryGet()
+            if d is not None:
+                depths.append(d.getFrame())
             m = q_imu.tryGet()
             if m is not None:
                 samples += [(k.acceleroMeter.x, k.acceleroMeter.y, k.acceleroMeter.z)
@@ -136,8 +172,19 @@ def capture(seconds: float = 1.5):
             if f is not None:
                 frame = f.getCvFrame()
             time.sleep(0.005)
+    import numpy as np
     accel = tuple(sum(s[i] for s in samples) / len(samples) for i in range(3))
-    return frame, accel
+    depth = np.median(np.stack(depths[-15:]), axis=0)
+    return frame, accel, depth, intr
+
+
+def depth_at(depth, u: float, v: float, half: int = 4) -> float | None:
+    """Median valid depth (mm) around a 1920x1080 pixel, from the 640x360 map."""
+    import numpy as np
+    x, y = int(u / 3), int(v / 3)
+    patch = depth[max(0, y - half):y + half + 1, max(0, x - half):x + half + 1]
+    good = patch[patch > 0]
+    return float(np.median(good)) if good.size else None
 
 
 def parse_roi(text: str | None) -> tuple[float, float, float, float] | None:
@@ -150,14 +197,14 @@ def parse_roi(text: str | None) -> tuple[float, float, float, float] | None:
     return vals
 
 
-def blue_markers(frame, expected: int, roi=None):
-    """Centers of the `expected` largest blue blobs, or fewer if not found."""
+def blue_markers(frame, roi=None):
+    """Every blue blob's center, largest first (the candidates)."""
     import cv2
     import numpy as np
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     # Wide on purpose: under the bench's warm light blue tape washes out
     # (2026-10-27: a blue note read hue 100 to 105 at low saturation).
-    mask = cv2.inRange(hsv, (90, 70, 50), (130, 255, 255))
+    mask = cv2.inRange(hsv, (90, 45, 35), (130, 255, 255))
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
     if roi is not None:                  # keep only the arm's region
         h, w = mask.shape
@@ -168,7 +215,7 @@ def blue_markers(frame, expected: int, roi=None):
     count, _, stats, cents = cv2.connectedComponentsWithStats(mask)
     blobs = sorted(((stats[i, cv2.CC_STAT_AREA], tuple(cents[i])) for i in range(1, count)
                     if stats[i, cv2.CC_STAT_AREA] >= MIN_BLOB_PX), reverse=True)
-    return [c for _, c in blobs[:expected]], mask
+    return [c for _, c in blobs], mask
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -178,48 +225,64 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument('--markers', type=int, choices=(4, 5), default=4,
                     help='4: shoulder, elbow, wrist, tip; 5: the disc center too')
     ap.add_argument('--roi', help='x0,y0,x1,y1 in fractions: look for markers only there')
+    ap.add_argument('--pick', help='candidate numbers from the reference image, top of the arm first')
     ap.add_argument('--out', default=OUT_DIR)
     args = ap.parse_args(argv)
     roi = parse_roi(args.roi)
     import cv2
     os.makedirs(args.out, exist_ok=True)
-    frame, accel = capture()
+    frame, accel, depth, (fx, cx, cy) = capture()
     up = imu_to_camera(accel, IMU_TO_CAM)
     down = image_down(up)
     pitch = camera_pitch_deg(up)
     print(f'camera pitch {pitch:+.1f} deg (level within {PITCH_WARN_DEG:g} for clean angles), '
           f'down in the picture ({down[0]:+.3f}, {down[1]:+.3f})', flush=True)
     names = NAMES_5 if args.markers == 5 else NAMES_4
-    found, mask = blue_markers(frame, len(names), roi)
+    cands, mask = blue_markers(frame, roi)
     stamp = time.strftime('%Y-%m-%d_%H%M%S')
     cv2.imwrite(os.path.join(args.out, f'{stamp}_raw.jpg'), frame)
     cv2.imwrite(os.path.join(args.out, f'{stamp}_mask.png'), mask)
-    if len(found) < len(names):
-        print(f'found {len(found)} blue markers, expected {len(names)}: see {args.out}')
+    picks = parse_pick(args.pick, len(names))
+    if picks is not None:
+        if max(picks) >= len(cands):
+            raise SystemExit(f'only {len(cands)} candidates: 0..{len(cands) - 1}')
+        pts = [cands[i] for i in picks]
+    else:
+        pts = order_down(cands[:len(names)], down) if len(cands) >= len(names) else []
+    view = frame.copy()
+    for i, c in enumerate(cands):              # every candidate, numbered
+        cv2.circle(view, tuple(map(int, c)), 14, (0, 255, 255), 1)
+        cv2.putText(view, str(i), (int(c[0]) - 40, int(c[1]) + 8), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.9, (0, 255, 255), 2)
+    for a, b in zip(pts, pts[1:]):
+        cv2.line(view, tuple(map(int, a)), tuple(map(int, b)), (0, 0, 255), 2)
+    for n, c in zip(names, pts):
+        cv2.putText(view, n, (int(c[0]) + 18, int(c[1]) + 8), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.9, (255, 255, 255), 2)
+    o = (60, 60)
+    cv2.arrowedLine(view, o, (int(o[0] + 80 * down[0]), int(o[1] + 80 * down[1])), (0, 255, 0), 3)
+    for path in (os.path.join(args.out, f'{stamp}_side.jpg'), os.path.join(args.out, 'latest_side.jpg')):
+        cv2.imwrite(path, view)
+    print(f'reference image: {args.out}/latest_side.jpg ({len(cands)} candidates numbered)')
+    if len(pts) < len(names):
+        print(f'found {len(cands)} candidates, need {len(names)}: look at the image, then --pick')
         return 1
-    pts = order_down(found, down)
+    zs = [z for z in (depth_at(depth, *p) for p in pts) if z]
+    z = sorted(zs)[len(zs) // 2] if zs else None
     sign = 1 if args.forward == 'right' else -1
     tilts = link_tilts(pts, down, sign)
     joints = joint_angles(tilts)
-    ref = names.index('shoulder')
-    lens = lengths_mm(pts, ref_index=ref)
     links = [f'{a}-{b}' for a, b in zip(names, names[1:])]
+    lens = mm_lengths(pts, z, fx) if z else lengths_mm(pts, ref_index=names.index('shoulder'))
     result = {'camera_pitch_deg': round(pitch, 1), 'image_down': [round(v, 4) for v in down],
+              'depth_mm': round(z) if z else None,
+              'mm_from': 'depth' if z else f'shoulder-elbow = {REF_MM} mm',
               'links': {k: {'tilt_deg': round(t, 1), 'length_mm': round(l, 1)}
                         for k, t, l in zip(links, tilts, lens)},
               'joints_deg': {n: round(j, 1) for n, j in zip(names[1:-1], joints)},
               'markers_px': {n: [round(p[0], 1), round(p[1], 1)] for n, p in zip(names, pts)}}
     if abs(pitch) > PITCH_WARN_DEG:
         result['warning'] = f'camera pitched {pitch:.1f} deg: level it for clean angles'
-    view = frame.copy()
-    for (a, b) in zip(pts, pts[1:]):
-        cv2.line(view, tuple(map(int, a)), tuple(map(int, b)), (0, 255, 255), 3)
-    for n, p in zip(names, pts):
-        cv2.circle(view, tuple(map(int, p)), 9, (0, 0, 255), 2)
-        cv2.putText(view, n, (int(p[0]) + 12, int(p[1])), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
-    c = (60, 60)
-    cv2.arrowedLine(view, c, (int(c[0] + 80 * down[0]), int(c[1] + 80 * down[1])), (0, 255, 0), 3)
-    cv2.imwrite(os.path.join(args.out, f'{stamp}_side.jpg'), view)
     with open(os.path.join(args.out, f'{stamp}_side.json'), 'w') as f:
         json.dump(result, f, indent=1)
     print(json.dumps(result, indent=1))
