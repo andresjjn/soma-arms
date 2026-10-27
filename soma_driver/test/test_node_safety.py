@@ -310,3 +310,59 @@ class TestWhatArmingSends:
             if n is not None:
                 n.destroy_node()
             rclpy.shutdown()
+
+
+class TestLimpArm:
+    """limp_arm (2026-10-26): the idle arm hangs with its signal cut, so it
+    does not hunt at the hanging zero while the other works. Only from
+    home, because a released arm servo anywhere else falls (rule 3)."""
+
+    @staticmethod
+    def _set(node, value):
+        from rclpy.parameter import Parameter
+        return node.set_parameters([Parameter('limp_arm', value=value)])[0]
+
+    def test_boots_with_both_arms_engaged(self, node):
+        assert node.get_parameter('limp_arm').value == ''
+        assert node.limp == set()
+
+    def test_an_arm_at_home_goes_limp_and_its_commands_are_dropped(self, node):
+        from sensor_msgs.msg import JointState
+        assert self._set(node, 'left').successful
+        msg = JointState()
+        msg.name = ['left_arm_elbow_joint', 'right_arm_elbow_joint']
+        msg.position = [-0.6, -0.6]
+        node._on_command(msg)
+        assert node.target['left_arm_elbow_joint'] == 0.0
+        assert node.target['right_arm_elbow_joint'] == pytest.approx(-0.6)
+
+    def test_an_arm_away_from_home_is_refused(self, node):
+        from sensor_msgs.msg import JointState
+        msg = JointState()
+        msg.name = ['left_arm_yaw_joint']
+        msg.position = [-0.5]
+        node._on_command(msg)
+        result = self._set(node, 'left')
+        assert not result.successful and 'falls' in result.reason
+        assert node.limp == set()
+
+    def test_armed_the_limp_arm_gets_full_off_and_the_other_its_pulse(self, chips):
+        rclpy.init()
+        n = None
+        try:
+            n = TestWhatArmingSends._real_node()
+            assert self._set(n, 'left').successful
+            assert _arm(n, True).success is True
+            n._tick()
+            for name, spec in SERVO_MAP.items():
+                regs = chips.regs[spec.address]
+                off_h = regs.get(0x06 + 4 * spec.channel + 3, 0)
+                if name.startswith('left_arm_'):
+                    assert off_h & 0x10, f'{name} should be FULL_OFF'
+                else:
+                    assert TestWhatArmingSends._counts(chips, spec) == \
+                        TestWhatArmingSends._counts_for(spec, spec.clamp(0.0)), name
+        finally:
+            if n is not None:
+                n.destroy_node()
+            rclpy.shutdown()

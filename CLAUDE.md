@@ -119,6 +119,7 @@ soma_driver/          PCA9685 driver
   soma_driver/sign_check_cli.py    ros2 run soma_driver soma_sign_check [--arm right|left|both]
   soma_driver/joint_probe.py       the joint probe, pure: real angle per radian with a phone level
   soma_driver/joint_probe_cli.py   ros2 run soma_driver soma_joint_probe --arm A --joint J
+  soma_driver/limp.py              which arm may hang with its signal cut (limp_arm), pure
   soma_driver/ina3221.py           power monitor, read-only, no gates needed
   test/                            the safety test suite
 docs/                 plan, log, hardware, wiring, safety, bench, migration,
@@ -175,7 +176,7 @@ you if you forgot.
 ## The tests are the specification
 
 24 tests came over from the bench driver, and the suite has grown since
-(620 passing plus 23 skipped as of 2026-10-26 on a machine without ROS,
+(698 passing plus 23 skipped as of 2026-10-26 on a machine without ROS,
 xacro or the mujoco wheel; the skipped ones need `rclpy`, which the ROS
 job of CI has, or xacro or mujoco, which the unit job installs). They encode every hardware contract. If a
 change breaks one, the change is wrong until proven otherwise. Never edit a

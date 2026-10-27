@@ -810,3 +810,10 @@ change they forced.
   diagnostic `shoulder_reach`: the hello's top, then the shoulder up in
   0.1 rad stairs to 0.1 inside its map end, the upper arm read above the
   horizontal at each stair.
+- Andres: the idle left arm hunts at its hanging zero while the right
+  arm works. New driver parameter `limp_arm` ('' | 'left' | 'right'):
+  that arm's channels get FULL_OFF every tick and its commands are
+  dropped. Refused unless every joint of the arm is at home, now and in
+  its target: rule 3 still holds (a released arm servo anywhere else
+  falls), and no arm joint joined RELEASE_WHEN_SETTLED. Pure logic in
+  `limp.py`, node tests in `test_node_safety.py::TestLimpArm`.

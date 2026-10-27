@@ -4,6 +4,8 @@ Interface:
   Sub  /soma/command    (sensor_msgs/JointState: name + position, the target)
   Pub  /joint_states    (ramped current position, feeds RViz and TF)
   Srv  /soma/arm        (std_srvs/SetBool: arm or disarm the real output)
+  Param limp_arm        ('' | 'left' | 'right'): that arm hangs with its
+                        signal cut while the other works (limp.py)
 
 Safety rules of the project, encoded here:
   - The node ALWAYS starts on the MOCK backend and DISARMED. Arming is an
@@ -18,6 +20,8 @@ Safety rules of the project, encoded here:
   - Self locking joints (the L16) drop their signal once settled, so a
     command is never held against a mechanical stop.
   - Mimic fingers are computed here (physical gear), never commanded.
+  - One arm may hang limp (limp_arm), only from home: a released arm
+    servo anywhere else falls. Commands for a limp arm are dropped.
   - While ARMED, a 1 Hz watchdog reads back every board's config. A board
     that reset to power-on defaults (asleep, 200 Hz) or stopped answering
     disarms the node. It never re-arms on its own: /soma/arm again, which
@@ -28,6 +32,7 @@ assumes every joint sits at zero. It does not know the true pose, which is
 why the ramp, the soft limits and the arming gates all exist.
 """
 import rclpy
+from rcl_interfaces.msg import SetParametersResult
 from rclpy.node import Node
 from sensor_msgs.msg import BatteryState, JointState
 from std_srvs.srv import SetBool
@@ -36,6 +41,7 @@ from .ina3221 import BATTERY_PROFILES, Ina3221, MockIna3221
 from .pca9685_backend import mock_fleet, real_fleet
 from .servo_map import (
     MIMIC_JOINTS, RELEASE_WHEN_SETTLED, SERVO_MAP, SETTLE_S)
+from .limp import arm_joints, limp_refusal
 from .trajectory import JointMotion
 
 RATE_HZ = 50.0
@@ -115,6 +121,11 @@ class ArmController(Node):
         # Time settled on target, used to release self locking joints.
         self.settled_s = {name: 0.0 for name in RELEASE_WHEN_SETTLED}
 
+        # An arm hanging with its signal cut (limp.py). Boots engaged.
+        self.declare_parameter('limp_arm', '')
+        self.limp: set[str] = set()
+        self.add_on_set_parameters_callback(self._on_params)
+
         self.create_subscription(JointState, 'soma/command', self._on_command, 10)
         self.pub_js = self.create_publisher(JointState, 'joint_states', 10)
         self.create_service(SetBool, 'soma/arm', self._on_arm)
@@ -125,9 +136,29 @@ class ArmController(Node):
     def allow_real(self) -> bool:
         return bool(self.get_parameter('allow_real').value)
 
+    def _on_params(self, params) -> SetParametersResult:
+        for p in params:
+            if p.name != 'limp_arm':
+                continue
+            arm = str(p.value)
+            reason = limp_refusal(arm, self.current, self.target)
+            if reason:
+                self.get_logger().warn(f'limp_arm={arm!r} {reason}')
+                return SetParametersResult(successful=False, reason=reason)
+            self.limp = set(arm_joints(arm)) if arm else set()
+            self.get_logger().info(
+                f'the {arm} arm hangs limp, signal cut' if arm
+                else 'both arms engaged')
+        return SetParametersResult(successful=True)
+
     def _on_command(self, msg: JointState) -> None:
         for name, pos in zip(msg.name, msg.position):
             spec = SERVO_MAP.get(name)
+            if name in self.limp:
+                self.get_logger().warn(
+                    f'{name} is limp: command dropped (limp_arm:="" first)',
+                    throttle_duration_sec=2.0)
+                continue
             if spec is not None:
                 # Clamp on arrival: the published joint state must never
                 # claim a pose outside the soft limits.
@@ -238,7 +269,9 @@ class ArmController(Node):
         names, positions = [], []
         for name, spec in SERVO_MAP.items():
             self.current[name] = self.motion[name].step(dt)
-            if name in RELEASE_WHEN_SETTLED:
+            if name in self.limp:
+                self.backend.release(spec)
+            elif name in RELEASE_WHEN_SETTLED:
                 # L16: self locking lead screw. Once settled, signal off.
                 # Holding PWM against a stop wedges it (2026-07-22).
                 if self.current[name] == self.target[name]:
