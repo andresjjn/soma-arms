@@ -288,3 +288,55 @@ SEQUENCES['shoulder_reach'] = (
     + tuple((f'shoulder_reach_{i}', 2.0) for i in range(1, len(_SHOULDER_STAIRS) + 1))
     + tuple((f'shoulder_reach_{i}', 1.5) for i in range(len(_SHOULDER_STAIRS) - 1, 0, -1))
     + (('hello_top', 1.5), ('hello_lift', 1.5), ('hello_rise', 1.5), ('home', 2.0)))
+
+
+# The left hello (2026-10-26). The left base reaches higher than the right
+# (about 142 deg real against 119; the right's ceiling is technical debt),
+# so Andres posed the left arm by hand in the workbench and read the
+# pulses of four poses. They are kept here AS PULSES, the record of what
+# he set on the metal; _from_us turns them into real radians through the
+# calibrated map. Converted, all four sit inside the soft band with the
+# 0.1 rad margin. His fifth pose (base 2405 us, the rest at zero) is home
+# within the base's gear play, so the sequence ends at home.
+#  - 1, the top: upper arm about 129 deg, the shoulder OPEN (+0.23).
+#  - 2: the elbow and the wrist bent in.
+#  - 3, out: the hand open (65 %), elbow and wrist opened.
+#  - 4, in: the hand closed, elbow and wrist bent in.
+# The base turns 2.49 rad from home to the top, so the rise and the fall
+# go through two waypoints, as the right hello does: the elbow folded to
+# -1.0 while the base passes the horizontal (a straight arm there would
+# ask 11.4 kg.cm). The left elbow's clean curl has not been measured; the
+# right's (-1.30) is the reference, and -1.0 stays 0.3 short of it.
+_LEFT_KEYS_US = {
+    'hello_left_1': dict(yaw=630, shoulder=1195, elbow=1350, wrist_pitch=1475, wrist_roll=1340, finger_l=1080),
+    'hello_left_2': dict(yaw=630, shoulder=1180, elbow=1535, wrist_pitch=1110, wrist_roll=1340, finger_l=1080),
+    'hello_left_3': dict(yaw=630, shoulder=1185, elbow=1280, wrist_pitch=1515, wrist_roll=1360, finger_l=1765),
+    'hello_left_4': dict(yaw=630, shoulder=1120, elbow=1425, wrist_pitch=1180, wrist_roll=1360, finger_l=1085),
+}
+
+
+def _from_us(side: str, **pulses: float) -> dict[str, float]:
+    """Real radians (fingers 0..1) for pulses read off the workbench."""
+    out = {}
+    for joint, us in pulses.items():
+        spec = SERVO_MAP[f'{side}_arm_{joint}_joint']
+        frac = (us - spec.min_us) / (spec.max_us - spec.min_us)
+        out[f'{side}_arm_{joint}_joint'] = round(spec.lower + frac * (spec.upper - spec.lower), 3)
+    return out
+
+
+def _left(**joints: float) -> dict[str, float]:
+    return {f'left_arm_{j}_joint': float(v) for j, v in joints.items()}
+
+
+POSES.update({name: _from_us('left', **us) for name, us in _LEFT_KEYS_US.items()})
+POSES.update({
+    'hello_left_rise': _left(yaw=-1.0, shoulder=0.0, elbow=-1.0, wrist_pitch=0.0,
+                             wrist_roll=0.0, finger_l=0.0),
+    'hello_left_lift': _left(yaw=-1.8, shoulder=0.1, elbow=-0.8, wrist_pitch=-0.2,
+                             wrist_roll=0.0, finger_l=0.0),
+})
+SEQUENCES['hello_left'] = _flowing(
+    ('home', 'hello_left_rise', 'hello_left_lift', 'hello_left_1', 'hello_left_2')
+    + ('hello_left_3', 'hello_left_4') * 5
+    + ('hello_left_lift', 'hello_left_rise', 'home'))

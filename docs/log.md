@@ -817,3 +817,13 @@ change they forced.
   its target: rule 3 still holds (a released arm servo anywhere else
   falls), and no arm joint joined RELEASE_WHEN_SETTLED. Pure logic in
   `limp.py`, node tests in `test_node_safety.py::TestLimpArm`.
+- The right base could not go higher (the hello's top is about 80 us
+  short of the 2425 us end captured in October); left as technical debt.
+  Andres moved to the left arm, whose base reaches about 142 deg real,
+  and posed it by hand in the workbench: four poses read as pulses (a
+  top with the shoulder open, a bent-in pose, out with the hand open, in
+  with it closed) and a fifth that is home within the gear play. They
+  became `hello_left`, kept as pulses in the code and converted through
+  the calibrated map: all inside the soft band with the 0.1 margin, the
+  base at most 7.8 kg.cm by the model. Two waypoints fold the elbow
+  while the base passes the horizontal. 10.8 s.
