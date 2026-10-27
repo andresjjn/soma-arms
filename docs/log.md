@@ -802,3 +802,11 @@ change they forced.
   box; the likelier contact is the forearm on its own arm, which depends
   on the fold, not on the posture. The hello's fold margin went from 0.3
   to 0.15 rad. First run of the new top in step mode is advised.
+- Andres: the workbench seemed to raise the right arm higher than the
+  hello does. The base's map end is the very pulse captured there (2425
+  us); the hello stops about 6 deg short of it. What may differ: the
+  workbench's all-joints master moved the shoulder too, or the 0.83 base
+  scale (measured over 0 to 34 deg) does not hold at the ends. New
+  diagnostic `shoulder_reach`: the hello's top, then the shoulder up in
+  0.1 rad stairs to 0.1 inside its map end, the upper arm read above the
+  horizontal at each stair.

@@ -272,3 +272,19 @@ def settle_time_s(targets: dict[str, float],
 SEQUENCES['hello'] = _flowing(('home', 'hello_rise', 'hello_lift', 'hello_top')
                               + ('hello_out', 'hello_in') * 5
                               + ('hello_top', 'hello_lift', 'hello_rise', 'home'))
+
+# How high does the right shoulder take the arm from the hello's top?
+# (2026-10-26, Andres: the workbench seemed to raise the arm further.)
+# The hello's top, then the shoulder up in stairs of 0.1 rad to 0.1
+# inside its map end (the 710 us captured on 2026-10-01); the operator
+# reads the upper arm above the horizontal at each stair and quits when
+# it stops rising or strains. Never past the map end: that is a stop.
+_SHOULDER_STAIRS = (0.06, -0.04, -0.14, -0.24, -0.28)
+POSES.update({f'shoulder_reach_{i}': _right(**dict(_HELLO_TOP, shoulder=sh),
+                                            elbow=_HELLO_ELBOW, finger_l=0.0)
+              for i, sh in enumerate(_SHOULDER_STAIRS, 1)})
+SEQUENCES['shoulder_reach'] = (
+    (('home', 1.5), ('hello_rise', 2.0), ('hello_lift', 2.0), ('hello_top', 2.0))
+    + tuple((f'shoulder_reach_{i}', 2.0) for i in range(1, len(_SHOULDER_STAIRS) + 1))
+    + tuple((f'shoulder_reach_{i}', 1.5) for i in range(len(_SHOULDER_STAIRS) - 1, 0, -1))
+    + (('hello_top', 1.5), ('hello_lift', 1.5), ('hello_rise', 1.5), ('home', 2.0)))

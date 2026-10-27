@@ -88,3 +88,20 @@ def test_it_flows_every_dwell_is_its_travel_time_plus_a_tenth():
 def test_it_ends_home_with_the_gripper_closed():
     assert HELLO[-1][0] == 'home'
     assert HOME['right_arm_finger_l_joint'] == 0.0
+
+
+def test_shoulder_reach_climbs_in_small_stairs_and_never_past_the_map_end():
+    seq = SEQUENCES['shoulder_reach']
+    assert seq[0][0] == 'home' and seq[-1][0] == 'home'
+    assert [p for p, _ in seq[:4]] == ['home', 'hello_rise', 'hello_lift', 'hello_top']
+    name = 'right_arm_shoulder_joint'
+    climb = [POSES['hello_top'][name]] + [
+        POSES[p][name] for p, _ in seq[4:] if p.startswith('shoulder_reach_')][:5]
+    for a, b in zip(climb, climb[1:]):
+        assert b < a and a - b <= 0.1 + 1e-9
+    assert min(climb) >= SERVO_MAP[name].lower + 0.1 - 1e-9
+    for p, _ in seq:
+        if p.startswith('shoulder_reach_'):
+            for joint in ('yaw', 'elbow', 'wrist_pitch', 'wrist_roll', 'finger_l'):
+                full = f'right_arm_{joint}_joint'
+                assert POSES[p][full] == POSES['hello_top'][full], (p, joint)
