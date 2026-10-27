@@ -880,3 +880,11 @@ read +5 deg at zero the day before (under 1 mm of tip height), so the
 likelier change is the disc height: the system was moved on 2026-10-26
 and the column belongs to a monitor stand. One reading decides it: disc
 center to fingertip with the arm hanging limp (about 339 if straight).
+- v0.2 closed. The criterion read "`soma_primitives wave` played end to
+  end under the ramp, filmed". The wave ran clean on 2026-10-26 but the
+  film is of `hello_left` (Andres's phone, low angle in front, 11 s).
+  Andres chose to close v0.2 with it, and the README says so: it asks
+  more of the driver than the wave (real radians, six joints at once,
+  the base near 142 deg, blending, the idle arm limp). Committed at 720
+  px H.264 (1.5 MB): no people in frame, and the terminal on the monitor,
+  readable at 4K, is not at 720. Tag `v0.2`.

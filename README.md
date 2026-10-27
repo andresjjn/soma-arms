@@ -116,7 +116,7 @@ issue, not a reason to keep the project open.
 | Version | Milestone | What has to be true | Status |
 |---|---|---|---|
 | **v0.1** | Calibrated URDF | Every `[calibrate]` length measured with calipers and corrected, servo zeros and ranges captured, model right in RViz, CI green | **TAGGED 2026-08-10.** Caliper session 2026-08-05: real hanging-bench configuration modeled (parallel J1-J4 axes, 33 mm clavicle); FK predicted the fingertips 5.7 mm above the plate and the photos agreed. Axis signs pinned down at the first powered session |
-| **v0.2** | Real driver | All 12 joints sign-checked through the ROS driver on both arms; `soma_primitives wave` played end to end under the ramp, filmed | Servos re-calibrated 2026-10-01 on the two-board bench; base direction verified on the metal (negative = forward); the wave and its step mode are written and tested, waiting for the bench |
+| **v0.2** | Real driver | All 12 joints sign-checked through the ROS driver on both arms; a primitive sequence played end to end under the ramp, filmed (written as `wave`; closed with `hello_left`, see status) | **TAGGED 2026-10-27.** Sign check of all 12 joints on 2026-10-12, the re-seated right elbow and wrist pitch again on 2026-10-26. The wave ran clean on the metal on 2026-10-26 but was not filmed; the film is `hello_left`, which asks more of the driver: real radians from the joint probe, six joints at once, the base at about 142 deg, flowing through its poses, the idle arm limp. [Video](docs/media/video/v0.2_hello_left_2026-10-26.mp4) |
 | **v0.3** | Cell geometry and eye-deck calibration | A laser-cut deck with one lane and three pockets per arm, the OAK-D fixed on the column, a pixel-to-deck homography, planar analytic IK. Acceptance: **click a pocket in the image and the gripper touches its center within 5 mm**, 10 of 10, repeated after a power cycle | Reach map and deck drawing done (`scripts/workspace_map.py`, `docs/workspace_map.svg`) |
 | **v0.4** | Scripted tending cycle | Pick and place between pockets with no cloud: 30 consecutive cycles per arm without a drop, then a one hour soak with servo temperatures logged | |
 | **v0.5** | The supervisor | `soma_agent`: Gemini Robotics ER 2 points, verifies success, reads the part id and recovers a dropped part, through function calls restricted to the primitives (the reasoner proposes, the armed driver disposes; the cloud can never arm the robot). Acceptance: 50 verified cycles with one induced fault recovered | Probe written (`scripts/er2_probe.py`); API billing pending |
@@ -129,7 +129,7 @@ planner, and the RL work was removed on 2026-10-03 to keep every evening on
 the demo. Vision teleop by human mimicry stays in the post-1.0 backlog.
 
 Why a tending cell and not something flashier: each arm is a planar chain
-in its own vertical plane, 124.6 mm from the other one, with no lateral
+in its own vertical plane, 162 mm from the other one, with no lateral
 joint at all. Each arm works a lane, the two arms can never hand anything
 to each other, and the honest job for that geometry is machine tending:
 pick a part from INPUT, load it into a fixture, unload it to OUTPUT, swap
@@ -137,6 +137,8 @@ the roles when INPUT is empty, repeat for hours. The engineering behind
 every number is in **[docs/plan.md](docs/plan.md)**.
 
 Videos land here as each tag ships.
+
+- **v0.2**, 2026-10-26: [`hello_left`](docs/media/video/v0.2_hello_left_2026-10-26.mp4), the left arm rises folding the elbow, greets at the top and comes home, flowing, under the ramp (11 s, 720 px).
 
 ---
 
