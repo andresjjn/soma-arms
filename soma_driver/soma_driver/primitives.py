@@ -112,6 +112,18 @@ POSES.update({f'cam_{side}_{deg}': _straight(side, yaw)
               for side in ('right', 'left') for deg, yaw in _CAM_LIFTS})
 
 
+# Where does the right elbow touch? (2026-10-26) The redrawn wave's
+# wave_raise_2 (elbow -1.60 real, 92 deg of curl, base at -0.87) folded
+# the forearm into the robot's body: the map's elbow end is the servo's,
+# not the metal's. Same posture as the wave, the elbow curled in stairs
+# of 0.1 rad that stop short of the -1.60 that touched; in step mode the
+# operator measures the gap before every ENTER and quits when it is
+# small. The last clean stair, minus a margin, is the wave's new floor.
+_REACH_STAIRS = (-1.0, -1.1, -1.2, -1.3, -1.4, -1.5)
+POSES.update({f'elbow_reach_{round(-100 * e)}': _wave_pose(yaw=_WAVE_YAW, elbow=e)
+              for e in _REACH_STAIRS})
+
+
 def _camera_sweep(side: str) -> tuple[tuple[str, float], ...]:
     """Up 15, 30, 40 deg and back down the same way; 3 s at each pose up
     (the coverage capture needs 2 s of still frames)."""
@@ -154,6 +166,11 @@ SEQUENCES: dict[str, tuple[tuple[str, float], ...]] = {
     # Camera coverage: the right arm, home, then the left arm. Pair it with
     # scripts/camera_coverage.py --watch, which captures each pose.
     'camera_check': (('home', 1.5),) + _camera_sweep('right') + _camera_sweep('left'),
+    # Diagnostic, step mode only in practice: see _REACH_STAIRS.
+    'elbow_reach': (('home', 1.5), ('wave_probe', 2.0), ('wave_raise_1', 2.0))
+    + tuple((f'elbow_reach_{round(-100 * e)}', 2.0) for e in _REACH_STAIRS)
+    + tuple((f'elbow_reach_{round(-100 * e)}', 1.5) for e in reversed(_REACH_STAIRS[:-1]))
+    + (('wave_raise_1', 1.5), ('wave_probe', 1.5), ('home', 2.0)),
 }
 
 

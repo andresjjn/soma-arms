@@ -328,7 +328,7 @@ def test_a_reversed_right_elbow_is_a_driver_fix_never_an_axis_flip():
     # outside the mirrored band: it must be redesigned, never played.
     for pose in ('wave_raise_1', 'wave_raise_2', 'wave_open', 'wave_close'):
         assert pose in text
-    assert 'sequences: demo, wave' in text
+    assert 'sequences: demo, elbow_reach, wave' in text
 
 
 def test_a_reversed_left_elbow_points_at_the_bench_xacro():

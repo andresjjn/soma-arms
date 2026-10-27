@@ -93,3 +93,18 @@ def test_every_dwell_leaves_a_quarter_second_of_margin():
     for pose, dwell, targets, current in _walk():
         assert dwell - settle_time_s(targets, current) >= 0.25 - 1e-9, (
             f'{pose}: dwell {dwell}s leaves no margin over the ramp')
+
+
+def test_elbow_reach_stops_short_of_the_curl_that_touched_the_body():
+    """2026-10-26: wave_raise_2 (elbow -1.60, base -0.87) folded the right
+    forearm into the robot. The diagnostic that finds the real floor must
+    climb in small stairs, in the wave's own posture, and never get there."""
+    seq = SEQUENCES['elbow_reach']
+    assert seq[0][0] == 'home' and seq[-1][0] == 'home'
+    elbows = [pose_targets(p)['right_arm_elbow_joint'] for p, _ in seq if p.startswith('elbow_reach_')]
+    assert min(elbows) > -1.60 + 0.05
+    for a, b in zip(elbows, elbows[1:]):
+        assert abs(a - b) <= 0.1 + 1e-9, 'stairs of at most 0.1 rad'
+    for p, _ in seq:
+        if p.startswith('elbow_reach_'):
+            assert pose_targets(p)['right_arm_yaw_joint'] == POSES['wave_raise_1']['right_arm_yaw_joint']

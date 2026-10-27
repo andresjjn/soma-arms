@@ -751,3 +751,8 @@ change they forced.
     puts a straight arm at 45 deg near 8.0 kg.cm).
   - Not applied yet: the right elbow zero (+5 deg forward at command 0),
     to be confirmed on the metal first.
+- 19:28, first run of the redrawn wave in step mode, gate 1 opened and
+  armed by Andres: `wave_raise_2` (elbow -1.60 real) folded the right
+  forearm into the robot's body. Stopped, unwound home, every joint read
+  0.0 at 19:30. Incident row in `docs/safety.md`. New diagnostic
+  sequence `elbow_reach` to find where the curl really touches.

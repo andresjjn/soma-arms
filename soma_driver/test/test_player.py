@@ -316,6 +316,10 @@ def test_reversing_a_move_in_flight_stays_on_the_walked_path(name):
                                          SERVO_MAP[joint].max_rate,
                                          tenth * ramp / 10)
                 where = f'{step.pose}: {joint} cut at {tenth}/10 of the ramp'
+                if not back:
+                    # A 0.1 rad stair cut before the first control tick:
+                    # the joint never left `before`, there is nothing to undo.
+                    continue
                 assert len(back) * DT <= wait, where
                 assert low - 0.1 < min(back) and max(back) < high + 0.1, where
 
