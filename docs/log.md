@@ -938,3 +938,15 @@ center to fingertip with the arm hanging limp (about 339 if straight).
   growing with the joint angles. Best ground: tip 30 mm over the plate,
   x from -30 to 0 (about 2 mm of sag, 6 mm of scale). Far from home the
   5 mm target needs the scales fitted from the trials, not the phone.
+
+## 2026-11-09, the eyes arrive
+
+A Waveshare ESP32-S3 Dual-Eye 1.28: one ESP32-S3 (rev v0.2, 8 MB PSRAM,
+16 MB flash, read with esptool) driving two round 240x240 GC9A01A LCDs,
+with an ES8311 audio codec and an ES7210 microphone ADC. Connected to
+the Mac for now. Its factory firmware was backed up whole (16 MB) and
+verified against the board (esptool verify-flash, digest matched),
+outside this repository (vendor firmware); its partition table holds a
+3 MB app and a 5.9 MB "model" partition, likely speech models. The eyes
+are outside the v0.3 to v1.0 ladder: time-boxed, and kept off the
+safety path (they will never arm or move anything).
