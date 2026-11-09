@@ -21,7 +21,9 @@ path: the eyes cannot arm or command anything.
   moves, about 34 fps for full redraws (blinks, moods); about 5 to 8
   before (the reference model per pixel, every frame). `stats` reports it.
 - Idle life of its own: small saccades and blinks; a command pauses it.
-- Commands are lines over the USB serial port (`eyes/protocol.h`):
+- Commands are lines over the USB serial port (`eyes/protocol.h`). From the
+  Mac: `.venv/bin/python firmware/eyes/tools/eyes.py "mood happy" blink`,
+  or `--tour` for every mood and gaze:
 
 | Line | Effect |
 |---|---|
