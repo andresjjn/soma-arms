@@ -960,3 +960,13 @@ safety path (they will never arm or move anything).
   Built with arduino-cli and the esp32 core 3.2.0 (Waveshare's version;
   the Mac needed Rosetta for Arduino's x86 ctags): 373 KB, 11 % of the
   app partition. Not flashed yet.
+- Eyes, first flash: both panels up, protocol answering. Andres: slow,
+  and black bands top and bottom. The bands are the resting lids of the
+  neutral design (22 and 18 px of a near-black lid): a design choice,
+  changeable live with `set neutral.up 0`. The slowness was the reference
+  model per pixel (two square roots and float color mixes, 115,200 px a
+  frame). New `fast_render.h`: tables, lids per column, no root per
+  pixel, a still eye not redrawn, a gaze-only change redrawn in the box
+  around the iris; tested against the reference (864 states, 0 px off)
+  and window against full frame (0 px). Measured with `stats`: about 50
+  fps while the gaze moves, about 34 fps on full redraws.

@@ -87,6 +87,7 @@ int main() {
   CHECK(parse("style").cmd == Cmd::Style);
   CHECK(parse("save").cmd == Cmd::Save);
   CHECK(parse("reset").cmd == Cmd::Reset);
+  CHECK(parse("stats").cmd == Cmd::Stats);
   CHECK(parse("arm").cmd == Cmd::None);                      // nothing that sounds like motion
   CHECK(parse("").cmd == Cmd::None);
   CHECK(parse("look 0.1 0.2\r").cmd == Cmd::Look);

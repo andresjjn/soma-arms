@@ -11,6 +11,7 @@
 //                                   colors.iris_in #ff8800, happy.low 80, ...
 //   style              -> {...}     the whole design as JSON, for style.json
 //   save | reset       -> ok        keep the live design across reboots | back to default
+//   stats              -> fps ...   frames drawn and skipped since the last stats
 //
 // Anything else answers `err <why>`. The eyes never arm or move anything:
 // they are off SOMA's safety path by construction.
@@ -22,7 +23,7 @@
 
 namespace eyes {
 
-enum class Cmd : uint8_t { None, Ping, Look, Blink, SetMood, Pupil, Bright, Idle, Set, Style, Save, Reset };
+enum class Cmd : uint8_t { None, Ping, Look, Blink, SetMood, Pupil, Bright, Idle, Set, Style, Save, Reset, Stats };
 
 struct Parsed {
   Cmd cmd = Cmd::None;
@@ -62,6 +63,7 @@ inline Parsed parse(char* buf) {
   if (!std::strcmp(w, "style") && n == 1) { p.cmd = Cmd::Style; return p; }
   if (!std::strcmp(w, "save") && n == 1) { p.cmd = Cmd::Save; return p; }
   if (!std::strcmp(w, "reset") && n == 1) { p.cmd = Cmd::Reset; return p; }
+  if (!std::strcmp(w, "stats") && n == 1) { p.cmd = Cmd::Stats; return p; }
   if (!std::strcmp(w, "set")) {
     // the value is checked when it is applied (set_param), against its field
     if (n == 3) { p.cmd = Cmd::Set; p.key = words[1]; p.value = words[2]; return p; }

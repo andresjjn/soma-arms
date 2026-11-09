@@ -18,7 +18,7 @@
 #include "freertos/semphr.h"
 #include <Preferences.h>
 #include "esp_lcd_gc9a01.h"
-#include "eye_model.h"
+#include "fast_render.h"
 #include "protocol.h"
 #include "style_default.h"
 
@@ -36,6 +36,10 @@ static uint16_t* stripe_buf[2];
 static SemaphoreHandle_t free_bufs;              // counts stripe buffers not in flight
 
 static eyes::Style style;
+static eyes::FastStyle fast;                     // tables built from `style`
+static eyes::FastFrame frame;
+static bool style_dirty = true;
+static uint32_t frames_drawn = 0, frames_skipped = 0, stats_since = 0;
 static eyes::EyeState state;
 static Preferences prefs;
 static float target_gx = 0, target_gy = 0;
@@ -80,17 +84,23 @@ static void set_brightness(float percent) {
   for (int i = 0; i < 2; i++) ledcWrite(PIN_BL[i], duty);
 }
 
-static void draw_eye(int i) {
+// Draw box b of eye i: as many rows per DMA stripe as fit a stripe buffer.
+static void draw_eye(int i, eyes::Box b) {
   static int k = 0;
-  for (int y0 = 0; y0 < eyes::SIZE; y0 += STRIPE) {
+  eyes::prepare_frame(fast, frame, state, MIRROR[i]);
+  int w = b.x1 - b.x0, rows_per = (eyes::SIZE * STRIPE) / w;
+  for (int y0 = b.y0; y0 < b.y1; y0 += rows_per) {
+    int rows = min(rows_per, b.y1 - y0);
     xSemaphoreTake(free_bufs, portMAX_DELAY);
     uint16_t* buf = stripe_buf[k];
     k ^= 1;
-    for (int y = 0; y < STRIPE; y++)
-      for (int x = 0; x < eyes::SIZE; x++)
-        buf[y * eyes::SIZE + x] = eyes::rgb565_swapped(eyes::pixel(style, state, x, y0 + y, MIRROR[i]));
-    esp_lcd_panel_draw_bitmap(panel[i], 0, y0, eyes::SIZE, y0 + STRIPE, buf);
+    eyes::render_rows(fast, frame, y0, rows, buf, b.x0, b.x1);
+    esp_lcd_panel_draw_bitmap(panel[i], b.x0, y0, b.x1, y0 + rows, buf);
   }
+}
+
+static bool same_state(const eyes::EyeState& a, const eyes::EyeState& b) {
+  return a.gx == b.gx && a.gy == b.gy && a.pupil == b.pupil && a.blink == b.blink && a.mood == b.mood;
 }
 
 // Idle life: small saccades and blinks of their own; a command pauses it.
@@ -131,6 +141,7 @@ static void handle_line(char* line) {
     case eyes::Cmd::Idle:    idle_on = p.on; break;
     case eyes::Cmd::Set:
       if (!eyes::set_param(style, p.key, p.value)) { Serial.println("err set: unknown key or bad value"); return; }
+      style_dirty = true;
       break;
     case eyes::Cmd::Style: {
       static char json[1400];
@@ -139,7 +150,15 @@ static void handle_line(char* line) {
       return;
     }
     case eyes::Cmd::Save:    prefs.putBytes("style", &style, sizeof(style)); break;
-    case eyes::Cmd::Reset:   style = eyes::default_style(); prefs.remove("style"); break;
+    case eyes::Cmd::Reset:   style = eyes::default_style(); prefs.remove("style"); style_dirty = true; break;
+    case eyes::Cmd::Stats: {
+      float secs = (now - stats_since) / 1000.0f;
+      Serial.printf("fps %.1f drawn %lu skipped %lu over %.1f s\n", frames_drawn / secs,
+                    (unsigned long)frames_drawn, (unsigned long)frames_skipped, secs);
+      frames_drawn = frames_skipped = 0;
+      stats_since = now;
+      return;
+    }
     case eyes::Cmd::None:    Serial.print("err "); Serial.println(p.error); return;
   }
   Serial.println("ok");
@@ -181,6 +200,20 @@ void loop() {
   uint32_t now = millis();
   animate(now, (now - last) / 1000.0f);
   last = now;
-  draw_eye(0);
-  draw_eye(1);
+  // Snap the eased gaze once it is within a hair, so a still eye is still.
+  if (fabsf(target_gx - state.gx) < 0.002f) state.gx = target_gx;
+  if (fabsf(target_gy - state.gy) < 0.002f) state.gy = target_gy;
+  static eyes::EyeState drawn;
+  static bool first = true;
+  if (style_dirty) { eyes::prepare_style(fast, style); style_dirty = false; first = true; }
+  if (!first && same_state(state, drawn)) { frames_skipped++; delay(5); return; }
+  // Only the gaze moved: redraw the box around the iris, old and new.
+  bool gaze_only = !first && state.mood == drawn.mood && state.blink == drawn.blink &&
+                   state.pupil == drawn.pupil;
+  eyes::Box box = gaze_only ? eyes::gaze_box(style, drawn, state) : eyes::Box{0, 0, eyes::SIZE, eyes::SIZE};
+  draw_eye(0, box);
+  draw_eye(1, box);
+  drawn = state;
+  first = false;
+  frames_drawn++;
 }

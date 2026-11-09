@@ -11,8 +11,15 @@ path: the eyes cannot arm or command anything.
 - Both panels share one SPI bus (clock, data and D/C); a chip select each.
 - The eye is math, not sprites (`eyes/eye_model.h`): gaze, pupil, blink
   and mood decide every pixel, so the gaze moves continuously.
-- Drawn in stripes of 24 lines with two DMA buffers: one stripe goes out
-  over SPI while the CPU computes the next.
+- Drawn in stripes with two DMA buffers: one stripe goes out over SPI
+  while the CPU computes the next.
+- Fast path (`eyes/fast_render.h`): color tables rebuilt only when the
+  design changes, lids per column, no square root per pixel; checked
+  against the reference `eye_model.h` on 864 states (0 px off). A still
+  eye is not redrawn; a gaze-only change redraws just the box around the
+  iris. Measured on the board 2026-11-09: about 50 fps while the gaze
+  moves, about 34 fps for full redraws (blinks, moods); about 5 to 8
+  before (the reference model per pixel, every frame). `stats` reports it.
 - Idle life of its own: small saccades and blinks; a command pauses it.
 - Commands are lines over the USB serial port (`eyes/protocol.h`):
 
@@ -27,6 +34,7 @@ path: the eyes cannot arm or command anything.
 | `idle on/off` | wandering gaze and blinks of their own |
 | `set KEY VALUE` | one design field, live: `set iris_r 58`, `set colors.iris_in #ff8800`, `set happy.low 80` |
 | `style` | the whole live design as JSON, in `style.json`'s shape |
+| `stats` | frames drawn and skipped since the last `stats`, and the rate |
 | `save` / `reset` | keep the live design in NVS across reboots / back to `style.json` |
 
 Anything else answers `err <why>`.
