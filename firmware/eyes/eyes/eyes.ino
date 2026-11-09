@@ -3,8 +3,10 @@
 // Two round 240x240 GC9A01A panels on one SPI bus (shared clock, data and
 // D/C, one chip select each), drawn in stripes of STRIPE lines with two
 // DMA buffers: while one stripe goes out over SPI the CPU computes the
-// next. Each pixel comes from eye_model.h; commands arrive as lines over
-// the USB serial port (protocol.h). Pins from Waveshare's own examples
+// next. Each pixel comes from eye_model.h with the design in a Style
+// (style.h): the default is compiled from style.json, `set` changes it
+// live, `save` keeps it in NVS across reboots. Commands arrive as lines
+// over the USB serial port (protocol.h). Pins from Waveshare's own examples
 // (waveshareteam/ESP32-S3-DualEye-Touch-LCD-1.28, Arduino 01_LCD_Driver).
 //
 // The eyes never arm or move anything: they sit off SOMA's safety path.
@@ -14,9 +16,11 @@
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_ops.h"
 #include "freertos/semphr.h"
+#include <Preferences.h>
 #include "esp_lcd_gc9a01.h"
 #include "eye_model.h"
 #include "protocol.h"
+#include "style_default.h"
 
 // Pins (Waveshare example, Display_GC9A01.h)
 constexpr int PIN_SCLK = 41, PIN_MOSI = 42, PIN_MISO = 40, PIN_DC = 45;
@@ -31,7 +35,9 @@ static esp_lcd_panel_handle_t panel[2];
 static uint16_t* stripe_buf[2];
 static SemaphoreHandle_t free_bufs;              // counts stripe buffers not in flight
 
+static eyes::Style style;
 static eyes::EyeState state;
+static Preferences prefs;
 static float target_gx = 0, target_gy = 0;
 static bool idle_on = true;
 static uint32_t idle_pause_until = 0, next_saccade = 0, next_blink = 0, blink_start = 0;
@@ -82,7 +88,7 @@ static void draw_eye(int i) {
     k ^= 1;
     for (int y = 0; y < STRIPE; y++)
       for (int x = 0; x < eyes::SIZE; x++)
-        buf[y * eyes::SIZE + x] = eyes::rgb565_swapped(eyes::pixel(state, x, y0 + y, MIRROR[i]));
+        buf[y * eyes::SIZE + x] = eyes::rgb565_swapped(eyes::pixel(style, state, x, y0 + y, MIRROR[i]));
     esp_lcd_panel_draw_bitmap(panel[i], 0, y0, eyes::SIZE, y0 + STRIPE, buf);
   }
 }
@@ -93,21 +99,21 @@ static void animate(uint32_t now, float dt) {
     if (now >= next_saccade) {
       target_gx = (random(-60, 61)) / 100.0f;
       target_gy = (random(-35, 36)) / 100.0f;
-      next_saccade = now + random(800, 3200);
+      next_saccade = now + random(long(style.saccade_min), long(style.saccade_max));
     }
     if (now >= next_blink && !blinking) {
       blinking = true;
       blink_start = now;
-      next_blink = now + random(2200, 6000);
+      next_blink = now + random(long(style.blink_every_min), long(style.blink_every_max));
     }
   }
   float k = fminf(1.0f, dt * 14.0f);            // fast, like a saccade
   state.gx += (target_gx - state.gx) * k;
   state.gy += (target_gy - state.gy) * k;
   if (blinking) {
-    uint32_t t = now - blink_start;              // 70 ms down, 110 ms up
-    if (t < 70) state.blink = t / 70.0f;
-    else if (t < 180) state.blink = 1.0f - (t - 70) / 110.0f;
+    float t = now - blink_start, c = style.blink_close, o = style.blink_open;
+    if (t < c) state.blink = t / c;              // quick down, slower up, like a real one
+    else if (t < c + o) state.blink = 1.0f - (t - c) / o;
     else { state.blink = 0; blinking = false; }
   }
 }
@@ -117,12 +123,23 @@ static void handle_line(char* line) {
   uint32_t now = millis();
   switch (p.cmd) {
     case eyes::Cmd::Ping:    Serial.println("pong soma-eyes 0.1"); return;
-    case eyes::Cmd::Look:    target_gx = p.a; target_gy = p.b; idle_pause_until = now + 3000; break;
+    case eyes::Cmd::Look:    target_gx = p.a; target_gy = p.b; idle_pause_until = now + uint32_t(style.look_holds); break;
     case eyes::Cmd::Blink:   blinking = true; blink_start = now; break;
     case eyes::Cmd::SetMood: state.mood = p.mood; break;
     case eyes::Cmd::Pupil:   state.pupil = p.a; break;
     case eyes::Cmd::Bright:  set_brightness(p.a); break;
     case eyes::Cmd::Idle:    idle_on = p.on; break;
+    case eyes::Cmd::Set:
+      if (!eyes::set_param(style, p.key, p.value)) { Serial.println("err set: unknown key or bad value"); return; }
+      break;
+    case eyes::Cmd::Style: {
+      static char json[1400];
+      eyes::dump_json(style, json, sizeof(json));
+      Serial.println(json);
+      return;
+    }
+    case eyes::Cmd::Save:    prefs.putBytes("style", &style, sizeof(style)); break;
+    case eyes::Cmd::Reset:   style = eyes::default_style(); prefs.remove("style"); break;
     case eyes::Cmd::None:    Serial.print("err "); Serial.println(p.error); return;
   }
   Serial.println("ok");
@@ -143,6 +160,10 @@ void setup() {
     ledcAttach(PIN_BL[i], 20000, 10);
   }
   free_bufs = xSemaphoreCreateCounting(2, 2);
+  // The saved design, if any and if it still fits this firmware's Style.
+  style = eyes::default_style();
+  prefs.begin("soma-eyes", false);
+  if (prefs.getBytesLength("style") == sizeof(style)) prefs.getBytes("style", &style, sizeof(style));
   for (int i = 0; i < 2; i++) init_panel(i);
   set_brightness(80);
   randomSeed(esp_random());

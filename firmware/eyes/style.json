@@ -1,0 +1,36 @@
+{
+  "_doc": "SOMA's eye design: the single source of truth. tools/gen_style.py writes eyes/style_default.h from it; a test keeps them equal. Sizes in px on a 240 px round panel; colors as #rrggbb. Lids: how far each lid comes in from the edge; upper = up + tilt * u, lower = low - curve * u^2, with u from -1 (nose side) to +1 across the eye.",
+  "iris_r": 62,
+  "pupil_r": 26,
+  "gaze_reach": 46,
+  "glint_dx": -22,
+  "glint_dy": -22,
+  "glint_r": 9,
+  "lid_shadow": 10,
+  "colors": {
+    "sclera": "#e8eaec",
+    "sclera_edge": "#9698a0",
+    "iris_in": "#28d2eb",
+    "iris_out": "#0a5a8c",
+    "pupil": "#000000",
+    "lid": "#121218",
+    "glint": "#ffffff"
+  },
+  "moods": {
+    "neutral":   {"up": 22, "tilt": 0,   "low": 18, "curve": 0},
+    "happy":     {"up": 22, "tilt": 0,   "low": 70, "curve": 40},
+    "sad":       {"up": 40, "tilt": -30, "low": 18, "curve": 0},
+    "angry":     {"up": 40, "tilt": 34,  "low": 18, "curve": 0},
+    "surprised": {"up": 4,  "tilt": 0,   "low": 4,  "curve": 0},
+    "sleepy":    {"up": 92, "tilt": 0,   "low": 18, "curve": 0}
+  },
+  "timing_ms": {
+    "blink_close": 70,
+    "blink_open": 110,
+    "saccade_min": 800,
+    "saccade_max": 3200,
+    "blink_every_min": 2200,
+    "blink_every_max": 6000,
+    "look_holds": 3000
+  }
+}

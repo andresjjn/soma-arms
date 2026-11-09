@@ -7,6 +7,10 @@
 //   pupil S            -> ok        0.5..1.5
 //   bright N           -> ok        backlight, 0..100
 //   idle on|off        -> ok        wandering gaze and blinks of their own
+//   set KEY VALUE      -> ok        one design field live (style.h): iris_r 58,
+//                                   colors.iris_in #ff8800, happy.low 80, ...
+//   style              -> {...}     the whole design as JSON, for style.json
+//   save | reset       -> ok        keep the live design across reboots | back to default
 //
 // Anything else answers `err <why>`. The eyes never arm or move anything:
 // they are off SOMA's safety path by construction.
@@ -14,17 +18,19 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
-#include "eye_model.h"
+#include "style.h"
 
 namespace eyes {
 
-enum class Cmd : uint8_t { None, Ping, Look, Blink, SetMood, Pupil, Bright, Idle };
+enum class Cmd : uint8_t { None, Ping, Look, Blink, SetMood, Pupil, Bright, Idle, Set, Style, Save, Reset };
 
 struct Parsed {
   Cmd cmd = Cmd::None;
   float a = 0, b = 0;
   Mood mood = Mood::Neutral;
   bool on = false;
+  const char* key = nullptr;   // Set: point into the parsed line
+  const char* value = nullptr;
   const char* error = nullptr;
 };
 
@@ -38,11 +44,8 @@ inline bool parse_float(const char* s, float lo, float hi, float* out) {
 }
 
 inline bool mood_from(const char* s, Mood* m) {
-  static const struct { const char* name; Mood mood; } table[] = {
-      {"neutral", Mood::Neutral}, {"happy", Mood::Happy}, {"sad", Mood::Sad},
-      {"angry", Mood::Angry}, {"surprised", Mood::Surprised}, {"sleepy", Mood::Sleepy}};
-  for (auto& e : table)
-    if (s && std::strcmp(s, e.name) == 0) { *m = e.mood; return true; }
+  for (int i = 0; s && i < MOODS; i++)
+    if (std::strcmp(s, mood_name(i)) == 0) { *m = Mood(i); return true; }
   return false;
 }
 
@@ -56,6 +59,14 @@ inline Parsed parse(char* buf) {
   const char* w = words[0];
   if (!std::strcmp(w, "ping") && n == 1) { p.cmd = Cmd::Ping; return p; }
   if (!std::strcmp(w, "blink") && n == 1) { p.cmd = Cmd::Blink; return p; }
+  if (!std::strcmp(w, "style") && n == 1) { p.cmd = Cmd::Style; return p; }
+  if (!std::strcmp(w, "save") && n == 1) { p.cmd = Cmd::Save; return p; }
+  if (!std::strcmp(w, "reset") && n == 1) { p.cmd = Cmd::Reset; return p; }
+  if (!std::strcmp(w, "set")) {
+    // the value is checked when it is applied (set_param), against its field
+    if (n == 3) { p.cmd = Cmd::Set; p.key = words[1]; p.value = words[2]; return p; }
+    p.error = "set KEY VALUE"; return p;
+  }
   if (!std::strcmp(w, "look")) {
     if (n == 3 && parse_float(words[1], -1, 1, &p.a) && parse_float(words[2], -1, 1, &p.b)) { p.cmd = Cmd::Look; return p; }
     p.error = "look X Y, each -1..1"; return p;

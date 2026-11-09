@@ -25,8 +25,25 @@ path: the eyes cannot arm or command anything.
 | `pupil S` | pupil scale 0.5..1.5 |
 | `bright N` | backlight 0..100 |
 | `idle on/off` | wandering gaze and blinks of their own |
+| `set KEY VALUE` | one design field, live: `set iris_r 58`, `set colors.iris_in #ff8800`, `set happy.low 80` |
+| `style` | the whole live design as JSON, in `style.json`'s shape |
+| `save` / `reset` | keep the live design in NVS across reboots / back to `style.json` |
 
 Anything else answers `err <why>`.
+
+## Changing the design
+
+How the eyes look is data, in one place: **`style.json`** (sizes, colors,
+the lid shape of each mood, blink and saccade timing). Never edit the
+numbers in C++.
+
+1. Preview on the Mac, with the board's own eye model compiled for the
+   host: `python3 firmware/eyes/tools/preview.py [KEY=VALUE ...]` writes
+   `firmware/eyes/preview.png` (rows: moods; columns: gaze and a half blink).
+2. Tune it live on the board: `set KEY VALUE`, then `save`.
+3. Bring it home: `style` prints the JSON; paste it into `style.json`, run
+   `python3 firmware/eyes/tools/gen_style.py`, commit. A test fails if the
+   JSON and the generated `eyes/style_default.h` ever disagree.
 
 ## Pins
 

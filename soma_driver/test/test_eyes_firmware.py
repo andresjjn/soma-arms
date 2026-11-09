@@ -30,3 +30,11 @@ def test_the_eyes_cannot_reach_the_driver():
     source = '\n'.join(p.read_text() for p in (EYES / 'eyes').glob('*.[hic]*') if 'gc9a01' not in p.name)
     for word in ('/soma/arm', 'allow_real', 'soma/command', 'rclpy', 'PCA9685'):
         assert word not in source
+
+
+def test_the_compiled_default_design_is_style_json():
+    # style.json is the single source of truth; style_default.h is generated
+    # from it (firmware/eyes/tools/gen_style.py). Edit the JSON, run the script.
+    import sys
+    run = subprocess.run([sys.executable, str(EYES / 'tools' / 'gen_style.py'), '--check'])
+    assert run.returncode == 0, 'style_default.h is stale: run firmware/eyes/tools/gen_style.py'
