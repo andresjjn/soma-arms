@@ -39,7 +39,7 @@ def render(style: dict) -> str:
     for i, m in enumerate(MOODS):
         d = style['moods'][m]
         lines.append(f'  s.moods[{i}] = {{{float(d["up"])!r}f, {float(d["tilt"])!r}f, '
-                     f'{float(d["low"])!r}f, {float(d["curve"])!r}f}};  // {m}')
+                     f'{float(d.get("arch", 0))!r}f, {float(d["low"])!r}f, {float(d["curve"])!r}f}};  // {m}')
     lines += [f'  s.{k} = {float(style["timing_ms"][k])!r}f;' for k in TIMING]
     lines += ['  return s;', '}', '', '}  // namespace eyes', '']
     return '\n'.join(lines)

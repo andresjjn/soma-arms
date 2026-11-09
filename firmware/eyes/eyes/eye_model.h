@@ -45,7 +45,7 @@ struct Lids { float upper, lower; };
 inline Lids lids(const Style& st, const EyeState& s, float dx, float mirror) {
   const MoodLids& m = st.moods[int(s.mood)];
   float u = dx / R * mirror;                     // -1 .. 1 across the eye
-  float up = m.up + m.tilt * u;
+  float up = m.up + m.tilt * u + m.arch * u * u;  // a curved lid: more at the corners
   float low = m.low - m.curve * u * u;
   // A blink brings both lids to meet a little below the middle.
   up += (R + 10.0f - up) * s.blink;

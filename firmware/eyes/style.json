@@ -1,5 +1,5 @@
 {
-  "_doc": "SOMA's eye design: the single source of truth. tools/gen_style.py writes eyes/style_default.h from it; a test keeps them equal. Sizes in px on a 240 px round panel; colors as #rrggbb. Lids: how far each lid comes in from the edge; upper = up + tilt * u, lower = low - curve * u^2, with u from -1 (nose side) to +1 across the eye.",
+  "_doc": "SOMA's eye design: the single source of truth. tools/gen_style.py writes eyes/style_default.h from it; a test keeps them equal. Sizes in px on a 240 px round panel; colors as #rrggbb. Lids: how far each lid comes in from the edge; upper = up + tilt * u + arch * u^2 (arch > 0 curves it like a human lid, more at the corners), lower = low - curve * u^2, with u from -1 (nose side) to +1 across the eye.",
   "iris_r": 62,
   "pupil_r": 26,
   "gaze_reach": 46,
@@ -17,12 +17,12 @@
     "glint": "#ffffff"
   },
   "moods": {
-    "neutral":   {"up": 22, "tilt": 0,   "low": 18, "curve": 0},
-    "happy":     {"up": 22, "tilt": 0,   "low": 70, "curve": 40},
-    "sad":       {"up": 40, "tilt": -30, "low": 18, "curve": 0},
-    "angry":     {"up": 40, "tilt": 34,  "low": 18, "curve": 0},
-    "surprised": {"up": 4,  "tilt": 0,   "low": 4,  "curve": 0},
-    "sleepy":    {"up": 92, "tilt": 0,   "low": 18, "curve": 0}
+    "neutral": {"up": 0, "tilt": 0, "arch": 26, "low": 0, "curve": -16},
+    "happy": {"up": 14, "tilt": 0, "arch": 22, "low": 70, "curve": 40},
+    "sad": {"up": 30, "tilt": -30, "arch": 22, "low": 6, "curve": -16},
+    "angry": {"up": 30, "tilt": 34, "arch": 18, "low": 6, "curve": -16},
+    "surprised": {"up": 0, "tilt": 0, "arch": 6, "low": 0, "curve": -4},
+    "sleepy": {"up": 84, "tilt": 0, "arch": 16, "low": 6, "curve": -16}
   },
   "timing_ms": {
     "blink_close": 70,

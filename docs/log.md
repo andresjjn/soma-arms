@@ -970,3 +970,10 @@ safety path (they will never arm or move anything).
   around the iris; tested against the reference (864 states, 0 px off)
   and window against full frame (0 px). Measured with `stats`: about 50
   fps while the gaze moves, about 34 fps on full redraws.
+- Andres on the board: "se ve espectacular", the lids carry the
+  expressions (surprise reads only because they open). He asked for
+  curved lids, like a human one, instead of straight ones. New `arch` per
+  mood: upper lid = up + tilt * u + arch * u^2, more lid at the corners;
+  neutral now open at the center with lid only at the corners (the dark
+  bands he saw were the old straight resting lids). The surprise test now
+  checks the corners, where a curved neutral differs from surprise.

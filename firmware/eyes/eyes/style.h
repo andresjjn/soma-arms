@@ -22,7 +22,7 @@ inline const char* mood_name(int i) {
   return names[i];
 }
 
-struct MoodLids { float up, tilt, low, curve; };
+struct MoodLids { float up, tilt, arch, low, curve; };
 
 struct Style {
   float iris_r, pupil_r, gaze_reach, glint_dx, glint_dy, glint_r, lid_shadow;
@@ -87,6 +87,7 @@ inline bool set_param(Style& s, const char* key, const char* value) {
     const char* field = dot + 1;
     float* target = !std::strcmp(field, "up") ? &s.moods[m].up
                   : !std::strcmp(field, "tilt") ? &s.moods[m].tilt
+                  : !std::strcmp(field, "arch") ? &s.moods[m].arch
                   : !std::strcmp(field, "low") ? &s.moods[m].low
                   : !std::strcmp(field, "curve") ? &s.moods[m].curve : nullptr;
     return target && parse_number(value, target);
@@ -109,8 +110,8 @@ inline int dump_json(const Style& s, char* out, size_t cap) {
   for (int i = 0; i < 7; i++) put("%s\"%s\":\"#%02x%02x%02x\"", i ? "," : "", cn[i], cs[i]->r, cs[i]->g, cs[i]->b);
   put("%s", "},\"moods\":{");
   for (int m = 0; m < MOODS; m++)
-    put("%s\"%s\":{\"up\":%g,\"tilt\":%g,\"low\":%g,\"curve\":%g}", m ? "," : "", mood_name(m),
-        s.moods[m].up, s.moods[m].tilt, s.moods[m].low, s.moods[m].curve);
+    put("%s\"%s\":{\"up\":%g,\"tilt\":%g,\"arch\":%g,\"low\":%g,\"curve\":%g}", m ? "," : "",
+        mood_name(m), s.moods[m].up, s.moods[m].tilt, s.moods[m].arch, s.moods[m].low, s.moods[m].curve);
   put("},\"timing_ms\":{\"blink_close\":%g,\"blink_open\":%g,\"saccade_min\":%g,\"saccade_max\":%g,"
       "\"blink_every_min\":%g,\"blink_every_max\":%g,\"look_holds\":%g}}",
       s.blink_close, s.blink_open, s.saccade_min, s.saccade_max, s.blink_every_min, s.blink_every_max,

@@ -41,7 +41,11 @@ int main() {
   CHECK(lids(st, s, -60, +1).upper != lids(st, s, -60, -1).upper);
   CHECK(lids(st, s, 60, +1).upper == lids(st, s, -60, -1).upper);
   s.mood = Mood::Surprised;
-  CHECK(lids(st, s, 0, 1).upper < lids(st, EyeState{}, 0, 1).upper);
+  // Surprise opens the eye wider than neutral: with curved lids (2026-11-09)
+  // neutral is already open at the center, so the corners tell.
+  CHECK(lids(st, s, 0, 1).upper <= lids(st, EyeState{}, 0, 1).upper);
+  CHECK(lids(st, s, 90, 1).upper < lids(st, EyeState{}, 90, 1).upper);
+  CHECK(lids(st, s, -90, 1).upper < lids(st, EyeState{}, -90, 1).upper);
   s.mood = Mood::Happy;
   CHECK(lids(st, s, 0, 1).lower > lids(st, EyeState{}, 0, 1).lower);
   s.mood = Mood::Neutral;
@@ -70,7 +74,8 @@ int main() {
   CHECK(n > 200 && n < int(sizeof(json)));
   CHECK(std::strstr(json, "\"iris_r\":40") != nullptr);
   CHECK(std::strstr(json, "\"pupil\":\"#ff0000\"") != nullptr);
-  CHECK(std::strstr(json, "\"happy\":{\"up\":22,\"tilt\":0,\"low\":80,\"curve\":40}") != nullptr);
+  CHECK(std::strstr(json, "\"happy\":{\"up\":14,\"tilt\":0,\"arch\":22,\"low\":80,\"curve\":40}") != nullptr);
+  CHECK(set_param(live, "neutral.arch", "30") && live.moods[int(Mood::Neutral)].arch == 30.0f);
 
   // Protocol.
   CHECK(parse("ping").cmd == Cmd::Ping);
