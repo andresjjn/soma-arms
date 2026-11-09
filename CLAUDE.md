@@ -122,6 +122,9 @@ soma_driver/          PCA9685 driver
   soma_driver/limp.py              which arm may hang with its signal cut (limp_arm), pure
   soma_driver/ina3221.py           power monitor, read-only, no gates needed
   test/                            the safety test suite
+firmware/eyes/        SOMA's eyes: ESP32-S3 Dual-Eye firmware (Arduino), off the ladder
+                      and off the safety path; eyes/eye_model.h and eyes/protocol.h are
+                      pure, built for the host by test/test_eyes.cpp
 docs/                 plan, log, hardware, wiring, safety, bench, migration,
                       session_v02 (the printable v0.2 bench runbook)
 scripts/              smoke_test.sh, check_model_driver_sync.py,

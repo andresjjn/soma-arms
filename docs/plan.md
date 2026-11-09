@@ -344,7 +344,15 @@ These do not bend for a demo, a deadline or an agent.
   and a package that never existed. `srdf/soma.srdf` and
   `config/kinematics.yaml` stay as reference files, off the ladder.
 - **Bimanual handoff.** Physically impossible on this bench: the planes
-  are 124.6 mm apart and no joint moves laterally.
+  are 162 mm apart (measured 2026-10-27) and no joint moves laterally.
+- **The eyes** (2026-11-09): a Waveshare ESP32-S3 Dual-Eye 1.28, two
+  round LCDs on one ESP32-S3, in `firmware/eyes/`. Kept in this
+  repository on purpose (they are SOMA's face, and the point is for them
+  to look where the arm works, which needs the IK and the camera), but
+  OFF the ladder: no gate waits on them, they get time-boxed evenings,
+  and anything left at v1.0 becomes an issue like everything else. They
+  sit off the safety path by construction: they cannot arm or command
+  anything.
 - **Vision teleop by mimicry (BlazePose).** Post-1.0 backlog, as before.
 - **Deferred past v1.0**: a rotary index table to move parts between the
   two lanes (the honest way to get a flow between arms), and a gravity

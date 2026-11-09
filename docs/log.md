@@ -950,3 +950,13 @@ outside this repository (vendor firmware); its partition table holds a
 3 MB app and a 5.9 MB "model" partition, likely speech models. The eyes
 are outside the v0.3 to v1.0 ladder: time-boxed, and kept off the
 safety path (they will never arm or move anything).
+- Kept in this repository (Andres's call: one place for SOMA, and the
+  point is for the eyes to look where the arm works). `firmware/eyes/`:
+  pins from Waveshare's own examples, both panels on one SPI bus with a
+  chip select each, drawn in 24-line stripes through two DMA buffers;
+  the eye is math per pixel (gaze, pupil, blink, mood as lid shapes);
+  a line protocol over USB serial (ping, look, blink, mood, pupil,
+  bright, idle). The pure parts build for the host and are tested.
+  Built with arduino-cli and the esp32 core 3.2.0 (Waveshare's version;
+  the Mac needed Rosetta for Arduino's x86 ctags): 373 KB, 11 % of the
+  app partition. Not flashed yet.
