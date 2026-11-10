@@ -128,8 +128,52 @@ static void animate(uint32_t now, float dt) {
   }
 }
 
+// A still picture from the host, for previewing designs on the real panels:
+// `img E` then SIZE*SIZE*2 bytes of RGB565, high byte first (the panel's
+// order), in blocks of IMG_BLOCK: the board answers `k` after each block
+// and the host waits for it. Arduino's USB-Serial/JTAG driver drops bytes
+// when its receive buffer fills (2026-11-09: 45 of 115 KB arrived), so the
+// blocks are the flow control. The eyes stop animating until `live`,
+// `mood` or `look`.
+constexpr size_t IMG_BLOCK = 4096;
+static bool showing_image = false, force_redraw = false;
+static uint8_t* image_buf = nullptr;
+
+static void receive_image(int eye) {
+  const size_t want = eyes::SIZE * eyes::SIZE * 2;
+  if (!image_buf) image_buf = (uint8_t*)heap_caps_malloc(want, MALLOC_CAP_SPIRAM);
+  if (!image_buf) { Serial.println("err img: no memory"); return; }
+  size_t got = 0, next_ack = IMG_BLOCK;
+  uint32_t deadline = millis() + 5000;
+  Serial.write('k');                             // ready for the first block
+  while (got < want && millis() < deadline) {
+    int n = Serial.read(image_buf + got, min(want, next_ack) - got);
+    if (n <= 0) { delay(1); continue; }
+    got += n;
+    deadline = millis() + 2000;
+    if (got == next_ack && got < want) { Serial.write('k'); next_ack += IMG_BLOCK; }
+  }
+  if (got < want) { Serial.printf("err img: got %u of %u bytes\n", (unsigned)got, (unsigned)want); return; }
+  showing_image = true;
+  static int k = 0;
+  for (int y0 = 0; y0 < eyes::SIZE; y0 += STRIPE) {
+    xSemaphoreTake(free_bufs, portMAX_DELAY);
+    uint16_t* buf = stripe_buf[k];
+    k ^= 1;
+    memcpy(buf, image_buf + size_t(y0) * eyes::SIZE * 2, size_t(STRIPE) * eyes::SIZE * 2);
+    esp_lcd_panel_draw_bitmap(panel[eye], 0, y0, eyes::SIZE, y0 + STRIPE, buf);
+  }
+  Serial.println("ok");
+}
+
 static void handle_line(char* line) {
+  if (!strncmp(line, "img ", 4) && (line[4] == '0' || line[4] == '1') && line[5] == '\0') {
+    receive_image(line[4] - '0');
+    return;
+  }
+  if (!strcmp(line, "live")) { showing_image = false; force_redraw = true; Serial.println("ok"); return; }
   eyes::Parsed p = eyes::parse(line);
+  if (p.cmd == eyes::Cmd::SetMood || p.cmd == eyes::Cmd::Look) { showing_image = false; force_redraw = true; }
   uint32_t now = millis();
   switch (p.cmd) {
     case eyes::Cmd::Ping:    Serial.println("pong soma-eyes 0.1"); return;
@@ -165,6 +209,7 @@ static void handle_line(char* line) {
 }
 
 void setup() {
+  Serial.setRxBufferSize(16384);
   Serial.begin(115200);
   spi_bus_config_t bus = {};
   bus.mosi_io_num = PIN_MOSI;
@@ -205,6 +250,8 @@ void loop() {
   if (fabsf(target_gy - state.gy) < 0.002f) state.gy = target_gy;
   static eyes::EyeState drawn;
   static bool first = true;
+  if (showing_image) { delay(5); return; }
+  if (force_redraw) { first = true; force_redraw = false; }
   if (style_dirty) { eyes::prepare_style(fast, style); style_dirty = false; first = true; }
   if (!first && same_state(state, drawn)) { frames_skipped++; delay(5); return; }
   // Only the gaze moved: redraw the box around the iris, old and new.

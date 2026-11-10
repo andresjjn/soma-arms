@@ -36,6 +36,8 @@ path: the eyes cannot arm or command anything.
 | `idle on/off` | wandering gaze and blinks of their own |
 | `set KEY VALUE` | one design field, live: `set iris_r 58`, `set colors.iris_in #ff8800`, `set happy.low 80` |
 | `style` | the whole live design as JSON, in `style.json`'s shape |
+| `img E` + data | a still picture on eye E (0 or 1): 115,200 bytes of RGB565, high byte first, in 4 KB blocks the board acknowledges with `k` (the USB driver drops bytes otherwise) |
+| `live` | back to the animated eyes after `img` (so do `mood` and `look`) |
 | `stats` | frames drawn and skipped since the last `stats`, and the rate |
 | `save` / `reset` | keep the live design in NVS across reboots / back to `style.json` |
 
@@ -54,6 +56,14 @@ numbers in C++.
 3. Bring it home: `style` prints the JSON; paste it into `style.json`, run
    `python3 firmware/eyes/tools/gen_style.py`, commit. A test fails if the
    JSON and the generated `eyes/style_default.h` ever disagree.
+
+## Previewing other designs on the panels
+
+`tools/design_tour.py` shows still pictures of any proposal on the real
+panels: it cuts each eye out of a contact sheet drawn at panel size (rows
+of four pairs) and sends it with `img`. Nothing is implemented on the
+board. It played the 2026-11-09 Claude Design proposals (APERTURA, a
+camera iris; HALO, a ring of 24 light segments) after the current design.
 
 ## Pins
 

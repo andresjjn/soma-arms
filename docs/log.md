@@ -977,3 +977,15 @@ safety path (they will never arm or move anything).
   neutral now open at the center with lid only at the corners (the dark
   bands he saw were the old straight resting lids). The surprise test now
   checks the corners, where a curved neutral differs from surprise.
+- Claude Design answered the eye brief with two robot (not humanoid)
+  proposals, each specified in shapes and per-mood parameters: APERTURA
+  (a camera iris: six-blade diaphragm, coated glass, sensor, a barrel
+  with focus marks; blink is the iris closing) and HALO (an instrument:
+  24 light segments and a pointing core; each mood a pattern plus a
+  color, never color alone). Both add "thinking" and "focused" states
+  and 250 ms eased transitions. To see them on the real panels without
+  implementing them, the firmware gained `img E` (a still RGB565 picture
+  per eye, in 4 KB blocks acknowledged by the board: Arduino's
+  USB-Serial/JTAG driver dropped 70 KB of 115 when sent in one go) and
+  `live`; `tools/design_tour.py` cuts the eyes out of the contact sheets
+  and played current, APERTURA, HALO. 0.35 s per eye.
