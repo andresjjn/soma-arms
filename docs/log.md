@@ -989,3 +989,10 @@ safety path (they will never arm or move anything).
   USB-Serial/JTAG driver dropped 70 KB of 115 when sent in one go) and
   `live`; `tools/design_tour.py` cuts the eyes out of the contact sheets
   and played current, APERTURA, HALO. 0.35 s per eye.
+- Andres preferred the current eye over both proposals ("lo que tienes
+  aqui esta mucho mejor") and kept one idea: the shutter. The lids keep
+  their shape (the moods live in it) and become shutter blades: gunmetal
+  (#22272e), a machined edge of 3 px (#8c98a8) along the lid line, and 3
+  joints radiating from the center that split each lid into blades. All
+  data in style.json (lid_edge 0 and lid_seams 0 give the plain lid back);
+  the fast path matches the reference on 864 states, 0 px off.

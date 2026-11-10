@@ -11,6 +11,10 @@ static int fails = 0;
 #define CHECK(cond) do { if (!(cond)) { std::printf("FAIL %s:%d %s\n", __FILE__, __LINE__, #cond); fails++; } } while (0)
 
 static bool same(eyes::Rgb a, eyes::Rgb b) { return a.r == b.r && a.g == b.g && a.b == b.b; }
+// Any part of the shutter: a blade, its machined edge or a joint (2026-11-09).
+static bool shutter(const eyes::Style& st, eyes::Rgb c) {
+  return same(c, st.lid) || same(c, st.lid_edge_color) || same(c, st.lid_seam_color);
+}
 static eyes::Parsed parse(const char* s) { static char buf[96]; std::strncpy(buf, s, 95); buf[95] = 0; return eyes::parse(buf); }
 
 int main() {
@@ -32,8 +36,10 @@ int main() {
 
   // A full blink shuts the eye.
   s.blink = 1.0f;
-  CHECK(same(pixel(st, s, 120, 100, 1), st.lid));
-  CHECK(same(pixel(st, s, 120, 140, 1), st.lid));
+  CHECK(shutter(st, pixel(st, s, 120, 100, 1)));
+  CHECK(shutter(st, pixel(st, s, 120, 140, 1)));
+  CHECK(same(pixel(st, s, 120, 100, 1), st.lid_seam_color));   // a joint runs down the middle
+  CHECK(same(pixel(st, s, 60, 100, 1), st.lid));                // a blade beside it
   s.blink = 0;
 
   // Moods change the lids; mirrored eyes slant toward the nose.

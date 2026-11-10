@@ -26,7 +26,9 @@ struct FastStyle {
   Rgb sclera_by_r[SIZE / 2 + 1];                 // sclera color at radius r
   Rgb iris_by_d[SIZE / 2 + 1];                   // iris color at distance d from the iris center
   uint16_t sclera565[SIZE / 2 + 1], iris565[SIZE / 2 + 1];
-  uint16_t lid565, pupil565, glint565;
+  uint16_t lid565, pupil565, glint565, edge565, seam565;
+  int seams;
+  float seam_c[8], seam_s[8];                    // per seam, upper lid; the lower one is mirrored
 };
 
 inline void prepare_style(FastStyle& f, const Style& st) {
@@ -38,12 +40,21 @@ inline void prepare_style(FastStyle& f, const Style& st) {
     f.sclera565[r] = rgb565_swapped(f.sclera_by_r[r]);
   }
   f.lid565 = rgb565_swapped(st.lid);
+  f.edge565 = rgb565_swapped(st.lid_edge_color);
+  f.seam565 = rgb565_swapped(st.lid_seam_color);
+  f.seams = int(st.lid_seams) > 8 ? 8 : int(st.lid_seams);
+  for (int k = 0; k < f.seams; k++) {             // the same angles as shutter()
+    float a = -1.5707964f + (k - (f.seams - 1) * 0.5f) * 0.6f;
+    f.seam_c[k] = std::cos(a);
+    f.seam_s[k] = std::sin(a);
+  }
   f.pupil565 = rgb565_swapped(st.pupil);
   f.glint565 = rgb565_swapped(st.glint);
 }
 
 struct FastFrame {
   float upper[SIZE];       // the upper lid's reach per column, px (pixel()'s l.upper)
+  float lower[SIZE];       // and the lower one's
   int lid_top[SIZE];       // first open row of each column
   int lid_bottom[SIZE];    // first lid row at the bottom of each column
   float cx, cy;            // iris center, px from the top left
@@ -56,6 +67,7 @@ inline void prepare_frame(FastStyle& f, FastFrame& fr, const EyeState& s, float 
   for (int x = 0; x < SIZE; x++) {
     Lids l = lids(st, s, x + 0.5f - R, mirror);
     fr.upper[x] = l.upper;
+    fr.lower[x] = l.lower;
     // pixel(): lid where dy < -R + upper, i.e. y + 0.5 < upper
     fr.lid_top[x] = int(std::ceil(l.upper - 0.5f));
     fr.lid_bottom[x] = int(std::floor(SIZE - l.lower - 0.5f)) + 1;
@@ -89,7 +101,20 @@ inline void render_rows(const FastStyle& f, const FastFrame& fr, int y0, int row
       float px = x + 0.5f, dx = px - R;
       float r2 = dx * dx + dy2;
       if (r2 > R * R) { row[x] = 0; continue; }
-      if (y < fr.lid_top[x] || y >= fr.lid_bottom[x]) { row[x] = f.lid565; continue; }
+      if (y < fr.lid_top[x] || y >= fr.lid_bottom[x]) {
+        bool up = y < fr.lid_top[x];
+        float depth = up ? fr.upper[x] - py : dy - (R - fr.lower[x]);
+        uint16_t c = f.lid565;
+        if (depth < st.lid_edge) c = f.edge565;
+        else
+          for (int k = 0; k < f.seams; k++) {
+            // the lower lid's seams are the upper ones mirrored top to bottom
+            float sc = f.seam_c[k], ss = up ? f.seam_s[k] : -f.seam_s[k];
+            if (dx * sc + dy * ss > 0 && std::fabs(dx * ss - dy * sc) < 0.9f) { c = f.seam565; break; }
+          }
+        row[x] = c;
+        continue;
+      }
       float ix = px - fr.cx, d2 = ix * ix + iy2;
       float gx = px - fr.gcx;
       bool glint = gx * gx + gy2 < fr.gr2;

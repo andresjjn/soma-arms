@@ -53,13 +53,29 @@ inline Lids lids(const Style& st, const EyeState& s, float dx, float mirror) {
   return {up, low};
 }
 
+// The lids as shutter blades (2026-11-09, Andres): a machined edge of
+// lid_edge px along the lid line, and lid_seams joints radiating from the
+// eye's center that split each lid into blades. depth is how far into the
+// lid the pixel is, measured across its edge.
+inline Rgb shutter(const Style& st, float dx, float dy, float depth, bool upper) {
+  if (depth < st.lid_edge) return st.lid_edge_color;
+  int n = int(st.lid_seams);
+  for (int k = 0; k < n; k++) {
+    float a = (upper ? -1.5707964f : 1.5707964f) + (k - (n - 1) * 0.5f) * 0.6f;  // 0.6 rad apart
+    float c = std::cos(a), s = std::sin(a);
+    if (dx * c + dy * s > 0 && std::fabs(dx * s - dy * c) < 0.9f) return st.lid_seam_color;
+  }
+  return st.lid;
+}
+
 // The color of one pixel (x, y in 0..SIZE-1) of an eye.
 inline Rgb pixel(const Style& st, const EyeState& s, int x, int y, float mirror) {
   float dx = x + 0.5f - R, dy = y + 0.5f - R;
   float r2 = dx * dx + dy * dy;
   if (r2 > R * R) return BLACK;                  // outside the round glass
   Lids l = lids(st, s, dx, mirror);
-  if (dy < -R + l.upper || dy > R - l.lower) return st.lid;
+  if (dy < -R + l.upper) return shutter(st, dx, dy, -R + l.upper - dy, true);
+  if (dy > R - l.lower) return shutter(st, dx, dy, dy - (R - l.lower), false);
   float ix = dx - s.gx * st.gaze_reach, iy = dy - s.gy * st.gaze_reach;
   float d = std::sqrt(ix * ix + iy * iy);
   float pr = st.pupil_r * s.pupil;

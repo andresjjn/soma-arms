@@ -1,5 +1,5 @@
 {
-  "_doc": "SOMA's eye design: the single source of truth. tools/gen_style.py writes eyes/style_default.h from it; a test keeps them equal. Sizes in px on a 240 px round panel; colors as #rrggbb. Lids: how far each lid comes in from the edge; upper = up + tilt * u + arch * u^2 (arch > 0 curves it like a human lid, more at the corners), lower = low - curve * u^2, with u from -1 (nose side) to +1 across the eye.",
+  "_doc": "SOMA's eye design: the single source of truth. tools/gen_style.py writes eyes/style_default.h from it; a test keeps them equal. Sizes in px on a 240 px round panel; colors as #rrggbb. Lids: how far each lid comes in from the edge; upper = up + tilt * u + arch * u^2 (arch > 0 curves it like a human lid, more at the corners), lower = low - curve * u^2, with u from -1 (nose side) to +1 across the eye. The lids are shutter blades: a machined edge of lid_edge px in colors.lid_edge along the lid line, and lid_seams joints radiating from the center in colors.lid_seam (lid_edge 0 and lid_seams 0 give a plain lid).",
   "iris_r": 62,
   "pupil_r": 26,
   "gaze_reach": 46,
@@ -7,14 +7,18 @@
   "glint_dy": -22,
   "glint_r": 9,
   "lid_shadow": 10,
+  "lid_edge": 3,
+  "lid_seams": 3,
   "colors": {
     "sclera": "#e8eaec",
     "sclera_edge": "#9698a0",
     "iris_in": "#28d2eb",
     "iris_out": "#0a5a8c",
     "pupil": "#000000",
-    "lid": "#121218",
-    "glint": "#ffffff"
+    "lid": "#22272e",
+    "glint": "#ffffff",
+    "lid_edge": "#8c98a8",
+    "lid_seam": "#0c0e12"
   },
   "moods": {
     "neutral": {"up": 0, "tilt": 0, "arch": 26, "low": 0, "curve": -16},

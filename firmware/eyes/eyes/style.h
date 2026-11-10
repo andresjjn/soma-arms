@@ -25,8 +25,8 @@ inline const char* mood_name(int i) {
 struct MoodLids { float up, tilt, arch, low, curve; };
 
 struct Style {
-  float iris_r, pupil_r, gaze_reach, glint_dx, glint_dy, glint_r, lid_shadow;
-  Rgb sclera, sclera_edge, iris_in, iris_out, pupil, lid, glint;
+  float iris_r, pupil_r, gaze_reach, glint_dx, glint_dy, glint_r, lid_shadow, lid_edge, lid_seams;
+  Rgb sclera, sclera_edge, iris_in, iris_out, pupil, lid, glint, lid_edge_color, lid_seam_color;
   MoodLids moods[MOODS];
   float blink_close, blink_open, saccade_min, saccade_max, blink_every_min, blink_every_max, look_holds;
 };
@@ -39,9 +39,10 @@ struct Field { const char* name; size_t offset; char kind; };   // kind: 'f' flo
 inline const Field* fields(size_t* count) {
   static const Field table[] = {
       EYES_F(iris_r), EYES_F(pupil_r), EYES_F(gaze_reach), EYES_F(glint_dx), EYES_F(glint_dy),
-      EYES_F(glint_r), EYES_F(lid_shadow),
+      EYES_F(glint_r), EYES_F(lid_shadow), EYES_F(lid_edge), EYES_F(lid_seams),
       EYES_C(sclera), EYES_C(sclera_edge), EYES_C(iris_in), EYES_C(iris_out), EYES_C(pupil),
-      EYES_C(lid), EYES_C(glint),
+      EYES_C(lid), EYES_C(glint), {"colors.lid_edge", offsetof(Style, lid_edge_color), 'c'},
+      {"colors.lid_seam", offsetof(Style, lid_seam_color), 'c'},
       EYES_T(blink_close), EYES_T(blink_open), EYES_T(saccade_min), EYES_T(saccade_max),
       EYES_T(blink_every_min), EYES_T(blink_every_max), EYES_T(look_holds)};
   *count = sizeof(table) / sizeof(table[0]);
@@ -103,11 +104,14 @@ inline int dump_json(const Style& s, char* out, size_t cap) {
     if (k > 0) w += k;
   };
   put("{\"iris_r\":%g,\"pupil_r\":%g,\"gaze_reach\":%g,\"glint_dx\":%g,\"glint_dy\":%g,"
-      "\"glint_r\":%g,\"lid_shadow\":%g,\"colors\":{",
-      s.iris_r, s.pupil_r, s.gaze_reach, s.glint_dx, s.glint_dy, s.glint_r, s.lid_shadow);
-  const Rgb* cs[] = {&s.sclera, &s.sclera_edge, &s.iris_in, &s.iris_out, &s.pupil, &s.lid, &s.glint};
-  const char* cn[] = {"sclera", "sclera_edge", "iris_in", "iris_out", "pupil", "lid", "glint"};
-  for (int i = 0; i < 7; i++) put("%s\"%s\":\"#%02x%02x%02x\"", i ? "," : "", cn[i], cs[i]->r, cs[i]->g, cs[i]->b);
+      "\"glint_r\":%g,\"lid_shadow\":%g,\"lid_edge\":%g,\"lid_seams\":%g,\"colors\":{",
+      s.iris_r, s.pupil_r, s.gaze_reach, s.glint_dx, s.glint_dy, s.glint_r, s.lid_shadow, s.lid_edge,
+      s.lid_seams);
+  const Rgb* cs[] = {&s.sclera, &s.sclera_edge, &s.iris_in, &s.iris_out, &s.pupil, &s.lid, &s.glint,
+                     &s.lid_edge_color, &s.lid_seam_color};
+  const char* cn[] = {"sclera", "sclera_edge", "iris_in", "iris_out", "pupil", "lid", "glint", "lid_edge",
+                      "lid_seam"};
+  for (int i = 0; i < 9; i++) put("%s\"%s\":\"#%02x%02x%02x\"", i ? "," : "", cn[i], cs[i]->r, cs[i]->g, cs[i]->b);
   put("%s", "},\"moods\":{");
   for (int m = 0; m < MOODS; m++)
     put("%s\"%s\":{\"up\":%g,\"tilt\":%g,\"arch\":%g,\"low\":%g,\"curve\":%g}", m ? "," : "",

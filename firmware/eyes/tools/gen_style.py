@@ -15,8 +15,9 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parents[1]
 JSON = HERE / 'style.json'
 HEADER = HERE / 'eyes' / 'style_default.h'
-TOP = ('iris_r', 'pupil_r', 'gaze_reach', 'glint_dx', 'glint_dy', 'glint_r', 'lid_shadow')
+TOP = ('iris_r', 'pupil_r', 'gaze_reach', 'glint_dx', 'glint_dy', 'glint_r', 'lid_shadow', 'lid_edge', 'lid_seams')
 COLORS = ('sclera', 'sclera_edge', 'iris_in', 'iris_out', 'pupil', 'lid', 'glint')
+COLOR_FIELDS = {'lid_edge': 'lid_edge_color', 'lid_seam': 'lid_seam_color'}
 MOODS = ('neutral', 'happy', 'sad', 'angry', 'surprised', 'sleepy')
 TIMING = ('blink_close', 'blink_open', 'saccade_min', 'saccade_max', 'blink_every_min',
           'blink_every_max', 'look_holds')
@@ -36,6 +37,7 @@ def render(style: dict) -> str:
              'inline Style default_style() {', '  Style s{};']
     lines += [f'  s.{k} = {float(style[k])!r}f;' for k in TOP]
     lines += [f'  s.{k} = Rgb{rgb(style["colors"][k])};' for k in COLORS]
+    lines += [f'  s.{field} = Rgb{rgb(style["colors"][k])};' for k, field in COLOR_FIELDS.items()]
     for i, m in enumerate(MOODS):
         d = style['moods'][m]
         lines.append(f'  s.moods[{i}] = {{{float(d["up"])!r}f, {float(d["tilt"])!r}f, '
