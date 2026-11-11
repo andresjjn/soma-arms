@@ -1053,3 +1053,11 @@ Spanish, heard through its own microphone, 1.6 and 2.0 s from the last word
 to the first audio. Model comparison, transport numbers and the four
 defects found on the way are in docs/voice_plan.md. The relay has no tool:
 the voice never reaches the arms, and a test checks that.
+
+## 2026-11-10, SOMA's voice on video
+
+Andres recorded the first take of the voice: SOMA asleep with its eyes
+shut, "despierta", the eyes opening, a short conversation in neutral Latin
+American Spanish, and asleep again. 32 s, vertical, uncut:
+docs/media/video/voice_wake_2026-11-10.mp4 (720x1280, location metadata
+stripped). The arms do not move in it; the voice has no way to them.

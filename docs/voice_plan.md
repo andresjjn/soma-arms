@@ -147,6 +147,8 @@ Half duplex, measured: the speaker's sound at the microphone falls from
 -32 dBFS to the -63 floor about 0.2 s after the relay's estimate of the
 end of playback, inside the 0.35 s tail.
 
+Video of the first take: `docs/media/video/voice_wake_2026-11-10.mp4`.
+
 ## Phases, each with its gate
 
 | Phase | Work | Gate |
