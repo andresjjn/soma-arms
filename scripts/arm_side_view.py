@@ -109,6 +109,16 @@ def order_down(points, down) -> list[tuple[float, float]]:
     return sorted(points, key=lambda p: p[0] * down[0] + p[1] * down[1])
 
 
+def auto_order(points, down, names) -> list[tuple[float, float]]:
+    """The markers named by position along 'down', or [] when position cannot
+    name them. With five markers it cannot: on this bench the shoulder axis
+    sits ABOVE the disc, so the topmost marker is the shoulder, not the disc
+    (review 2026-11-10; the 2026-10-27 session needed --pick for this)."""
+    if len(names) != len(NAMES_4) or len(points) < len(names):
+        return []
+    return order_down(points[:len(names)], down)
+
+
 def mm_lengths(points, z_mm: float, fx: float) -> list[float]:
     """Link lengths in mm for markers on a plane z_mm from the camera.
 
@@ -248,7 +258,7 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit(f'only {len(cands)} candidates: 0..{len(cands) - 1}')
         pts = [cands[i] for i in picks]
     else:
-        pts = order_down(cands[:len(names)], down) if len(cands) >= len(names) else []
+        pts = auto_order(cands, down, names)
     view = frame.copy()
     for i, c in enumerate(cands):              # every candidate, numbered
         cv2.circle(view, tuple(map(int, c)), 14, (0, 255, 255), 1)
@@ -265,7 +275,9 @@ def main(argv: list[str] | None = None) -> int:
         cv2.imwrite(path, view)
     print(f'reference image: {args.out}/latest_side.jpg ({len(cands)} candidates numbered)')
     if len(pts) < len(names):
-        print(f'found {len(cands)} candidates, need {len(names)}: look at the image, then --pick')
+        why = ('five markers need --pick (the shoulder sits above the disc)' if len(names) == 5
+               else f'found {len(cands)} candidates, need {len(names)}')
+        print(f'{why}: look at the image, then --pick')
         return 1
     zs = [z for z in (depth_at(depth, *p) for p in pts) if z]
     z = sorted(zs)[len(zs) // 2] if zs else None

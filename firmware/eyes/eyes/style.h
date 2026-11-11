@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <initializer_list>
 
 namespace eyes {
 
@@ -70,9 +71,37 @@ inline bool parse_number(const char* s, float* out) {
   return true;
 }
 
+// Whether a design is safe to draw. The renderer's tables stop at the
+// panel's radius (120 px): an iris wider than that reads past root[]
+// (review 2026-11-10), and negative timings pause the eye for weeks.
+// set refuses a value that breaks this, and the board drops a saved
+// design that fails it, so a bad `save` cannot outlive a reboot.
+inline bool valid(const Style& s) {
+  auto in = [](float v, float lo, float hi) { return v >= lo && v <= hi; };
+  const float r = 119.0f;
+  if (!in(s.iris_r, 1, r) || !in(s.pupil_r, 0, r) || !in(s.gaze_reach, 0, r) || !in(s.glint_r, 0, r) ||
+      !in(s.glint_dx, -r, r) || !in(s.glint_dy, -r, r) || !in(s.lid_shadow, 0, r) || !in(s.lid_edge, 0, r) ||
+      !in(s.lid_seams, 0, 8))
+    return false;
+  for (float t : {s.blink_close, s.blink_open, s.saccade_min, s.saccade_max, s.blink_every_min,
+                  s.blink_every_max, s.look_holds})
+    if (t < 0) return false;
+  return true;
+}
+
+inline bool set_param_unchecked(Style& s, const char* key, const char* value);
+
 // `set KEY VALUE`: a top-level field, colors.NAME, timing_ms.NAME, or MOOD.FIELD
-// (e.g. happy.low). False if the key or the value is not understood.
+// (e.g. happy.low). False, and s unchanged, if the key or the value is not
+// understood or the result would not be valid().
 inline bool set_param(Style& s, const char* key, const char* value) {
+  Style next = s;
+  if (!set_param_unchecked(next, key, value) || !valid(next)) return false;
+  s = next;
+  return true;
+}
+
+inline bool set_param_unchecked(Style& s, const char* key, const char* value) {
   size_t n;
   const Field* f = fields(&n);
   for (size_t i = 0; i < n; i++) {

@@ -74,6 +74,21 @@ int main() {
   CHECK(!set_param(live, "happy.wide", "3"));
   CHECK(!set_param(live, "hap.low", "3"));
 
+  // Review 2026-11-10: a design that breaks the renderer is refused, and
+  // the refused value leaves the style as it was.
+  CHECK(valid(st));
+  {
+    Style t = st;
+    CHECK(!set_param(t, "iris_r", "130") && t.iris_r == st.iris_r);     // would read past root[]
+    CHECK(!set_param(t, "gaze_reach", "400") && t.gaze_reach == st.gaze_reach);
+    CHECK(!set_param(t, "lid_seams", "9"));
+    CHECK(!set_param(t, "timing_ms.look_holds", "-1"));
+    CHECK(!set_param(t, "glint_r", "-2"));
+    CHECK(set_param(t, "gaze_reach", "119") && t.gaze_reach == 119.0f);
+    Style bad = st; bad.iris_r = 130.0f;
+    CHECK(!valid(bad));                                           // what the board checks after NVS
+  }
+
   // `style` prints JSON that carries what `set` changed.
   static char json[1400];
   int n = dump_json(live, json, sizeof(json));

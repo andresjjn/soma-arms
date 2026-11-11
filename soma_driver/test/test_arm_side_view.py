@@ -79,6 +79,15 @@ def test_markers_are_ordered_down_the_arm():
     assert sv.order_down(pts, (0.0, 1.0)) == [(12, 100), (11, 300), (10, 500)]
 
 
+def test_five_markers_are_never_named_by_position():
+    # Review 2026-11-10: the shoulder axis sits above the disc, so the
+    # topmost of five markers is not the disc; only --pick can name them.
+    pts = [(10, 100), (10, 150), (10, 300), (10, 450), (10, 600)]
+    assert sv.auto_order(pts, (0.0, 1.0), sv.NAMES_5) == []
+    assert sv.auto_order(pts, (0.0, 1.0), sv.NAMES_4) == pts[:4]
+    assert sv.auto_order(pts[:3], (0.0, 1.0), sv.NAMES_4) == []
+
+
 def test_it_never_reaches_the_driver():
     source = (REPO / 'scripts' / 'arm_side_view.py').read_text()
     for word in ('docker', 'ros2', '/soma/arm', 'allow_real', 'rclpy'):

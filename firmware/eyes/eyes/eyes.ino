@@ -33,6 +33,7 @@ constexpr float MIRROR[2] = {+1.0f, -1.0f};
 
 static esp_lcd_panel_handle_t panel[2];
 static uint16_t* stripe_buf[2];
+static int next_buf = 0;                     // the stripe to fill next, shared by draw_eye and img
 static SemaphoreHandle_t free_bufs;              // counts stripe buffers not in flight
 
 static eyes::Style style;
@@ -86,14 +87,14 @@ static void set_brightness(float percent) {
 
 // Draw box b of eye i: as many rows per DMA stripe as fit a stripe buffer.
 static void draw_eye(int i, eyes::Box b) {
-  static int k = 0;
+  if (b.empty()) return;                     // nothing on the panel moved
   eyes::prepare_frame(fast, frame, state, MIRROR[i]);
   int w = b.x1 - b.x0, rows_per = (eyes::SIZE * STRIPE) / w;
   for (int y0 = b.y0; y0 < b.y1; y0 += rows_per) {
     int rows = min(rows_per, b.y1 - y0);
     xSemaphoreTake(free_bufs, portMAX_DELAY);
-    uint16_t* buf = stripe_buf[k];
-    k ^= 1;
+    uint16_t* buf = stripe_buf[next_buf];
+    next_buf ^= 1;
     eyes::render_rows(fast, frame, y0, rows, buf, b.x0, b.x1);
     esp_lcd_panel_draw_bitmap(panel[i], b.x0, y0, b.x1, y0 + rows, buf);
   }
@@ -155,11 +156,10 @@ static void receive_image(int eye) {
   }
   if (got < want) { Serial.printf("err img: got %u of %u bytes\n", (unsigned)got, (unsigned)want); return; }
   showing_image = true;
-  static int k = 0;
   for (int y0 = 0; y0 < eyes::SIZE; y0 += STRIPE) {
     xSemaphoreTake(free_bufs, portMAX_DELAY);
-    uint16_t* buf = stripe_buf[k];
-    k ^= 1;
+    uint16_t* buf = stripe_buf[next_buf];
+    next_buf ^= 1;
     memcpy(buf, image_buf + size_t(y0) * eyes::SIZE * 2, size_t(STRIPE) * eyes::SIZE * 2);
     esp_lcd_panel_draw_bitmap(panel[eye], 0, y0, eyes::SIZE, y0 + STRIPE, buf);
   }
@@ -227,7 +227,10 @@ void setup() {
   // The saved design, if any and if it still fits this firmware's Style.
   style = eyes::default_style();
   prefs.begin("soma-eyes", false);
-  if (prefs.getBytesLength("style") == sizeof(style)) prefs.getBytes("style", &style, sizeof(style));
+  if (prefs.getBytesLength("style") == sizeof(style)) {
+    prefs.getBytes("style", &style, sizeof(style));
+    if (!eyes::valid(style)) style = eyes::default_style();   // a bad save must not outlive a reboot
+  }
   for (int i = 0; i < 2; i++) init_panel(i);
   set_brightness(80);
   randomSeed(esp_random());

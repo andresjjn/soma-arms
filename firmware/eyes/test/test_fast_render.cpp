@@ -63,6 +63,41 @@ int main() {
           if (!in && old_full[y * SIZE + x] != new_full[y * SIZE + x]) outside_bad++;
         }
     }
+  // Review 2026-11-10: a glint past the iris edge must stay inside the box.
+  {
+    Style wide = default_style(); wide.glint_dx = 80.0f;
+    static FastStyle g; prepare_style(g, wide);
+    for (float to : {-1.0f, 0.4f, 1.0f}) {
+      EyeState a; a.gx = 0.1f;
+      EyeState b = a; b.gx = to; b.gy = 0.3f;
+      std::vector<uint16_t> o(SIZE * SIZE), n(SIZE * SIZE);
+      prepare_frame(g, fr, a, 1.0f); render_rows(g, fr, 0, SIZE, o.data());
+      prepare_frame(g, fr, b, 1.0f); render_rows(g, fr, 0, SIZE, n.data());
+      Box bx = gaze_box(wide, a, b);
+      for (int y = 0; y < SIZE; y++)
+        for (int x = 0; x < SIZE; x++) {
+          bool in = x >= bx.x0 && x < bx.x1 && y >= bx.y0 && y < bx.y1;
+          if (!in && o[y * SIZE + x] != n[y * SIZE + x]) outside_bad++;
+        }
+    }
+  }
+  // An iris carried off the panel gives an empty box, never an inverted
+  // one: an inverted box hung draw_eye() in an endless loop.
+  int box_bad = 0;
+  {
+    Style far = default_style(); far.gaze_reach = 400.0f;      // set refuses it; gaze_box must cope anyway
+    for (float ga : {-1.0f, 0.9f, 1.0f})
+      for (float gb : {-1.0f, 0.95f, 1.0f}) {
+        EyeState a; a.gx = ga; EyeState b; b.gx = gb; b.gy = gb;
+        Box bx = gaze_box(far, a, b);
+        if (!(bx.x0 >= 0 && bx.y0 >= 0 && bx.x1 <= SIZE && bx.y1 <= SIZE)) box_bad++;
+        if (!bx.empty() && (bx.x1 <= bx.x0 || bx.y1 <= bx.y0)) box_bad++;
+      }
+    EyeState a; a.gx = 0.9f; EyeState b; b.gx = 1.0f;
+    if (!gaze_box(far, a, b).empty()) box_bad++;                  // the case that hung the board
+  }
+  std::printf("gaze boxes off the panel: %d bad\n", box_bad);
+  if (box_bad) return 1;
   std::printf("windows: %d px differ inside, %d px changed outside the gaze box\n", window_bad, outside_bad);
   if (window_bad || outside_bad) return 1;
   double worst_pct = 100.0 * worst_bad / (SIZE * SIZE);

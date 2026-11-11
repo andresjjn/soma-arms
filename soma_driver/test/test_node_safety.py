@@ -326,6 +326,37 @@ class TestLimpArm:
         assert node.get_parameter('limp_arm').value == ''
         assert node.limp == set()
 
+    @staticmethod
+    def _launched_with(value):
+        from rclpy.parameter import Parameter
+        return ArmController(parameter_overrides=[Parameter('limp_arm', value=value)])
+
+    def test_a_launch_value_is_applied_not_just_reported(self):
+        # Review 2026-11-10: limp_arm:=left at launch used to leave the
+        # parameter saying 'left' while the node held the arm.
+        rclpy.init()
+        n = None
+        try:
+            n = self._launched_with('left')
+            assert n.get_parameter('limp_arm').value == 'left'
+            assert n.limp and all(j.startswith('left_arm_') for j in n.limp)
+        finally:
+            if n is not None:
+                n.destroy_node()
+            rclpy.shutdown()
+
+    def test_a_bad_launch_value_is_reset_and_both_arms_stay_engaged(self):
+        rclpy.init()
+        n = None
+        try:
+            n = self._launched_with('both')
+            assert n.get_parameter('limp_arm').value == ''
+            assert n.limp == set()
+        finally:
+            if n is not None:
+                n.destroy_node()
+            rclpy.shutdown()
+
     def test_an_arm_at_home_goes_limp_and_its_commands_are_dropped(self, node):
         from sensor_msgs.msg import JointState
         assert self._set(node, 'left').successful

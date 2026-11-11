@@ -135,16 +135,22 @@ inline void render_rows(const FastStyle& f, const FastFrame& fr, int y0, int row
   }
 }
 
-// The box a gaze-only change touches: the iris (and its glint, which sits
-// inside it) at both the old and the new gaze, a margin for rounding.
-struct Box { int x0, y0, x1, y1; };
+// The box a gaze-only change touches: the iris and its glint at both the
+// old and the new gaze, a margin for rounding, clipped to the panel. The
+// glint is counted on its own: a glint_dx past the iris edge used to
+// leave stale pixels outside the box (review 2026-11-10). The box may be
+// empty (the whole iris off the panel): callers check empty() first.
+struct Box {
+  int x0, y0, x1, y1;
+  bool empty() const { return x1 <= x0 || y1 <= y0; }
+};
 inline Box gaze_box(const Style& st, const EyeState& a, const EyeState& b) {
-  float r = st.iris_r + 3.0f;
+  float r = std::fmax(st.iris_r, std::hypot(st.glint_dx, st.glint_dy) + st.glint_r) + 3.0f;
   float ax = R + a.gx * st.gaze_reach, ay = R + a.gy * st.gaze_reach;
   float bx = R + b.gx * st.gaze_reach, by = R + b.gy * st.gaze_reach;
-  auto lo = [](float v) { int i = int(std::floor(v)); return i < 0 ? 0 : i; };
-  auto hi = [](float v) { int i = int(std::ceil(v)); return i > SIZE ? SIZE : i; };
-  return {lo(std::fmin(ax, bx) - r), lo(std::fmin(ay, by) - r), hi(std::fmax(ax, bx) + r), hi(std::fmax(ay, by) + r)};
+  auto clip = [](float v) { int i = int(v); return i < 0 ? 0 : i > SIZE ? SIZE : i; };
+  return {clip(std::floor(std::fmin(ax, bx) - r)), clip(std::floor(std::fmin(ay, by) - r)),
+          clip(std::ceil(std::fmax(ax, bx) + r)), clip(std::ceil(std::fmax(ay, by) + r))};
 }
 
 }  // namespace eyes

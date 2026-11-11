@@ -34,6 +34,7 @@ why the ramp, the soft limits and the arming gates all exist.
 import rclpy
 from rcl_interfaces.msg import SetParametersResult
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from sensor_msgs.msg import BatteryState, JointState
 from std_srvs.srv import SetBool
 
@@ -125,6 +126,13 @@ class ArmController(Node):
         self.declare_parameter('limp_arm', '')
         self.limp: set[str] = set()
         self.add_on_set_parameters_callback(self._on_params)
+        # A launch value (limp_arm:=left) never reaches the callback, which
+        # is registered after the declaration: run it through the same check
+        # so the reported parameter and self.limp agree. At boot every joint
+        # is at home, so a valid arm is accepted; an invalid one is reset.
+        launch = self.get_parameter('limp_arm')
+        if launch.value and not self._on_params([launch]).successful:
+            self.set_parameters([Parameter('limp_arm', value='')])
 
         self.create_subscription(JointState, 'soma/command', self._on_command, 10)
         self.pub_js = self.create_publisher(JointState, 'joint_states', 10)
