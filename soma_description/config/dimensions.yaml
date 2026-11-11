@@ -67,7 +67,7 @@ bench:
     col_lx:       {value: 0.035,  status: measured, source: tape measure, date: 2026-08-05, measure: column depth, front-to-back}
     col_ly:       {value: 0.060,  status: measured, source: tape measure, date: 2026-08-05, measure: column width, left-to-right}
     col_gap_x:    {value: 0.078,  status: measured, source: tape measure, date: 2026-08-05, measure: central box rear face to column front face}
-    col_h:        {value: 0.386,  status: estimated, source: derived mount_h + mount_lz/2, date: 2026-08-05, measure: column height, plate to roughly the central box top}
+    col_h:        {value: 0.370,  status: measured, source: "tape, box top; mount_h + mount_lz/2 = 327.2 + 42.8 agrees", date: 2026-10-27, measure: "column height, plate to the central box top"}
 
 # The future printed torso keeps its design-intent numbers; it is not on
 # the bench today and its xacro is dormant until task #9 builds it.

@@ -44,7 +44,7 @@
   <xacro:property name="col_lx"       value="0.035"/>
   <xacro:property name="col_ly"       value="0.060"/>
   <xacro:property name="col_gap_x"    value="0.078"/>   <!-- box rear to column front -->
-  <xacro:property name="col_h"        value="0.386"/>
+  <xacro:property name="col_h"        value="0.370"/>
   <xacro:property name="col_cx"       value="${-mount_lx/2 - col_gap_x - col_lx/2}"/>
 
   <link name="world"/>

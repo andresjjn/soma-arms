@@ -18,8 +18,8 @@
       PARALLEL: the arm is a planar 4R chain in its own vertical plane,
       redundant like a finger. J5 (wrist roll) spins the gripper about
       the forearm axis and is what moves the fingertips out of plane.
-    - A 33 mm link Andres named "the clavicle" joins the disc center to
-      the shoulder axis.
+    - A 32.7 mm link Andres named "the clavicle" joins the disc center to
+      the shoulder axis, which sits above the disc (clavicle_angle).
 
   Local frame of the macro root (${prefix}mount_link), chosen so one rpy
   at the mount does all the work:

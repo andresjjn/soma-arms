@@ -424,6 +424,10 @@ taught us.
 - Cross-check that closed the loop: with every joint at zero the model
   puts the fingertips 5.7 mm above the base plate, which is what the
   photos of the rig show.
+- Superseded on 2026-10-27 (see `docs/log.md` and `dimensions.yaml`):
+  107.5 mm disc face to disc face, discs 327.2 mm above the plate, a
+  32.7 mm clavicle that rises toward the shoulder (`clavicle_angle`),
+  fingertips 38 mm above the plate (36.8 mm by the model).
 - Still pending: arm weight (arms never left the bench), joint axis SIGNS
   versus the hug convention (needs the first powered RViz-vs-reality
   comparison, v0.2), and the left yaw re-spline.

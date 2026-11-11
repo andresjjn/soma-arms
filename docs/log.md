@@ -996,3 +996,34 @@ safety path (they will never arm or move anything).
   joints radiating from the center that split each lid into blades. All
   data in style.json (lid_edge 0 and lid_seams 0 give the plain lid back);
   the fast path matches the reference on 864 states, 0 px off.
+
+## 2026-11-10, an independent review since v0.2
+
+An independent read-only review (a separate model, nothing run on the
+bench) went over the work since v0.2. Nothing it found could move or drop
+an arm: limp, the scaled `SERVO_MAP`, the blending under jitter and
+Ctrl-C, and the clavicle in the URDF against `workspace_map` (0.00 mm)
+all held. Five real defects, each fixed with a test:
+
+- Eyes: a `gaze_reach` that carried the iris off the panel gave an
+  inverted redraw box, and `draw_eye` looped forever (reproduced:
+  `gaze_reach 400`, gaze 0.9 to 1.0). With `save` the bad value lived in
+  NVS and hung every boot. Now `gaze_box` clips both ends and may be
+  empty, `draw_eye` skips an empty box, `set` refuses a design that
+  `valid()` rejects, and a saved design that fails it is dropped at boot.
+- Eyes: `iris_r` above 120 px read past the renderer's root table.
+  `valid()` caps it at 119; it also refuses negative timings (a negative
+  `look_holds` paused the eye for weeks) and more than 8 seams.
+- Eyes: a glint pushed past the iris edge changed pixels outside the
+  redraw box. The box now covers the glint on its own. And `draw_eye`
+  and `img` shared one stripe-buffer index instead of two.
+- Driver: `limp_arm:=left` at launch was reported but never applied (the
+  callback registers after the declaration). Fails safe, but the state
+  lied; the launch value now goes through the same check.
+- `arm_side_view --markers 5` named five markers by height, and the
+  shoulder sits above the disc: five markers now require `--pick`.
+
+Stale numbers from the 2026-08-05 geometry were brought up to the
+2026-10-27 measurements: `col_h` 0.370 (tape, and mount_h + mount_lz/2
+agrees), the single-arm model at 0.3272, the 32.7 mm clavicle, the lane
+at 81 mm in docs/plan.md.

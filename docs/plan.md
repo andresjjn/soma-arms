@@ -57,8 +57,9 @@ never in the safety path**, and no remote response can arm the driver.
 
 Both arms hang from the central box with their four big joints (yaw,
 shoulder, elbow, wrist pitch) on parallel horizontal axes. Each arm is a
-planar 4R chain in its own vertical plane, 62.3 mm outboard of the bench
-centerline (`mount_ly / 2 + disc_h`), so the two planes are **124.6 mm
+planar 4R chain in its own vertical plane, 81 mm outboard of the bench
+centerline at the fingertip (`tip_lane_y` = `mount_ly / 2 + disc_h +
+plane_offset`, measured 2026-10-27), so the two planes are **162 mm
 apart**. The fingertip center sits on the roll axis and never leaves its
 plane, for any joint configuration. Three consequences, none negotiable:
 
@@ -95,8 +96,9 @@ With the tool allowed to tilt up to 15 degrees from vertical:
 What the table says, honestly:
 
 - Reach is short and it is **not monotonic in deck height**. At plate
-  level the arm is fully stretched (fingertips 5.7 mm above the plate at
-  home) and the lane is a 140 mm band around the axis. It widens up to
+  level the arm is fully stretched (fingertips 38 mm above the plate at
+  home, measured 2026-10-27; the band figures here come from the
+  2026-08-05 geometry and are redrawn by `scripts/workspace_map.py`) and the lane is a 140 mm band around the axis. It widens up to
   about 60 mm of fingertip height, then a hole opens under the disc axis
   and the front run of the right arm shrinks, because the right wrist
   pitch may lean only 22 degrees forward (+0.4869 rad, measured) while the
@@ -107,8 +109,8 @@ What the table says, honestly:
 - The plate ends 55 mm in front of the disc axis (`plate_x_back`, still an
   estimate). The deck overhangs it to the front, so the deck is a box that
   stands on the table around the plate, not a tray on the plate.
-- The rear pocket sits beside the column: lane at 62.3 mm, column at 30 mm
-  from the centerline, gripper 45 mm wide, about 10 mm of clearance. The
+- The rear pocket sits beside the column: lane at 81 mm, column at 30 mm
+  from the centerline, gripper 45 mm wide, about 28 mm of clearance. The
   first fit check happens with the deck in cardboard before the laser.
 - The whole map rests on sign hypotheses. Only the yaw direction is
   verified on the metal (2026-10-01: negative = forward). Shoulder, elbow
@@ -173,7 +175,8 @@ Each version ends with a git tag, a short video, and CI green. Every
 ### v0.1 Calibrated model, TAGGED 2026-08-10
 
 Caliper session of 2026-08-05, the real hanging bench modeled, FK matched
-the photos (fingertips 5.7 mm above the plate). The servo calibration was
+the photos (fingertips 5.7 mm above the plate; 38 mm after the
+re-measure of 2026-10-27, which found the clavicle rising). The servo calibration was
 re-captured on 2026-10-01 after the harness rebuild; `SERVO_MAP` and the
 URDF carry it.
 

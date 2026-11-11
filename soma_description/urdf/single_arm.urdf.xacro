@@ -16,7 +16,7 @@
   <link name="world"/>
 
   <xacro:soma_arm prefix="arm_" parent="world" side="-1">
-    <origin xyz="0 0 0.343" rpy="${pi/2} ${pi/2} 0"/>
+    <origin xyz="0 0 0.3272" rpy="${pi/2} ${pi/2} 0"/>
   </xacro:soma_arm>
 
 </robot>
