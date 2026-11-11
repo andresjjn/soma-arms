@@ -5,6 +5,7 @@ speaker, a Gemini Live session in between. Spanish first.
     voice_relay.py                       talk; Ctrl-C ends
     voice_relay.py --model gemini-3.8-live
     voice_relay.py --vol 85
+    voice_relay.py --voice Kore          one of Gemini's prebuilt voices
 
 The board streams 20 ms microphone frames and plays what this sends
 (firmware/eyes/eyes/frames.h). The key comes from the macOS Keychain
@@ -42,9 +43,14 @@ VOICE_DBFS = -40.0              # speech frames: voice RMS about -30, quiet room
 VOICE_RUN = 3                   # ... at least this many in a row (60 ms): single clicks reach -29
 TAIL_S = 0.35                   # after the speaker empties, still half duplex this long
 DEFAULT_MODEL = 'gemini-3.1-flash-live-preview'
+# Without a voice the model picks one per session, so SOMA changed between
+# a man's and a woman's voice (2026-11-10). One fixed voice is part of who it is.
+DEFAULT_VOICE = 'Capella'      # chosen by Andres, 2026-11-10
+LANGUAGE = 'es-MX'             # Mexican Spanish: the speech config and the prompt both say it
 LOG = Path(__file__).resolve().parents[1] / 'rec' / 'voice_log.csv'
 SYSTEM = ('Eres SOMA, un robot con dos brazos de aluminio colgados de una caja central, '
-          'unos ojos redondos en dos pantallas y una cámara. Hablas en español, con frases cortas '
+          'unos ojos redondos en dos pantallas y una cámara. Hablas español de México, con acento '
+          'mexicano, con frases cortas '
           'y naturales, como en una conversación. No puedes mover los brazos por voz todavía: '
           'si te lo piden, dilo con honestidad.')
 
@@ -206,10 +212,11 @@ def keychain_key() -> str:
 
 
 class Relay:
-    def __init__(self, port: str, model: str):
+    def __init__(self, port: str, model: str, voice: str = DEFAULT_VOICE):
         import serial
         self.ser = serial.Serial(port, 115200, timeout=0.05)
         self.model = model
+        self.voice_name = voice
         self.frames = BoardFrames()
         self.speaker = SpeakerQueue()
         self.resample = Down24to16()
@@ -255,12 +262,14 @@ class Relay:
         client = genai.Client(api_key=keychain_key())
         config = types.LiveConnectConfig(
             response_modalities=['AUDIO'], system_instruction=SYSTEM,
-            input_audio_transcription={}, output_audio_transcription={})
+            input_audio_transcription={}, output_audio_transcription={},
+            speech_config=types.SpeechConfig(language_code=LANGUAGE, voice_config=types.VoiceConfig(
+                prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=self.voice_name))))
         loop = asyncio.get_running_loop()
         mic: asyncio.Queue = asyncio.Queue()
         stop = threading.Event()
         threading.Thread(target=self.reader, args=(loop, mic, stop), daemon=True).start()
-        print(f'{self.model}: connecting...', flush=True)
+        print(f'{self.model}, voice {self.voice_name}: connecting...', flush=True)
         try:
             async with client.aio.live.connect(model=self.model, config=config) as session:
                 print('listening. Talk to SOMA (Ctrl-C ends).', flush=True)
@@ -351,11 +360,12 @@ def main(argv=None) -> int:
     ap.add_argument('--port')
     ap.add_argument('--model', default=DEFAULT_MODEL)
     ap.add_argument('--vol', type=int, help='speaker volume 0..100 for this session')
+    ap.add_argument('--voice', default=DEFAULT_VOICE, help=f'prebuilt voice (default {DEFAULT_VOICE})')
     args = ap.parse_args(argv)
     port = args.port or next(iter(sorted(glob.glob('/dev/cu.usbmodem*'))), None)
     if not port:
         raise SystemExit('no board found on /dev/cu.usbmodem*')
-    relay = Relay(port, args.model)
+    relay = Relay(port, args.model, args.voice)
     # SIGTERM ends like Ctrl-C, so the board hears `stream off` (a relay in
     # the background ignores SIGINT).
     signal.signal(signal.SIGTERM, _terminate)
