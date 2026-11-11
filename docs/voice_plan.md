@@ -112,6 +112,31 @@ gaze, so many small steps read as one movement. Layer 2, an `expresar`
 mood tool for Gemini (non-blocking, silent), comes next. The session
 volume defaults to 75 (85 felt like too much for the small speaker).
 
+## Asleep and awake (2026-11-10)
+
+SOMA's eyes are shut unless it is in a conversation: the board boots with
+them closed and closes them whenever a stream ends, even by the 3 s
+timeout, so a crashed relay never leaves them open. The relay starts
+asleep: a transcription-only Live model (gemini-3.5-transcribe-live, which
+never answers) listens for "despierta", and audio leaves the board only
+while someone talks (a 0.5 s preroll keeps the first syllable; a quiet
+room sends nothing). "Despierta" opens the eyes over about a second and
+starts the conversation with a short greeting; "duérmete", Ctrl-C or a
+lost session closes them, and the relay listens for "despierta" again.
+Tested end to end: wake, two turns, a goodbye, asleep again; latencies
+1.2 to 1.5 s.
+
+Layer 1 was reworked after Andres saw it: a pupil beating with the voice
+looked wrong (people's pupils do not do that; they dilate with mental
+effort). Now the pupil dilates while thinking and stays still while
+speaking; each of SOMA's phrases starts looking away and ends looking back
+at the person; the gaze searches up and aside while thinking; the eyes
+blink less while hearing, and sometimes once in the person's pause.
+
+Half duplex, measured: the speaker's sound at the microphone falls from
+-32 dBFS to the -63 floor about 0.2 s after the relay's estimate of the
+end of playback, inside the 0.35 s tail.
+
 ## Phases, each with its gate
 
 | Phase | Work | Gate |

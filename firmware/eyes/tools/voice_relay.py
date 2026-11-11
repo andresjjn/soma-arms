@@ -2,7 +2,8 @@
 """SOMA's voice, phase 1 (docs/voice_plan.md): the eye board's microphone and
 speaker, a Gemini Live session in between. Spanish first.
 
-    voice_relay.py                       talk; Ctrl-C ends
+    voice_relay.py                       SOMA sleeps; "SOMA, despierta" wakes it,
+                                         "duérmete" puts it back to sleep, Ctrl-C ends
     voice_relay.py --model gemini-3.8-live
     voice_relay.py --vol 70              speaker volume for the session (default 75)
     voice_relay.py --voice Kore          one of Gemini's prebuilt voices
@@ -45,6 +46,9 @@ VOICE_DBFS = -40.0              # speech frames: voice RMS about -30, quiet room
 VOICE_RUN = 3                   # ... at least this many in a row (60 ms): single clicks reach -29
 TAIL_S = 0.35                   # after the speaker empties, still half duplex this long
 DEFAULT_MODEL = 'gemini-3.1-flash-live-preview'
+TRANSCRIBE_MODEL = 'gemini-3.5-transcribe-live'   # asleep: transcribes, never answers
+WAKE_PROMPT = ('(Te acaban de despertar diciendo "despierta". Abre los ojos y saluda '
+               'con una frase corta y natural.)')
 DEFAULT_VOL = 75               # Andres, 2026-11-10: 85 felt like it could hurt the small speaker
 # Without a voice the model picks one per session, so SOMA changed between
 # a man's and a woman's voice (2026-11-10). One fixed voice is part of who it is.
@@ -55,7 +59,7 @@ SYSTEM = ('Eres SOMA, un robot con dos brazos de aluminio colgados de una caja c
           'unos ojos redondos en dos pantallas y una cámara. Hablas español de México, con acento '
           'mexicano, con frases cortas '
           'y naturales, como en una conversación. No puedes mover los brazos por voz todavía: '
-          'si te lo piden, dilo con honestidad.')
+          'si te lo piden, dilo con honestidad. Si te piden que te duermas, despídete en una frase corta.')
 
 
 # ---- pure parts, tested in soma_driver/test/test_voice_relay.py ----
@@ -181,32 +185,43 @@ class Envelope:
 
 
 class EyeDirector:
-    """Layer 1 of the eyes in a conversation: what they do comes from where
-    the conversation is, known locally with no model and no delay.
+    """Layer 1 of the eyes in a conversation, from how people's eyes behave
+    in one (2026-11-10: a pupil beating with the voice looked wrong, because
+    it is not what people do). What they do comes from where the
+    conversation is, known locally with no model and no delay:
 
-      listening  nobody talks: wide, slow saccades, pupils a bit open
-      hearing    the person talks: eyes fixed on them, pupils wide
-      thinking   the person ended, no answer yet: a look up and aside
-      speaking   SOMA talks: micro-saccades, pupils beat with the voice,
-                 blinks in the pauses between phrases
+      listening  nobody talks: slow, wide saccades, ordinary blinking
+      hearing    the person talks: eyes on them, fewer blinks (attention),
+                 sometimes one blink in a pause, like a nod
+      thinking   the person ended, no answer yet: the pupils dilate (mental
+                 effort dilates them), the gaze goes up and aside and
+                 searches there, a different side each turn
+      speaking   SOMA talks: the pupil stays put; each phrase starts looking
+                 away (planning it) and ends looking back at the person
+                 (handing over the turn), often with a blink
 
     tick() returns the command lines to send; a value is only resent when it
     changed enough to show. Gaze: x + is the picture's right, y + is down."""
 
     THINK_MAX_S = 8.0           # no answer by then: back to listening
     HEARING_S = 0.4             # this long after the last word still counts as hearing
-    PUPIL = {'listening': 1.15, 'hearing': 1.3, 'thinking': 0.9}
+    PAUSE_S = 0.25              # a gap this long in the person's speech is a pause
+    PHRASE_GAP_S = 0.3          # SOMA quiet this long: its phrase ended
+    LOUD_DBFS = -40.0
+    PUPIL = {'listening': 1.1, 'hearing': 1.15, 'thinking': 1.3, 'speaking': 1.05}
 
     def __init__(self, rng: random.Random | None = None):
         self.rng = rng or random.Random()
         self.phase = None
         self.spoke_at = 0.0
         self.side = 1.0
+        self.anchor = (0.0, 0.0)
         self.next_look = 0.0
         self.next_blink = 0.0
         self.pupil = None
-        self.env = 0.0
-        self.loud = False
+        self.loud_at = -1e9
+        self.in_phrase = False
+        self.pause_blinked = False
 
     def _phase(self, now: float, speaking: bool, last_voice: float) -> str:
         if speaking:
@@ -217,43 +232,110 @@ class EyeDirector:
             return 'thinking'
         return 'listening'
 
+    def _blink(self, now: float, out: list[str]) -> None:
+        out.append('blink')
+        self.next_blink = now + (self.rng.uniform(4.0, 8.0) if self.phase == 'hearing'
+                                 else self.rng.uniform(2.5, 5.5))
+
     def tick(self, now: float, speaking: bool, last_voice: float, level_dbfs: float = -120.0) -> list[str]:
         if speaking:
             self.spoke_at = now
         phase = self._phase(now, speaking, last_voice)
+        u = self.rng.uniform
         out = []
         if phase != self.phase:
             if phase == 'thinking':
-                self.side = -self.side                # a different side each turn
+                self.side = -self.side
+                self.anchor = (0.45 * self.side, -0.5)
+            if phase == 'hearing':
+                self.next_blink = max(self.next_blink, now + u(4.0, 8.0))
             self.phase = phase
-            self.next_look = now                      # a new phase looks at once
-        u = self.rng.uniform
+            self.next_look = now
+            self.in_phrase = False
+        # SOMA's phrases: look away to plan one, back at the person to end it.
+        if level_dbfs > self.LOUD_DBFS:
+            if phase == 'speaking' and not self.in_phrase:
+                self.in_phrase = True
+                side = self.rng.choice((-1.0, 1.0))
+                out.append(f'look {0.35 * side + u(-0.05, 0.05):.2f} {u(0.05, 0.2):.2f}')
+                self.next_look = now + u(0.6, 1.2)
+            self.loud_at = now
+        elif self.in_phrase and now - self.loud_at > self.PHRASE_GAP_S:
+            self.in_phrase = False
+            out.append(f'look {u(-0.04, 0.04):.2f} {u(-0.03, 0.03):.2f}')
+            self.next_look = now + u(1.0, 2.0)
+            if self.rng.random() < 0.6:
+                self._blink(now, out)
         if now >= self.next_look:
             if phase == 'thinking':
-                gx, gy, wait = 0.45 * self.side + u(-0.08, 0.08), -0.5 + u(-0.05, 0.05), u(1.2, 2.0)
+                ax, ay = self.anchor                  # searching around the up-aside point
+                gx, gy, wait = ax + u(-0.15, 0.15), ay + u(-0.08, 0.08), u(0.4, 0.8)
             elif phase == 'speaking':
-                gx, gy, wait = u(-0.1, 0.1), u(-0.06, 0.06), u(0.5, 1.2)
+                gx, gy, wait = u(-0.05, 0.05), u(-0.04, 0.04), u(1.0, 2.0)
             elif phase == 'hearing':
-                gx, gy, wait = u(-0.06, 0.06), u(-0.04, 0.04), u(1.0, 2.0)
+                gx, gy, wait = u(-0.05, 0.05), u(-0.03, 0.03), u(1.2, 2.4)
             else:
                 gx, gy, wait = u(-0.2, 0.2), u(-0.12, 0.12), u(1.5, 3.5)
             out.append(f'look {gx:.2f} {gy:.2f}')
             self.next_look = now + wait
-        # The voice's envelope, -50..-10 dBFS onto 0..1: fast up, slower down.
-        x = min(1.0, max(0.0, (level_dbfs + 50.0) / 40.0))
-        self.env += (x - self.env) * (0.6 if x > self.env else 0.25)
-        target = 1.0 + 0.35 * self.env if phase == 'speaking' else self.PUPIL[phase]
+        target = self.PUPIL[phase]
         if self.pupil is None or abs(target - self.pupil) >= 0.03:
             out.append(f'pupil {target:.2f}')
             self.pupil = target
-        # Blinks: on a timer, and while speaking also when a phrase ends.
-        loud = level_dbfs > -40.0
-        phrase_end = phase == 'speaking' and self.loud and not loud
-        self.loud = loud
-        if now >= self.next_blink or (phrase_end and now >= self.next_blink - 2.0 and self.rng.random() < 0.5):
-            out.append('blink')
-            self.next_blink = now + u(2.5, 5.5)
+        # Blinks: a timer, and while hearing sometimes one in the person's pause.
+        if phase == 'hearing':
+            if now - last_voice < self.PAUSE_S:
+                self.pause_blinked = False
+            elif not self.pause_blinked:
+                self.pause_blinked = True
+                if self.rng.random() < 0.5:
+                    self._blink(now, out)
+        if now >= self.next_blink and 'blink' not in out:
+            self._blink(now, out)
         return out
+
+
+WAKE_WORDS = ('despierta', 'despiertate')
+SLEEP_WORDS = ('duermete', 'a dormir')
+
+
+def plain(text: str) -> str:
+    """Lower case, no accents, no punctuation: 'Despiértate!' -> 'despiertate'."""
+    import unicodedata
+    t = unicodedata.normalize('NFKD', text.lower())
+    t = ''.join(c for c in t if not unicodedata.combining(c))
+    return ' '.join(''.join(c if c.isalnum() else ' ' for c in t).split())
+
+
+def says(text: str, words: tuple[str, ...]) -> bool:
+    t = f' {plain(text)} '
+    return any(f' {w} ' in t for w in words)
+
+
+class VoiceGate:
+    """While asleep, audio leaves only when someone talks: a frame goes out
+    when it, or one in the last HOLD_S, is speech, with PREROLL_S of what came
+    before so the first syllable is not cut. A quiet room sends nothing."""
+
+    PREROLL_S = 0.5
+    HOLD_S = 1.0
+
+    def __init__(self):
+        self.before = deque(maxlen=int(self.PREROLL_S * 50))
+        self.open_until = 0.0
+        self.run = 0
+
+    def frame(self, pcm: bytes, now: float) -> list[bytes]:
+        self.run = self.run + 1 if dbfs(pcm) > VOICE_DBFS else 0
+        if self.run >= VOICE_RUN:
+            out = list(self.before) if now >= self.open_until else []
+            self.before.clear()
+            self.open_until = now + self.HOLD_S
+            return out + [pcm]
+        if now < self.open_until:
+            return [pcm]
+        self.before.append(pcm)
+        return []
 
 
 def drain(ser, quiet_s: float = 0.15, limit_s: float = 1.5) -> int:
@@ -319,6 +401,10 @@ def keychain_key() -> str:
     return r.stdout.strip()
 
 
+class GoToSleep(Exception):
+    """The conversation ends and SOMA closes its eyes."""
+
+
 class Relay:
     def __init__(self, port: str, model: str, voice: str = DEFAULT_VOICE):
         import serial
@@ -335,6 +421,7 @@ class Relay:
         self.director = EyeDirector()
         self.turn = {}
         self.tokens = 0
+        self.sleep_asked = False
 
     def send(self, kind: str, payload: bytes = b'') -> None:
         with self.write_lock:
@@ -359,7 +446,9 @@ class Relay:
                 if line != 'ok':
                     print(f'  [board] {line}')
 
-    async def run(self, vol: int | None) -> None:
+    async def run(self, vol: int) -> None:
+        """Asleep until someone says "despierta", then a conversation until
+        Ctrl-C, "duérmete" or the session ends; then asleep again."""
         from google import genai
         from google.genai import types
 
@@ -367,31 +456,102 @@ class Relay:
             drain(self.ser)
             self.ser.write(b'\nstream\n')
         self.command(f'vol {vol}')                 # every session sets it: no volume left over from a test
-        for line in ('idle off', 'mood neutral'):   # the director drives the eyes now
+        for line in ('idle off', 'mood neutral', 'sleep'):
             self.command(line)
         client = genai.Client(api_key=keychain_key())
+        loop = asyncio.get_running_loop()
+        mic: asyncio.Queue = asyncio.Queue()
+        stop = threading.Event()
+        threading.Thread(target=self.reader, args=(loop, mic, stop), daemon=True).start()
+        keepalive = asyncio.create_task(self.keepalive())
+        try:
+            while True:
+                try:
+                    await self.wait_for_wake(client, mic, types)
+                    await self.converse(client, mic, types)
+                except Exception as e:                  # a lost or refused session: sleep, then listen again
+                    print(f'  session lost ({e}); asleep again in 2 s', flush=True)
+                    self.command('sleep')
+                    await asyncio.sleep(2)
+        finally:
+            keepalive.cancel()
+            stop.set()
+            for line in ('sleep', 'pupil 1', 'look 0 0', 'stream off'):
+                self.command(line)
+            time.sleep(0.2)
+            self.ser.close()
+            print(f'session tokens: {self.tokens}')
+
+    @staticmethod
+    def _empty(q: asyncio.Queue) -> None:
+        while not q.empty():
+            q.get_nowait()
+
+    async def wait_for_wake(self, client, mic: asyncio.Queue, types) -> None:
+        """Eyes shut; only a transcription model listens, and only while
+        someone talks (VoiceGate). It never answers."""
+        self.command('sleep')
+        self._empty(mic)
+        gate = VoiceGate()
+        print('asleep. Say "SOMA, despierta".', flush=True)
+        config = types.LiveConnectConfig(input_audio_transcription={})
+        async with client.aio.live.connect(model=TRANSCRIBE_MODEL, config=config) as session:
+            async def feed():
+                while True:
+                    now, pcm = await mic.get()
+                    for out in gate.frame(pcm, now):
+                        await session.send_realtime_input(audio=types.Blob(data=out, mime_type=f'audio/pcm;rate={RATE}'))
+            feeder = asyncio.create_task(feed())
+            try:
+                heard = ''
+                while True:
+                    got = False
+                    async for msg in session.receive():
+                        got = True
+                        sc = msg.server_content
+                        if sc and sc.input_transcription and sc.input_transcription.text:
+                            heard = (heard + sc.input_transcription.text)[-200:]
+                            if says(heard, WAKE_WORDS):
+                                print(f'  [asleep] heard: {heard.strip()}', flush=True)
+                                return
+                    if not got:
+                        raise ConnectionError('the transcription session closed')
+            finally:
+                feeder.cancel()
+
+    async def converse(self, client, mic: asyncio.Queue, types) -> None:
+        self.command('wake')
+        self._empty(mic)
+        self.voice = VoiceTracker()
+        self.director = EyeDirector()
+        self.sleep_asked = False
         config = types.LiveConnectConfig(
             response_modalities=['AUDIO'], system_instruction=SYSTEM,
             input_audio_transcription={}, output_audio_transcription={},
             speech_config=types.SpeechConfig(language_code=LANGUAGE, voice_config=types.VoiceConfig(
                 prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=self.voice_name))))
-        loop = asyncio.get_running_loop()
-        mic: asyncio.Queue = asyncio.Queue()
-        stop = threading.Event()
-        threading.Thread(target=self.reader, args=(loop, mic, stop), daemon=True).start()
-        print(f'{self.model}, voice {self.voice_name}: connecting...', flush=True)
+        print(f'awake: {self.model}, voice {self.voice_name}. Talk to SOMA '
+              '("duérmete" or Ctrl-C ends).', flush=True)
         try:
             async with client.aio.live.connect(model=self.model, config=config) as session:
-                print('listening. Talk to SOMA (Ctrl-C ends).', flush=True)
-                await asyncio.gather(self.uplink(session, mic, types), self.downlink(session),
-                                     self.speaker_feed(), self.keepalive(), self.eyes())
+                await session.send_client_content(
+                    turns=types.Content(role='user', parts=[types.Part(text=WAKE_PROMPT)]), turn_complete=True)
+                tasks = [asyncio.create_task(c) for c in (
+                    self.uplink(session, mic, types), self.downlink(session), self.speaker_feed(), self.eyes())]
+                try:
+                    done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                finally:
+                    for t in tasks:
+                        t.cancel()
+                for t in done:
+                    if t.exception() and not isinstance(t.exception(), GoToSleep):
+                        raise t.exception()
         finally:
-            stop.set()
-            for line in ('pupil 1', 'look 0 0', 'idle on', 'stream off'):
-                self.command(line)
-            time.sleep(0.2)
-            self.ser.close()
-            print(f'session tokens: {self.tokens}')
+            self.pending.clear()
+            self.envelope.clear()
+            self.send('X')
+            self.command('sleep')
+            print('asleep again.', flush=True)
 
     async def uplink(self, session, mic: asyncio.Queue, types) -> None:
         while True:
@@ -404,7 +564,11 @@ class Relay:
 
     async def downlink(self, session) -> None:
         while True:
+            got = False
             async for msg in session.receive():
+                got = True
+                if msg.go_away:
+                    raise GoToSleep('the server is closing the session')
                 if msg.usage_metadata and msg.usage_metadata.total_token_count:
                     self.turn['tokens'] = msg.usage_metadata.total_token_count
                 sc = msg.server_content
@@ -412,6 +576,8 @@ class Relay:
                     continue
                 if sc.input_transcription and sc.input_transcription.text:
                     self.turn['heard'] = self.turn.get('heard', '') + sc.input_transcription.text
+                    if says(self.turn['heard'], SLEEP_WORDS):
+                        self.sleep_asked = True       # SOMA says goodbye first, then sleeps
                 if sc.output_transcription and sc.output_transcription.text:
                     self.turn['said'] = self.turn.get('said', '') + sc.output_transcription.text
                 for part in (sc.model_turn.parts if sc.model_turn else []):
@@ -426,6 +592,12 @@ class Relay:
                     self.send('X')
                 if sc.turn_complete:
                     self.log_turn()
+                    if self.sleep_asked:
+                        while self.pending or self.speaker.speaking(time.monotonic()):
+                            await asyncio.sleep(0.05)
+                        raise GoToSleep('asked to sleep')
+            if not got:
+                raise ConnectionError('the conversation session closed')
 
     async def speaker_feed(self) -> None:
         while True:

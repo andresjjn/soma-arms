@@ -132,6 +132,9 @@ int main() {
   { Parsed p = parse("vol 70"); CHECK(p.cmd == Cmd::Vol && p.a == 70.0f); }
   CHECK(parse("vol 101").cmd == Cmd::None);
   CHECK(parse("stream").cmd == Cmd::Stream);
+  CHECK(parse("sleep").cmd == Cmd::Sleep);
+  CHECK(parse("wake").cmd == Cmd::Wake);
+  CHECK(parse("wake up").cmd == Cmd::None);
 
   // The stream's frames (phase 1): found in garbage, split anywhere.
   {

@@ -50,6 +50,9 @@ static float target_pupil = 1.0f;              // eased like the gaze: the voice
 static bool idle_on = true;
 static uint32_t idle_pause_until = 0, next_saccade = 0, next_blink = 0, blink_start = 0;
 static bool blinking = false;
+// Asleep: the lids held shut. SOMA boots asleep and falls asleep when a
+// stream ends (even by timeout); `wake` opens the eyes over about a second.
+static float closed = 1.0f, target_closed = 1.0f;
 
 static bool IRAM_ATTR on_stripe_sent(esp_lcd_panel_io_handle_t, esp_lcd_panel_io_event_data_t*, void*) {
   BaseType_t woken = pdFALSE;
@@ -125,12 +128,18 @@ static void animate(uint32_t now, float dt) {
   state.gx += (target_gx - state.gx) * k;
   state.gy += (target_gy - state.gy) * k;
   state.pupil += (target_pupil - state.pupil) * fminf(1.0f, dt * 12.0f);
+  float b = 0;                                   // the blink's own lid, this frame
   if (blinking) {
     float t = now - blink_start, c = style.blink_close, o = style.blink_open;
-    if (t < c) state.blink = t / c;              // quick down, slower up, like a real one
-    else if (t < c + o) state.blink = 1.0f - (t - c) / o;
-    else { state.blink = 0; blinking = false; }
+    if (t < c) b = t / c;                        // quick down, slower up, like a real one
+    else if (t < c + o) b = 1.0f - (t - c) / o;
+    else blinking = false;
   }
+  // Waking is slower than falling asleep, like a person's.
+  float rate = target_closed < closed ? 2.5f : 4.0f;
+  closed += (target_closed - closed) * fminf(1.0f, dt * rate);
+  if (fabsf(target_closed - closed) < 0.002f) closed = target_closed;
+  state.blink = fmaxf(b, closed);               // asleep holds the lids, a blink can only close more
 }
 
 // A still picture from the host, for previewing designs on the real panels:
@@ -203,6 +212,8 @@ static void handle_line(char* line) {
     case eyes::Cmd::Rec:     audio::rec(p.a); return;
     case eyes::Cmd::Play:    audio::play(p.bytes); return;
     case eyes::Cmd::SelfTest: audio::selftest(); return;
+    case eyes::Cmd::Sleep:   target_closed = 1.0f; break;
+    case eyes::Cmd::Wake:    target_closed = 0.0f; break;
     case eyes::Cmd::Stream:
       if (!audio::stream_begin()) { Serial.println("err audio: cannot stream"); return; }
       break;
@@ -276,7 +287,7 @@ void loop() {
     for (int i = 0; i < got; i++) {
       if (audio::streaming()) {
         if (frames.push(chunk[i])) on_frame(frames);
-        if (!audio::streaming()) { frames.reset(); len = 0; }     // `stream off` mid chunk
+        if (!audio::streaming()) { frames.reset(); len = 0; target_closed = 1.0f; }   // `stream off` mid chunk
         continue;
       }
       char c = char(chunk[i]);
@@ -284,7 +295,11 @@ void loop() {
       else if (len < sizeof(line) - 1) line[len++] = c;
     }
   }
+  // A stream that ends by itself (the host went quiet) also puts SOMA to sleep.
+  static bool was_streaming = false;
   audio::stream_poll();
+  if (was_streaming && !audio::streaming()) target_closed = 1.0f;
+  was_streaming = audio::streaming();
   static uint32_t last = millis();
   uint32_t now = millis();
   animate(now, (now - last) / 1000.0f);

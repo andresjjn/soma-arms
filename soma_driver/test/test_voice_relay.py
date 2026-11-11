@@ -155,13 +155,85 @@ def test_an_unanswered_turn_does_not_think_forever():
     assert d.phase == 'listening'
 
 
-def test_while_speaking_the_pupil_beats_with_the_voice():
+def _looks(out):
+    return [tuple(float(v) for v in c.split()[1:]) for c in out if c.startswith('look')]
+
+
+def _pupils(out):
+    return [float(c.split()[1]) for c in out if c.startswith('pupil')]
+
+
+def test_speaking_keeps_the_pupil_still():
+    # 2026-11-10: a pupil beating with the voice looked wrong; people's don't.
     d = _director()
     pupils = []
-    for i, level in enumerate([-60, -15, -12, -15, -60, -60, -60]):
-        out = d.tick(i * 0.05, True, 0.0, level)
-        pupils += [float(c.split()[1]) for c in out if c.startswith('pupil')]
-    assert max(pupils) > 1.2 and pupils[-1] < max(pupils) - 0.1
+    for i, level in enumerate([-60, -15, -12, -15, -60, -60, -15, -60]):
+        pupils += _pupils(d.tick(i * 0.05, True, 0.0, level))
+    assert len(set(pupils)) == 1
+
+
+def test_thinking_dilates_the_pupils_and_the_gaze_searches_up_there():
+    d = _director()
+    d.tick(0.0, False, 0.0)
+    d.tick(1.0, False, 0.95)                           # hearing
+    out = d.tick(1.5, False, 0.95)                     # thinking
+    assert _pupils(out) and _pupils(out)[0] > vr.EyeDirector.PUPIL['hearing']
+    looks = _looks(out)
+    for i in range(1, 60):                            # 3 s of thinking
+        looks += _looks(d.tick(1.5 + i * 0.05, False, 0.95))
+    assert len(looks) >= 4                            # it searches, it does not stare
+    assert all(y < -0.3 for _, y in looks)            # and it stays up there
+
+
+def test_a_phrase_starts_looking_away_and_ends_looking_back():
+    d = _director()
+    d.tick(0.0, True, 0.0, -60)
+    start = _looks(d.tick(0.05, True, 0.0, -20))      # SOMA's phrase begins
+    assert start and abs(start[0][0]) > 0.25          # away, to plan it
+    out = []
+    for i in range(2, 12):                            # loud for half a second
+        d.tick(i * 0.05, True, 0.0, -20)
+    for i in range(12, 22):                           # then a pause
+        out += d.tick(i * 0.05, True, 0.0, -60)
+    back = _looks(out)
+    assert back and abs(back[0][0]) < 0.06 and abs(back[0][1]) < 0.06   # back at the person
+
+
+def test_hearing_blinks_less_than_listening():
+    d = _director()
+    listening = sum('blink' in d.tick(i * 0.05, False, 0.0) for i in range(600))
+    d2 = _director()
+    hearing = sum('blink' in d2.tick(100 + i * 0.05, False, 100 + i * 0.05 - 0.05) for i in range(600))
+    assert hearing < listening
+
+
+def test_wake_and_sleep_words_survive_accents_and_punctuation():
+    assert vr.says('Oye SOMA, ¡despiértate!', vr.WAKE_WORDS)
+    assert vr.says('soma despierta', vr.WAKE_WORDS)
+    assert not vr.says('estaba despiertamente cansado', vr.WAKE_WORDS)
+    assert vr.says('Bueno, ya, duérmete.', vr.SLEEP_WORDS)
+    assert vr.says('vete a dormir', vr.SLEEP_WORDS)
+    assert not vr.says('no me puedo dormir', vr.SLEEP_WORDS)
+
+
+def test_asleep_a_quiet_room_sends_nothing_and_a_voice_keeps_its_first_syllable():
+    g = vr.VoiceGate()
+    quiet = bytes(640)
+    voice = vr.to_int16(np.full(320, 3000.0))         # about -21 dBFS
+    sent = []
+    for i in range(100):                              # 2 s of quiet room
+        sent += g.frame(quiet, i * 0.02)
+    assert sent == []
+    for i in range(100, 103):                         # a word starts
+        sent += g.frame(voice, i * 0.02)
+    # the half second before (its last two frames are the word's start, which
+    # were not yet confirmed as speech), then the frame that confirmed it
+    assert len(sent) == vr.VoiceGate.PREROLL_S * 50 + 1
+    assert sent[-3:] == [voice] * 3
+    after = []
+    for i in range(103, 103 + 100):                   # quiet again: held a second, then closed
+        after += g.frame(quiet, i * 0.02)
+    assert len(after) == pytest.approx(vr.VoiceGate.HOLD_S * 50, abs=2)
 
 
 def test_a_steady_eye_sends_nothing_new():

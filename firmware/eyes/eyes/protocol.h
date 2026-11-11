@@ -11,6 +11,8 @@
 //                                   colors.iris_in #ff8800, happy.low 80, ...
 //   style              -> {...}     the whole design as JSON, for style.json
 //   save | reset       -> ok        keep the live design across reboots | back to default
+//   sleep | wake       -> ok        close | open the eyes slowly; they boot closed and
+//                                   close again whenever a stream ends
 //   stats              -> fps ...   frames drawn and skipped since the last stats
 //   rec S              -> pcm N RATE 2, N raw bytes, ok
 //                                   S seconds (0.1..10) of the microphones, 16 bit
@@ -36,7 +38,7 @@
 namespace eyes {
 
 enum class Cmd : uint8_t { None, Ping, Look, Blink, SetMood, Pupil, Bright, Idle, Set, Style, Save, Reset, Stats,
-                           Rec, Play, Vol, SelfTest, Stream };
+                           Rec, Play, Vol, SelfTest, Stream, Sleep, Wake };
 
 // Audio (docs/voice_plan.md, phase 0): one I2S rate for both codecs.
 constexpr uint32_t AUDIO_RATE = 16000;
@@ -107,6 +109,8 @@ inline Parsed parse(char* buf) {
   }
   if (!std::strcmp(w, "selftest") && n == 1) { p.cmd = Cmd::SelfTest; return p; }
   if (!std::strcmp(w, "stream") && n == 1) { p.cmd = Cmd::Stream; return p; }
+  if (!std::strcmp(w, "sleep") && n == 1) { p.cmd = Cmd::Sleep; return p; }
+  if (!std::strcmp(w, "wake") && n == 1) { p.cmd = Cmd::Wake; return p; }
   if (!std::strcmp(w, "rec")) {
     if (n == 2 && parse_float(words[1], 0.1f, AUDIO_MAX_S, &p.a)) { p.cmd = Cmd::Rec; return p; }
     p.error = "rec S, 0.1..10 seconds"; return p;
