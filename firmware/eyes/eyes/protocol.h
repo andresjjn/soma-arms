@@ -12,6 +12,16 @@
 //   style              -> {...}     the whole design as JSON, for style.json
 //   save | reset       -> ok        keep the live design across reboots | back to default
 //   stats              -> fps ...   frames drawn and skipped since the last stats
+//   rec S              -> pcm N RATE 2, N raw bytes, ok
+//                                   S seconds (0.1..10) of the microphones, 16 bit
+//                                   stereo frames as the codec delivers them
+//   play N             -> k ... ok  N bytes (even, at most 10 s) of 16 bit mono at
+//                                   AUDIO_RATE follow in AUDIO_BLOCK blocks, each
+//                                   acknowledged with k, then the speaker plays them
+//   vol N              -> ok        speaker volume, 0..100
+//   selftest           -> pcm ...   like rec: 0.5 s quiet, then 1.5 s with a 1 kHz
+//                                   tone out the speaker, so the microphones tell
+//                                   whether the speaker sounds
 //
 // Anything else answers `err <why>`. The eyes never arm or move anything:
 // they are off SOMA's safety path by construction.
@@ -23,7 +33,14 @@
 
 namespace eyes {
 
-enum class Cmd : uint8_t { None, Ping, Look, Blink, SetMood, Pupil, Bright, Idle, Set, Style, Save, Reset, Stats };
+enum class Cmd : uint8_t { None, Ping, Look, Blink, SetMood, Pupil, Bright, Idle, Set, Style, Save, Reset, Stats,
+                           Rec, Play, Vol, SelfTest };
+
+// Audio (docs/voice_plan.md, phase 0): one I2S rate for both codecs.
+constexpr uint32_t AUDIO_RATE = 16000;
+constexpr float AUDIO_MAX_S = 10.0f;
+constexpr uint32_t AUDIO_MAX_PLAY = uint32_t(AUDIO_RATE * AUDIO_MAX_S) * 2;   // mono bytes
+constexpr uint32_t AUDIO_BLOCK = 4096;
 
 struct Parsed {
   Cmd cmd = Cmd::None;
@@ -33,6 +50,7 @@ struct Parsed {
   const char* key = nullptr;   // Set: point into the parsed line
   const char* value = nullptr;
   const char* error = nullptr;
+  uint32_t bytes = 0;          // Play
 };
 
 inline bool parse_float(const char* s, float lo, float hi, float* out) {
@@ -84,6 +102,23 @@ inline Parsed parse(char* buf) {
   if (!std::strcmp(w, "bright")) {
     if (n == 2 && parse_float(words[1], 0, 100, &p.a)) { p.cmd = Cmd::Bright; return p; }
     p.error = "bright N, 0..100"; return p;
+  }
+  if (!std::strcmp(w, "selftest") && n == 1) { p.cmd = Cmd::SelfTest; return p; }
+  if (!std::strcmp(w, "rec")) {
+    if (n == 2 && parse_float(words[1], 0.1f, AUDIO_MAX_S, &p.a)) { p.cmd = Cmd::Rec; return p; }
+    p.error = "rec S, 0.1..10 seconds"; return p;
+  }
+  if (!std::strcmp(w, "play")) {
+    char* end = nullptr;
+    unsigned long v = n == 2 ? std::strtoul(words[1], &end, 10) : 0;
+    if (n == 2 && end != words[1] && *end == '\0' && words[1][0] != '-' && v >= 2 && v <= AUDIO_MAX_PLAY && v % 2 == 0) {
+      p.cmd = Cmd::Play; p.bytes = uint32_t(v); return p;
+    }
+    p.error = "play N, even bytes, at most 10 s of 16 bit mono"; return p;
+  }
+  if (!std::strcmp(w, "vol")) {
+    if (n == 2 && parse_float(words[1], 0, 100, &p.a)) { p.cmd = Cmd::Vol; return p; }
+    p.error = "vol N, 0..100"; return p;
   }
   if (!std::strcmp(w, "idle")) {
     if (n == 2 && (!std::strcmp(words[1], "on") || !std::strcmp(words[1], "off"))) {

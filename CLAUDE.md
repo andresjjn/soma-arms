@@ -124,7 +124,8 @@ soma_driver/          PCA9685 driver
   test/                            the safety test suite
 firmware/eyes/        SOMA's eyes: ESP32-S3 Dual-Eye firmware (Arduino), off the ladder
                       and off the safety path; eyes/eye_model.h and eyes/protocol.h are
-                      pure, built for the host by test/test_eyes.cpp
+                      pure, built for the host by test/test_eyes.cpp; eyes/audio.* is the
+                      voice's microphone and speaker (docs/voice_plan.md)
 docs/                 plan, log, hardware, wiring, safety, bench, migration,
                       session_v02 (the printable v0.2 bench runbook)
 scripts/              smoke_test.sh, check_model_driver_sync.py,

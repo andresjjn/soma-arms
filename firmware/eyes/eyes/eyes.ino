@@ -17,6 +17,7 @@
 #include "esp_lcd_panel_ops.h"
 #include "freertos/semphr.h"
 #include <Preferences.h>
+#include "audio.h"
 #include "esp_lcd_gc9a01.h"
 #include "fast_render.h"
 #include "protocol.h"
@@ -195,10 +196,17 @@ static void handle_line(char* line) {
     }
     case eyes::Cmd::Save:    prefs.putBytes("style", &style, sizeof(style)); break;
     case eyes::Cmd::Reset:   style = eyes::default_style(); prefs.remove("style"); style_dirty = true; break;
+    // Audio blocks the eyes while it runs (phase 0: a bench measurement).
+    case eyes::Cmd::Rec:     audio::rec(p.a); return;
+    case eyes::Cmd::Play:    audio::play(p.bytes); return;
+    case eyes::Cmd::SelfTest: audio::selftest(); return;
+    case eyes::Cmd::Vol:     if (!audio::ready()) { Serial.println("err audio: codecs did not start"); return; }
+                             audio::volume(int(p.a)); break;
     case eyes::Cmd::Stats: {
       float secs = (now - stats_since) / 1000.0f;
-      Serial.printf("fps %.1f drawn %lu skipped %lu over %.1f s\n", frames_drawn / secs,
-                    (unsigned long)frames_drawn, (unsigned long)frames_skipped, secs);
+      Serial.printf("fps %.1f drawn %lu skipped %lu over %.1f s audio %s boot %d up %lu s\n", frames_drawn / secs,
+                    (unsigned long)frames_drawn, (unsigned long)frames_skipped, secs,
+                    audio::ready() ? "ready" : "off", int(esp_reset_reason()), (unsigned long)(now / 1000));
       frames_drawn = frames_skipped = 0;
       stats_since = now;
       return;
@@ -233,6 +241,7 @@ void setup() {
   }
   for (int i = 0; i < 2; i++) init_panel(i);
   set_brightness(80);
+  audio::begin(eyes::AUDIO_RATE);               // `stats` says whether it came up
   randomSeed(esp_random());
 }
 

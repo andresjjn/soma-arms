@@ -114,6 +114,22 @@ int main() {
   CHECK(parse("save").cmd == Cmd::Save);
   CHECK(parse("reset").cmd == Cmd::Reset);
   CHECK(parse("stats").cmd == Cmd::Stats);
+  // Audio, phase 0 of docs/voice_plan.md.
+  { Parsed p = parse("rec 3"); CHECK(p.cmd == Cmd::Rec && p.a == 3.0f); }
+  CHECK(parse("rec 0").cmd == Cmd::None);
+  CHECK(parse("rec 11").cmd == Cmd::None);
+  CHECK(parse("rec").cmd == Cmd::None);
+  { Parsed p = parse("play 32000"); CHECK(p.cmd == Cmd::Play && p.bytes == 32000); }
+  CHECK(parse("play 32001").cmd == Cmd::None);               // half a sample
+  CHECK(parse("play 0").cmd == Cmd::None);
+  CHECK(parse("play -2").cmd == Cmd::None);
+  CHECK(parse("play 2x").cmd == Cmd::None);
+  CHECK(parse("play 320002").cmd == Cmd::None);              // past 10 s
+  CHECK(parse("play 320000").cmd == Cmd::Play);
+  CHECK(parse("selftest").cmd == Cmd::SelfTest);
+  CHECK(parse("selftest now").cmd == Cmd::None);
+  { Parsed p = parse("vol 70"); CHECK(p.cmd == Cmd::Vol && p.a == 70.0f); }
+  CHECK(parse("vol 101").cmd == Cmd::None);
   CHECK(parse("arm").cmd == Cmd::None);                      // nothing that sounds like motion
   CHECK(parse("").cmd == Cmd::None);
   CHECK(parse("look 0.1 0.2\r").cmd == Cmd::Look);

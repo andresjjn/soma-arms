@@ -1027,3 +1027,20 @@ Stale numbers from the 2026-08-05 geometry were brought up to the
 2026-10-27 measurements: `col_h` 0.370 (tape, and mount_h + mount_lz/2
 agrees), the single-arm model at 0.3272, the 32.7 mm clavicle, the lane
 at 81 mm in docs/plan.md.
+
+## 2026-11-10, SOMA's voice: plan and phase 0
+
+Andres asked for a voice pipeline on the eye board: its microphones, the
+Gemini Live API, its speaker. The plan is docs/voice_plan.md. The
+deciding question was where the conversation lives. Calling Gemini from
+the ESP32 works (Andres accepted the key on the board), but the
+orchestration will live on the Jetson, next to the driver and the v0.5
+supervisor; a voice session inside the board would be a second brain that
+shares no context and needs a reflash for every change. So a relay on the
+host owns the Live session and the board is the microphone and the
+speaker over USB serial. SOMA speaks Spanish first.
+
+Phase 0 passed its gate the same day: the ES7210 and ES8311 drivers
+(Espressif, Apache-2.0, as Waveshare adapted them to Wire) with `rec`,
+`play`, `vol` and `selftest`, and tools/audio_check.py measuring dBFS per
+channel. Numbers in docs/voice_plan.md.
