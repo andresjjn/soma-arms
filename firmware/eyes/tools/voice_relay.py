@@ -53,11 +53,11 @@ DEFAULT_VOL = 75               # Andres, 2026-11-10: 85 felt like it could hurt 
 # Without a voice the model picks one per session, so SOMA changed between
 # a man's and a woman's voice (2026-11-10). One fixed voice is part of who it is.
 DEFAULT_VOICE = 'Capella'      # chosen by Andres, 2026-11-10
-LANGUAGE = 'es-MX'             # Mexican Spanish: the speech config and the prompt both say it
+LANGUAGE = 'es-US'             # Google's Latin American Spanish; the prompt asks for a neutral one
 LOG = Path(__file__).resolve().parents[1] / 'rec' / 'voice_log.csv'
 SYSTEM = ('Eres SOMA, un robot con dos brazos de aluminio colgados de una caja central, '
-          'unos ojos redondos en dos pantallas y una cámara. Hablas español de México, con acento '
-          'mexicano, con frases cortas '
+          'unos ojos redondos en dos pantallas y una cámara. Hablas español latinoamericano neutro, '
+          'sin modismos ni acento de ningún país en particular, con frases cortas '
           'y naturales, como en una conversación. No puedes mover los brazos por voz todavía: '
           'si te lo piden, dilo con honestidad. Si te piden que te duermas, despídete en una frase corta.')
 

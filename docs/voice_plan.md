@@ -37,10 +37,12 @@ speaker (ES8311) <- ESP32-S3 <- USB serial <- relay <- response audio
   behind the two arming gates like any other call from the reasoner.
 - **Listening is always visible.** Whenever audio leaves the board, the
   eyes show it.
-- **Spanish first, Mexican Spanish, one voice.** Without a fixed voice the
-  model picked a different one per session, sometimes a man's, sometimes a
-  woman's. SOMA speaks with the prebuilt voice Capella and `es-MX`, set
-  both in the speech config and in the system prompt (2026-11-10).
+- **Spanish first, neutral Latin American, one voice.** Without a fixed
+  voice the model picked a different one per session, sometimes a man's,
+  sometimes a woman's. SOMA speaks with the prebuilt voice Capella and
+  `es-US` (Google's Latin American Spanish), and the system prompt asks
+  for a neutral Spanish with no regional idioms (2026-11-10; Mexican
+  Spanish first, then neutral at Andres's request).
 
 ## Board facts (from Waveshare's 03_Mic_test and the board's xiaozhi config)
 
