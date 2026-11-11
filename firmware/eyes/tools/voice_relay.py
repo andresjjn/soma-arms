@@ -4,7 +4,7 @@ speaker, a Gemini Live session in between. Spanish first.
 
     voice_relay.py                       talk; Ctrl-C ends
     voice_relay.py --model gemini-3.8-live
-    voice_relay.py --vol 85
+    voice_relay.py --vol 70              speaker volume for the session (default 75)
     voice_relay.py --voice Kore          one of Gemini's prebuilt voices
 
 The board streams 20 ms microphone frames and plays what this sends
@@ -24,11 +24,13 @@ import csv
 import glob
 import math
 import os
+import random
 import struct
 import subprocess
 import sys
 import threading
 import time
+from collections import deque
 from pathlib import Path
 
 import numpy as np
@@ -43,6 +45,7 @@ VOICE_DBFS = -40.0              # speech frames: voice RMS about -30, quiet room
 VOICE_RUN = 3                   # ... at least this many in a row (60 ms): single clicks reach -29
 TAIL_S = 0.35                   # after the speaker empties, still half duplex this long
 DEFAULT_MODEL = 'gemini-3.1-flash-live-preview'
+DEFAULT_VOL = 75               # Andres, 2026-11-10: 85 felt like it could hurt the small speaker
 # Without a voice the model picks one per session, so SOMA changed between
 # a man's and a woman's voice (2026-11-10). One fixed voice is part of who it is.
 DEFAULT_VOICE = 'Capella'      # chosen by Andres, 2026-11-10
@@ -148,6 +151,111 @@ class VoiceTracker:
             self.last = now
 
 
+class Envelope:
+    """The level of what the speaker plays, on the clock it will play: each
+    chunk sent is placed right after the previous one, in 20 ms marks, so the
+    eyes follow the voice the room hears, not the bytes the relay sends."""
+
+    STEP = RATE * 2 // 50                         # 20 ms of 16 bit mono
+
+    def __init__(self):
+        self.marks = deque()
+        self.end = 0.0
+
+    def add(self, pcm: bytes, now: float) -> None:
+        start = max(now, self.end)
+        for i in range(0, len(pcm), self.STEP):
+            self.marks.append((start + i / (RATE * 2), dbfs(pcm[i:i + self.STEP])))
+        self.end = start + len(pcm) / (RATE * 2)
+
+    def level(self, now: float) -> float:
+        while len(self.marks) > 1 and self.marks[1][0] <= now:
+            self.marks.popleft()
+        if self.marks and self.marks[0][0] <= now < self.marks[0][0] + 0.02:
+            return self.marks[0][1]
+        return -120.0
+
+    def clear(self) -> None:
+        self.marks.clear()
+        self.end = 0.0
+
+
+class EyeDirector:
+    """Layer 1 of the eyes in a conversation: what they do comes from where
+    the conversation is, known locally with no model and no delay.
+
+      listening  nobody talks: wide, slow saccades, pupils a bit open
+      hearing    the person talks: eyes fixed on them, pupils wide
+      thinking   the person ended, no answer yet: a look up and aside
+      speaking   SOMA talks: micro-saccades, pupils beat with the voice,
+                 blinks in the pauses between phrases
+
+    tick() returns the command lines to send; a value is only resent when it
+    changed enough to show. Gaze: x + is the picture's right, y + is down."""
+
+    THINK_MAX_S = 8.0           # no answer by then: back to listening
+    HEARING_S = 0.4             # this long after the last word still counts as hearing
+    PUPIL = {'listening': 1.15, 'hearing': 1.3, 'thinking': 0.9}
+
+    def __init__(self, rng: random.Random | None = None):
+        self.rng = rng or random.Random()
+        self.phase = None
+        self.spoke_at = 0.0
+        self.side = 1.0
+        self.next_look = 0.0
+        self.next_blink = 0.0
+        self.pupil = None
+        self.env = 0.0
+        self.loud = False
+
+    def _phase(self, now: float, speaking: bool, last_voice: float) -> str:
+        if speaking:
+            return 'speaking'
+        if last_voice and now - last_voice < self.HEARING_S:
+            return 'hearing'
+        if last_voice > self.spoke_at and now - last_voice < self.THINK_MAX_S:
+            return 'thinking'
+        return 'listening'
+
+    def tick(self, now: float, speaking: bool, last_voice: float, level_dbfs: float = -120.0) -> list[str]:
+        if speaking:
+            self.spoke_at = now
+        phase = self._phase(now, speaking, last_voice)
+        out = []
+        if phase != self.phase:
+            if phase == 'thinking':
+                self.side = -self.side                # a different side each turn
+            self.phase = phase
+            self.next_look = now                      # a new phase looks at once
+        u = self.rng.uniform
+        if now >= self.next_look:
+            if phase == 'thinking':
+                gx, gy, wait = 0.45 * self.side + u(-0.08, 0.08), -0.5 + u(-0.05, 0.05), u(1.2, 2.0)
+            elif phase == 'speaking':
+                gx, gy, wait = u(-0.1, 0.1), u(-0.06, 0.06), u(0.5, 1.2)
+            elif phase == 'hearing':
+                gx, gy, wait = u(-0.06, 0.06), u(-0.04, 0.04), u(1.0, 2.0)
+            else:
+                gx, gy, wait = u(-0.2, 0.2), u(-0.12, 0.12), u(1.5, 3.5)
+            out.append(f'look {gx:.2f} {gy:.2f}')
+            self.next_look = now + wait
+        # The voice's envelope, -50..-10 dBFS onto 0..1: fast up, slower down.
+        x = min(1.0, max(0.0, (level_dbfs + 50.0) / 40.0))
+        self.env += (x - self.env) * (0.6 if x > self.env else 0.25)
+        target = 1.0 + 0.35 * self.env if phase == 'speaking' else self.PUPIL[phase]
+        if self.pupil is None or abs(target - self.pupil) >= 0.03:
+            out.append(f'pupil {target:.2f}')
+            self.pupil = target
+        # Blinks: on a timer, and while speaking also when a phrase ends.
+        loud = level_dbfs > -40.0
+        phrase_end = phase == 'speaking' and self.loud and not loud
+        self.loud = loud
+        if now >= self.next_blink or (phrase_end and now >= self.next_blink - 2.0 and self.rng.random() < 0.5):
+            out.append('blink')
+            self.next_blink = now + u(2.5, 5.5)
+        return out
+
+
 def drain(ser, quiet_s: float = 0.15, limit_s: float = 1.5) -> int:
     """Read until the board has been quiet for quiet_s: a stream that ended
     with the port closed leaves frames in the buffers, delivered on the next
@@ -223,6 +331,8 @@ class Relay:
         self.pending = bytearray()                  # 16 kHz speaker audio not yet sent
         self.write_lock = threading.Lock()
         self.voice = VoiceTracker()
+        self.envelope = Envelope()
+        self.director = EyeDirector()
         self.turn = {}
         self.tokens = 0
 
@@ -256,9 +366,9 @@ class Relay:
         with self.write_lock:
             drain(self.ser)
             self.ser.write(b'\nstream\n')
-        if vol is not None:
-            self.command(f'vol {vol}')
-        self.command('pupil 1.25')                  # listening shows: wide pupils
+        self.command(f'vol {vol}')                 # every session sets it: no volume left over from a test
+        for line in ('idle off', 'mood neutral'):   # the director drives the eyes now
+            self.command(line)
         client = genai.Client(api_key=keychain_key())
         config = types.LiveConnectConfig(
             response_modalities=['AUDIO'], system_instruction=SYSTEM,
@@ -274,11 +384,11 @@ class Relay:
             async with client.aio.live.connect(model=self.model, config=config) as session:
                 print('listening. Talk to SOMA (Ctrl-C ends).', flush=True)
                 await asyncio.gather(self.uplink(session, mic, types), self.downlink(session),
-                                     self.speaker_feed(), self.keepalive())
+                                     self.speaker_feed(), self.keepalive(), self.eyes())
         finally:
             stop.set()
-            self.command('pupil 1')
-            self.command('stream off')
+            for line in ('pupil 1', 'look 0 0', 'idle on', 'stream off'):
+                self.command(line)
             time.sleep(0.2)
             self.ser.close()
             print(f'session tokens: {self.tokens}')
@@ -312,6 +422,7 @@ class Relay:
                         self.pending += to_int16(self.resample(pcm24))
                 if sc.interrupted:
                     self.pending.clear()
+                    self.envelope.clear()
                     self.send('X')
                 if sc.turn_complete:
                     self.log_turn()
@@ -323,9 +434,19 @@ class Relay:
                 chunk = bytes(self.pending[:MAX_PAYLOAD])
                 del self.pending[:MAX_PAYLOAD]
                 self.speaker.inflight += 1
+                self.envelope.add(chunk, now)
                 self.send('P', chunk)
                 continue
             await asyncio.sleep(0.005)
+
+    async def eyes(self) -> None:
+        """Layer 1: 20 times a second, where the conversation is becomes eyes."""
+        while True:
+            now = time.monotonic()
+            for line in self.director.tick(now, self.speaker.speaking(now), self.voice.last,
+                                           self.envelope.level(now)):
+                self.command(line)
+            await asyncio.sleep(0.05)
 
     async def keepalive(self) -> None:
         while True:
@@ -359,7 +480,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--port')
     ap.add_argument('--model', default=DEFAULT_MODEL)
-    ap.add_argument('--vol', type=int, help='speaker volume 0..100 for this session')
+    ap.add_argument('--vol', type=int, default=DEFAULT_VOL, help=f'speaker volume 0..100 (default {DEFAULT_VOL})')
     ap.add_argument('--voice', default=DEFAULT_VOICE, help=f'prebuilt voice (default {DEFAULT_VOICE})')
     args = ap.parse_args(argv)
     port = args.port or next(iter(sorted(glob.glob('/dev/cu.usbmodem*'))), None)

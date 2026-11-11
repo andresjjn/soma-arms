@@ -46,6 +46,7 @@ static uint32_t frames_drawn = 0, frames_skipped = 0, stats_since = 0;
 static eyes::EyeState state;
 static Preferences prefs;
 static float target_gx = 0, target_gy = 0;
+static float target_pupil = 1.0f;              // eased like the gaze: the voice moves it many times a second
 static bool idle_on = true;
 static uint32_t idle_pause_until = 0, next_saccade = 0, next_blink = 0, blink_start = 0;
 static bool blinking = false;
@@ -123,6 +124,7 @@ static void animate(uint32_t now, float dt) {
   float k = fminf(1.0f, dt * 14.0f);            // fast, like a saccade
   state.gx += (target_gx - state.gx) * k;
   state.gy += (target_gy - state.gy) * k;
+  state.pupil += (target_pupil - state.pupil) * fminf(1.0f, dt * 12.0f);
   if (blinking) {
     float t = now - blink_start, c = style.blink_close, o = style.blink_open;
     if (t < c) state.blink = t / c;              // quick down, slower up, like a real one
@@ -182,7 +184,7 @@ static void handle_line(char* line) {
     case eyes::Cmd::Look:    target_gx = p.a; target_gy = p.b; idle_pause_until = now + uint32_t(style.look_holds); break;
     case eyes::Cmd::Blink:   blinking = true; blink_start = now; break;
     case eyes::Cmd::SetMood: state.mood = p.mood; break;
-    case eyes::Cmd::Pupil:   state.pupil = p.a; break;
+    case eyes::Cmd::Pupil:   target_pupil = p.a; break;
     case eyes::Cmd::Bright:  set_brightness(p.a); break;
     case eyes::Cmd::Idle:    idle_on = p.on; break;
     case eyes::Cmd::Set:
@@ -290,6 +292,7 @@ void loop() {
   // Snap the eased gaze once it is within a hair, so a still eye is still.
   if (fabsf(target_gx - state.gx) < 0.002f) state.gx = target_gx;
   if (fabsf(target_gy - state.gy) < 0.002f) state.gy = target_gy;
+  if (fabsf(target_pupil - state.pupil) < 0.002f) state.pupil = target_pupil;
   static eyes::EyeState drawn;
   static bool first = true;
   if (showing_image) { delay(5); return; }

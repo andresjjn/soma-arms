@@ -108,3 +108,83 @@ def test_a_click_is_not_a_word_but_a_syllable_is():
 def test_audio_caught_mid_frame_is_not_printed_as_board_text():
     _, lines = vr.BoardFrames().feed(b'\x12\xfe\x00\x81 \x7f\x03\n' + b'stream ended\n')
     assert lines == ['stream ended']
+
+
+# ---- layer 1 of the eyes: the conversation's phase becomes eyes ----
+
+def _director():
+    import random
+    return vr.EyeDirector(random.Random(7))
+
+
+def test_the_eyes_hear_then_think_then_speak_then_listen():
+    d = _director()
+    d.tick(0.0, False, 0.0)
+    assert d.phase == 'listening'
+    d.tick(1.0, False, 0.9)                          # a word 0.1 s ago
+    assert d.phase == 'hearing'
+    out = d.tick(1.6, False, 0.9)                    # the person stopped
+    assert d.phase == 'thinking'
+    look = [c for c in out if c.startswith('look')][0]
+    assert float(look.split()[2]) < -0.4             # a look up
+    d.tick(2.5, True, 0.9)
+    assert d.phase == 'speaking'
+    d.tick(5.0, False, 0.9)                          # SOMA finished: the old word is answered
+    assert d.phase == 'listening'
+
+
+def test_thinking_looks_to_a_different_side_each_turn():
+    d = _director()
+    sides = []
+    for turn in range(3):
+        t = 10.0 * turn
+        d.tick(t, False, t - 0.1)                    # hearing
+        out = d.tick(t + 1.0, False, t - 0.1)        # thinking
+        sides.append(float([c for c in out if c.startswith('look')][0].split()[1]) > 0)
+        d.tick(t + 2.0, True, t - 0.1)               # speaking
+    assert sides[0] != sides[1] and sides[1] != sides[2]
+
+
+def test_an_unanswered_turn_does_not_think_forever():
+    d = _director()
+    d.tick(0.0, False, 0.0)
+    d.tick(1.0, False, 0.9)
+    d.tick(2.0, False, 0.9)
+    assert d.phase == 'thinking'
+    d.tick(0.9 + vr.EyeDirector.THINK_MAX_S + 0.1, False, 0.9)
+    assert d.phase == 'listening'
+
+
+def test_while_speaking_the_pupil_beats_with_the_voice():
+    d = _director()
+    pupils = []
+    for i, level in enumerate([-60, -15, -12, -15, -60, -60, -60]):
+        out = d.tick(i * 0.05, True, 0.0, level)
+        pupils += [float(c.split()[1]) for c in out if c.startswith('pupil')]
+    assert max(pupils) > 1.2 and pupils[-1] < max(pupils) - 0.1
+
+
+def test_a_steady_eye_sends_nothing_new():
+    d = _director()
+    d.tick(0.0, False, 0.0)
+    quiet = d.tick(0.05, False, 0.0)
+    assert not [c for c in quiet if c.startswith('pupil')]
+
+
+def test_the_eyes_blink_by_themselves():
+    d = _director()
+    blinks = sum('blink' in d.tick(i * 0.05, False, 0.0) for i in range(400))   # 20 s
+    assert 3 <= blinks <= 9
+
+
+def test_the_envelope_plays_chunks_back_to_back_on_the_speaker_clock():
+    e = vr.Envelope()
+    loud = vr.to_int16(np.full(3200, 8000.0))                 # 0.2 s
+    quiet = bytes(3200 * 2)
+    e.add(loud, 10.0)
+    e.add(quiet, 10.0)                                        # queued right after, not at 10.0
+    assert e.level(10.1) > -20
+    assert e.level(10.3) == -120.0                            # the quiet chunk is playing
+    assert e.level(10.5) == -120.0                            # nothing left
+    e.clear()
+    assert e.level(10.05) == -120.0

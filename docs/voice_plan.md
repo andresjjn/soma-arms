@@ -100,6 +100,18 @@ Both codecs share BCLK and WS, so input and output run at one sample rate.
   drain before talking); the 3 s timeout itself works.
 - Half duplex: while SOMA speaks the microphone sends silence.
 
+## Phase 2, layer 1: the eyes follow the conversation (2026-11-10)
+
+The relay knows where the conversation is without asking any model, and an
+`EyeDirector` turns that into eye commands 20 times a second: listening
+(slow wide saccades), hearing (fixed on the person, wide pupils), thinking
+(the person ended, no answer yet: a look up, to the other side each turn),
+speaking (micro-saccades, the pupil beating with the voice on the speaker's
+clock, blinks at phrase ends). The firmware now eases the pupil like the
+gaze, so many small steps read as one movement. Layer 2, an `expresar`
+mood tool for Gemini (non-blocking, silent), comes next. The session
+volume defaults to 75 (85 felt like too much for the small speaker).
+
 ## Phases, each with its gate
 
 | Phase | Work | Gate |
