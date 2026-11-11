@@ -19,6 +19,8 @@
 //                                   AUDIO_RATE follow in AUDIO_BLOCK blocks, each
 //                                   acknowledged with k, then the speaker plays them
 //   vol N              -> ok        speaker volume, 0..100
+//   stream             -> ok, then frames both ways (frames.h) until `stream off`
+//                                   or 3 s without a frame from the host
 //   selftest           -> pcm ...   like rec: 0.5 s quiet, then 1.5 s with a 1 kHz
 //                                   tone out the speaker, so the microphones tell
 //                                   whether the speaker sounds
@@ -34,7 +36,7 @@
 namespace eyes {
 
 enum class Cmd : uint8_t { None, Ping, Look, Blink, SetMood, Pupil, Bright, Idle, Set, Style, Save, Reset, Stats,
-                           Rec, Play, Vol, SelfTest };
+                           Rec, Play, Vol, SelfTest, Stream };
 
 // Audio (docs/voice_plan.md, phase 0): one I2S rate for both codecs.
 constexpr uint32_t AUDIO_RATE = 16000;
@@ -104,6 +106,7 @@ inline Parsed parse(char* buf) {
     p.error = "bright N, 0..100"; return p;
   }
   if (!std::strcmp(w, "selftest") && n == 1) { p.cmd = Cmd::SelfTest; return p; }
+  if (!std::strcmp(w, "stream") && n == 1) { p.cmd = Cmd::Stream; return p; }
   if (!std::strcmp(w, "rec")) {
     if (n == 2 && parse_float(words[1], 0.1f, AUDIO_MAX_S, &p.a)) { p.cmd = Cmd::Rec; return p; }
     p.error = "rec S, 0.1..10 seconds"; return p;

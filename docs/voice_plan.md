@@ -72,12 +72,37 @@ Both codecs share BCLK and WS, so input and output run at one sample rate.
 - While audio runs the eyes stop (phase 0 is blocking); phase 1 moves audio
   to its own task.
 
+## Phase 1 results (2026-11-10)
+
+- Three Live models answered a synthesized Spanish question with this key:
+  first audio 1.54 s after the question (gemini-3.8-live, 809 tokens),
+  1.63 s (gemini-3.1-flash-live-preview, 382 tokens, the only one that
+  heard "SOMA"), 2.63 s (gemini-2.5-flash-native-audio-latest, 539).
+  All answer 24 kHz PCM. Default: 3.1 flash live; `--model` changes it.
+- Transport: `stream` switches the line protocol to frames (eyes/frames.h):
+  microphone up at 50.5 frames a second, no wrong sizes; speaker audio down
+  in 2 KB frames, a window of 4, acked with the queue level; a 16 s ring in
+  PSRAM absorbs Gemini's bursts; 0 frames dropped. The relay resamples 24 to
+  16 kHz (windowed sinc, tested: 1 kHz passes within 2 %, a 10 kHz alias is
+  over 40 dB down, chunks leave no seam).
+- End to end, the board's own microphone hearing a question played by the
+  Mac's speaker: two turns, 1.63 s and 1.98 s from the last word to
+  Gemini's first audio, 470 and 795 tokens; SOMA said it cannot move its
+  arms by voice yet, as its prompt asks.
+- Found and fixed on the way: the mic task and the acks shared one frame
+  buffer across the two cores (frames came out mixed; now a lock); a lone
+  click up to -29 dBFS counted as speech and read the latency as 0.1 s (a
+  word is now 3 frames in a row over -40 dBFS); a stream that ends with the
+  port closed leaves frames in the buffers for the next open (the tools
+  drain before talking); the 3 s timeout itself works.
+- Half duplex: while SOMA speaks the microphone sends silence.
+
 ## Phases, each with its gate
 
 | Phase | Work | Gate |
 |---|---|---|
 | 0 (passed) | Codecs and I2S in the eye firmware; `rec S` streams S s of microphone to the Mac, `play N` plays PCM the Mac sends in acknowledged blocks, `selftest` checks the speaker with the board's own microphone; noise floor, voice level at 50 cm, clipping | a recording played back is clearly understood |
-| 1 | Audio in its own task so the eyes keep about 50 fps; `tools/voice_relay.py`: serial audio to and from a Live session; latency from end of speech to first sound measured; cost of one minute measured | one spoken question, one spoken answer, numbers logged |
+| 1 (works; a human turn pending) | Audio in its own task so the eyes keep about 50 fps; `tools/voice_relay.py`: serial audio to and from a Live session; latency from end of speech to first sound measured; cost of one minute measured | one spoken question, one spoken answer, numbers logged |
 | 2 | Touch an eye to talk, barge-in, the eyes follow the conversation (listening, thinking, speaking) through `look`, `pupil`, `mood` | a short video |
 | 3 | The relay on the Jetson, the serial device passed into the container | phase 2 working from the Jetson |
 | 4 | "SOMA, wake up" on the board with ESP-SR, so audio leaves only after the phrase; needs a model partition, so a full reflash | wakes on the phrase, not on ordinary talk in the room |

@@ -63,7 +63,11 @@ class Board:
     def __init__(self, port: str):
         self.s = serial.Serial(port, 115200, timeout=6)
         time.sleep(0.2)
-        self.s.reset_input_buffer()
+        old, self.s.timeout = self.s.timeout, 0.15          # stale frames from an ended stream
+        end = time.monotonic() + 1.5
+        while time.monotonic() < end and self.s.read(65536):
+            pass
+        self.s.timeout = old
 
     def line(self) -> str:
         raw = self.s.readline()

@@ -17,6 +17,7 @@
 #include "es7210.h"
 #include "es8311.h"
 #include "protocol.h"
+#include "frames.h"
 
 namespace audio {
 
@@ -91,8 +92,11 @@ static size_t read_frames(size_t bytes) {
   return got;
 }
 
+static volatile bool stream_on = false;
+
 void rec(float seconds) {
   if (!ok) { Serial.println("err audio: codecs did not start"); return; }
+  if (stream_on) { Serial.println("err audio: streaming"); return; }
   read_frames(size_t(rate_hz * SETTLE_S) * 4);   // stale DMA and the codec's wake up
   size_t want = size_t(rate_hz * seconds) * 4;
   size_t got = read_frames(want);
@@ -103,6 +107,7 @@ void rec(float seconds) {
 
 void play(uint32_t bytes) {
   if (!ok) { Serial.println("err audio: codecs did not start"); return; }
+  if (stream_on) { Serial.println("err audio: streaming"); return; }
   // Mono in the first half of the buffer, read in acknowledged blocks (the
   // same flow control as `img`: the USB serial driver drops what overflows).
   uint8_t* mono = buf;
@@ -138,6 +143,7 @@ void play(uint32_t bytes) {
 
 void selftest() {
   if (!ok) { Serial.println("err audio: codecs did not start"); return; }
+  if (stream_on) { Serial.println("err audio: streaming"); return; }
   const size_t quiet = size_t(rate_hz / 2), loud = size_t(rate_hz) * 3 / 2;
   read_frames(size_t(rate_hz * SETTLE_S) * 4);
   size_t got = read_frames(quiet * 4);
@@ -171,6 +177,110 @@ void selftest() {
   Serial.printf("pcm %u %u 2\n", (unsigned)got, (unsigned)rate_hz);
   Serial.write(buf, got);
   Serial.println("ok");
+}
+
+// ---- Phase 1: the stream ----
+
+constexpr uint32_t RING_SAMPLES = 1u << 18;      // 16.4 s at 16 kHz, 512 KB of PSRAM
+constexpr size_t MIC_FRAME = 320;               // 20 ms at 16 kHz
+static int16_t* ring_store = nullptr;
+static eyes::SampleRing* ring = nullptr;
+static TaskHandle_t mic_h = nullptr, spk_h = nullptr;
+static volatile uint32_t last_host_ms = 0;
+static volatile uint32_t dropped_frames = 0;
+
+bool streaming() { return stream_on; }
+
+// One Serial.write per frame: the USB serial driver holds its lock for the
+// whole call, so a frame is never split by another task's text. The mic task
+// (core 0) and the acks (core 1) share the assembly buffer, so it has its own
+// lock: without it the two cores wrote over each other (2026-11-10, frames
+// came out mixed).
+static SemaphoreHandle_t frame_lock = nullptr;
+static void send_frame(uint8_t type, const void* payload, size_t len) {
+  static uint8_t out[eyes::FRAME_HEADER + eyes::MAX_PAYLOAD];
+  xSemaphoreTake(frame_lock, portMAX_DELAY);
+  eyes::frame_header(out, type, len);
+  memcpy(out + eyes::FRAME_HEADER, payload, len);
+  Serial.write(out, eyes::FRAME_HEADER + len);
+  xSemaphoreGive(frame_lock);
+}
+
+static void mic_task(void*) {
+  int16_t stereo[MIC_FRAME * 2], mono[MIC_FRAME];
+  while (stream_on) {
+    size_t want = sizeof(stereo), got = 0;
+    while (got < want && stream_on) {
+      size_t n = i2s.readBytes((char*)stereo + got, want - got);
+      if (n == 0) break;
+      got += n;
+    }
+    size_t frames = got / 4;
+    for (size_t i = 0; i < frames; i++) mono[i] = stereo[2 * i];   // channel 0 is the microphone
+    if (frames) send_frame('M', mono, frames * 2);
+  }
+  mic_h = nullptr;
+  vTaskDelete(nullptr);
+}
+
+static void speaker_task(void*) {
+  int16_t mono[256], stereo[512];
+  while (stream_on) {
+    uint32_t k = ring->take(mono, 256);
+    for (uint32_t i = 0; i < 256; i++) stereo[2 * i] = stereo[2 * i + 1] = i < k ? mono[i] : 0;
+    // Silence when the queue is empty: the I2S clock and the pace stay the same.
+    size_t sent = 0;
+    while (sent < sizeof(stereo) && stream_on) {
+      size_t n = i2s.write((const uint8_t*)stereo + sent, sizeof(stereo) - sent);
+      if (n == 0) delay(1);
+      sent += n;
+    }
+  }
+  spk_h = nullptr;
+  vTaskDelete(nullptr);
+}
+
+bool stream_begin() {
+  if (!ok) return false;
+  if (stream_on) return true;
+  if (!frame_lock) frame_lock = xSemaphoreCreateMutex();
+  if (!ring_store) {
+    ring_store = (int16_t*)heap_caps_malloc(RING_SAMPLES * sizeof(int16_t), MALLOC_CAP_SPIRAM);
+    if (!ring_store) return false;
+    ring = new eyes::SampleRing(ring_store, RING_SAMPLES);
+  }
+  ring->flush();
+  dropped_frames = 0;
+  last_host_ms = millis();
+  stream_on = true;
+  digitalWrite(PIN_PA, HIGH);
+  xTaskCreatePinnedToCore(mic_task, "mic", 6144, nullptr, 5, &mic_h, 0);
+  xTaskCreatePinnedToCore(speaker_task, "speaker", 6144, nullptr, 5, &spk_h, 0);
+  return true;
+}
+
+void stream_end() {
+  if (!stream_on) return;
+  stream_on = false;
+  for (int i = 0; i < 50 && (mic_h || spk_h); i++) delay(10);   // each task finishes its block
+  digitalWrite(PIN_PA, LOW);
+  Serial.printf("stream ended, %lu speaker frames dropped\n", (unsigned long)dropped_frames);
+}
+
+void stream_frame(uint8_t type, const uint8_t* payload, size_t len) {
+  last_host_ms = millis();
+  if (type == 'X') { ring->flush(); return; }
+  if (type != 'P') return;
+  static int16_t samples[eyes::MAX_PAYLOAD / 2];
+  size_t n = len / 2;
+  for (size_t i = 0; i < n; i++) samples[i] = int16_t(payload[2 * i] | (payload[2 * i + 1] << 8));
+  if (!ring->put(samples, n)) dropped_frames = dropped_frames + 1;
+  uint32_t k[2] = {ring->queued() * 2, ring->capacity() * 2};      // bytes queued, bytes of room in all
+  send_frame('K', k, sizeof(k));
+}
+
+void stream_poll() {
+  if (stream_on && millis() - last_host_ms > eyes::STREAM_TIMEOUT_MS) stream_end();
 }
 
 }  // namespace audio

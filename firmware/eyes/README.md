@@ -42,6 +42,7 @@ path: the eyes cannot arm or command anything.
 | `rec S` | S seconds (0.1 to 10) of the microphones: `pcm N RATE 2`, N raw bytes of 16 bit stereo, `ok` (channel 0 is the microphone) |
 | `play N` | N bytes of 16 bit mono at 16 kHz follow in 4 KB blocks, each acknowledged with `k`; then the speaker plays them |
 | `vol N` | speaker volume, 0 to 100 (75 at boot) |
+| `stream` | the conversation: frames both ways (`eyes/frames.h`) until `stream off` or 3 s without a frame; `tools/voice_relay.py` speaks it |
 | `selftest` | like `rec`: 0.5 s quiet, then 1.5 s with a 1 kHz tone out the speaker; `tools/audio_check.py selftest` reads it |
 | `save` / `reset` | keep the live design in NVS across reboots / back to `style.json` |
 

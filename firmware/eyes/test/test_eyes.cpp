@@ -6,6 +6,7 @@
 #include "../eyes/eye_model.h"
 #include "../eyes/protocol.h"
 #include "../eyes/style_default.h"
+#include "../eyes/frames.h"
 
 static int fails = 0;
 #define CHECK(cond) do { if (!(cond)) { std::printf("FAIL %s:%d %s\n", __FILE__, __LINE__, #cond); fails++; } } while (0)
@@ -130,6 +131,47 @@ int main() {
   CHECK(parse("selftest now").cmd == Cmd::None);
   { Parsed p = parse("vol 70"); CHECK(p.cmd == Cmd::Vol && p.a == 70.0f); }
   CHECK(parse("vol 101").cmd == Cmd::None);
+  CHECK(parse("stream").cmd == Cmd::Stream);
+
+  // The stream's frames (phase 1): found in garbage, split anywhere.
+  {
+    static FrameReader r;
+    const uint8_t text[] = "ok\r\nstream ended\r\n";
+    for (uint8_t b : text) CHECK(!r.push(b));                  // plain text is skipped
+    uint8_t f[FRAME_HEADER + 4];
+    frame_header(f, 'P', 4);
+    f[4] = 1; f[5] = 2; f[6] = 3; f[7] = 4;
+    int done = 0;
+    for (uint8_t b : f) done += r.push(b);
+    CHECK(done == 1 && r.type() == 'P' && r.size() == 4 && r.payload()[3] == 4);
+    uint8_t n0[FRAME_HEADER]; frame_header(n0, 'N', 0);
+    done = 0;
+    for (uint8_t b : n0) done += r.push(b);
+    CHECK(done == 1 && r.type() == 'N' && r.size() == 0);
+    uint8_t bad[] = {FRAME_MAGIC, 'M', 4, 0};                   // a board type: not ours
+    for (uint8_t b : bad) CHECK(!r.push(b));
+    uint8_t big[] = {FRAME_MAGIC, 'P', 0x01, 0x10};             // 4097 bytes: refused
+    for (uint8_t b : big) CHECK(!r.push(b));
+    done = 0;
+    uint8_t again[] = {FRAME_MAGIC, FRAME_MAGIC, 'X', 0, 0};    // magic twice, then a frame
+    for (uint8_t b : again) done += r.push(b);
+    CHECK(done == 1 && r.type() == 'X');
+  }
+  // The speaker's ring: all or nothing, wraps, flushes on the reader's side.
+  {
+    static int16_t store[8];
+    SampleRing ring(store, 8);
+    int16_t a[6] = {1, 2, 3, 4, 5, 6}, out[8] = {};
+    CHECK(ring.put(a, 6) && ring.queued() == 6 && ring.room() == 2);
+    CHECK(!ring.put(a, 3) && ring.queued() == 6);              // a frame never goes in half
+    CHECK(ring.take(out, 4) == 4 && out[0] == 1 && out[3] == 4);
+    CHECK(ring.put(a, 6));                                      // wraps past the end
+    CHECK(ring.take(out, 8) == 8 && out[0] == 5 && out[1] == 6 && out[2] == 1 && out[7] == 6);
+    CHECK(ring.take(out, 8) == 0);
+    CHECK(ring.put(a, 5));
+    ring.flush();
+    CHECK(ring.take(out, 8) == 0 && ring.queued() == 0);
+  }
   CHECK(parse("arm").cmd == Cmd::None);                      // nothing that sounds like motion
   CHECK(parse("").cmd == Cmd::None);
   CHECK(parse("look 0.1 0.2\r").cmd == Cmd::Look);

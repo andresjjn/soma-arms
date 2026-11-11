@@ -21,6 +21,7 @@
 #include "esp_lcd_gc9a01.h"
 #include "fast_render.h"
 #include "protocol.h"
+#include "frames.h"
 #include "style_default.h"
 
 // Pins (Waveshare example, Display_GC9A01.h)
@@ -200,6 +201,9 @@ static void handle_line(char* line) {
     case eyes::Cmd::Rec:     audio::rec(p.a); return;
     case eyes::Cmd::Play:    audio::play(p.bytes); return;
     case eyes::Cmd::SelfTest: audio::selftest(); return;
+    case eyes::Cmd::Stream:
+      if (!audio::stream_begin()) { Serial.println("err audio: cannot stream"); return; }
+      break;
     case eyes::Cmd::Vol:     if (!audio::ready()) { Serial.println("err audio: codecs did not start"); return; }
                              audio::volume(int(p.a)); break;
     case eyes::Cmd::Stats: {
@@ -218,6 +222,7 @@ static void handle_line(char* line) {
 
 void setup() {
   Serial.setRxBufferSize(16384);
+  Serial.setTxBufferSize(8192);                  // a 20 ms microphone frame is 644 bytes
   Serial.begin(115200);
   spi_bus_config_t bus = {};
   bus.mosi_io_num = PIN_MOSI;
@@ -245,14 +250,39 @@ void setup() {
   randomSeed(esp_random());
 }
 
+// A frame from the host while streaming (frames.h): speaker audio, a flush,
+// a keepalive, or a command line such as `mood happy` or `stream off`.
+static void on_frame(const eyes::FrameReader& f) {
+  if (f.type() != 'C') { audio::stream_frame(f.type(), f.payload(), f.size()); return; }
+  static char cmd[64];
+  size_t n = f.size() < sizeof(cmd) - 1 ? f.size() : sizeof(cmd) - 1;
+  memcpy(cmd, f.payload(), n);
+  cmd[n] = '\0';
+  audio::stream_frame('N', nullptr, 0);         // any frame keeps the stream alive
+  if (!strcmp(cmd, "stream off")) { audio::stream_end(); return; }
+  handle_line(cmd);
+}
+
 void loop() {
   static char line[64];
   static size_t len = 0;
-  while (Serial.available()) {
-    char c = Serial.read();
-    if (c == '\n') { line[len] = '\0'; if (len) handle_line(line); len = 0; }
-    else if (len < sizeof(line) - 1) line[len++] = c;
+  static eyes::FrameReader frames;
+  static uint8_t chunk[512];
+  int avail;
+  while ((avail = Serial.available()) > 0) {
+    int got = Serial.read(chunk, min(avail, int(sizeof(chunk))));
+    for (int i = 0; i < got; i++) {
+      if (audio::streaming()) {
+        if (frames.push(chunk[i])) on_frame(frames);
+        if (!audio::streaming()) { frames.reset(); len = 0; }     // `stream off` mid chunk
+        continue;
+      }
+      char c = char(chunk[i]);
+      if (c == '\n') { line[len] = '\0'; if (len) handle_line(line); len = 0; }
+      else if (len < sizeof(line) - 1) line[len++] = c;
+    }
   }
+  audio::stream_poll();
   static uint32_t last = millis();
   uint32_t now = millis();
   animate(now, (now - last) / 1000.0f);

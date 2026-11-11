@@ -1044,3 +1044,12 @@ Phase 0 passed its gate the same day: the ES7210 and ES8311 drivers
 (Espressif, Apache-2.0, as Waveshare adapted them to Wire) with `rec`,
 `play`, `vol` and `selftest`, and tools/audio_check.py measuring dBFS per
 channel. Numbers in docs/voice_plan.md.
+
+## 2026-11-10, SOMA's voice: phase 1, the first conversation
+
+The relay (firmware/eyes/tools/voice_relay.py) holds a Gemini Live session
+and the board streams over USB: SOMA answered two spoken questions in
+Spanish, heard through its own microphone, 1.6 and 2.0 s from the last word
+to the first audio. Model comparison, transport numbers and the four
+defects found on the way are in docs/voice_plan.md. The relay has no tool:
+the voice never reaches the arms, and a test checks that.

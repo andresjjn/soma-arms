@@ -26,4 +26,13 @@ void volume(int percent);
 // compares the 1 kHz energy of the two parts: the speaker sounds or not.
 void selftest();
 
+// Phase 1, the conversation (frames.h): the microphone streams 20 ms frames
+// and the speaker plays a queue the host fills, each in its own task on
+// core 0 while the eyes keep drawing on core 1.
+bool stream_begin();
+void stream_end();
+bool streaming();
+void stream_frame(uint8_t type, const uint8_t* payload, size_t len);   // P, X, N
+void stream_poll();                         // leaves the stream if the host went quiet
+
 }  // namespace audio

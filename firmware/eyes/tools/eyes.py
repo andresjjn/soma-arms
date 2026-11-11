@@ -52,7 +52,7 @@ def main(argv=None) -> int:
         commands = ['ping']
     with serial.Serial(port, 115200, timeout=0.5) as s:
         time.sleep(0.3)
-        s.reset_input_buffer()
+        drain(s)
         for c in commands:
             s.write((c + '\n').encode())
             reply = s.readline().decode(errors='replace').strip()
@@ -60,6 +60,16 @@ def main(argv=None) -> int:
             if args.tour:
                 time.sleep(args.pause)
     return 0
+
+
+def drain(s, quiet_s: float = 0.15, limit_s: float = 1.5) -> None:
+    """Discard what the board left in the buffers (stale audio frames after a
+    stream ended with the port closed) until it has been quiet for quiet_s."""
+    old, s.timeout = s.timeout, quiet_s
+    end = time.monotonic() + limit_s
+    while time.monotonic() < end and s.read(65536):
+        pass
+    s.timeout = old
 
 
 def story(port: str) -> int:
