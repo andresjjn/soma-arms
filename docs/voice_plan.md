@@ -135,6 +135,14 @@ speaking; each of SOMA's phrases starts looking away and ends looking back
 at the person; the gaze searches up and aside while thinking; the eyes
 blink less while hearing, and sometimes once in the person's pause.
 
+Waking late, fixed the same day: the gate stopped sending audio a second
+after the phrase, so the transcription model kept waiting for the silence
+that ends an utterance and "despierta" only registered when more sound
+reopened the gate. Measured against the API with a synthesized "SOMA,
+despierta": before, no wake within 6 s; with `audio_stream_end` when the
+gate closes, 1.2 s after the phrase; waking on the partial transcription
+as well, 0.6 to 0.7 s.
+
 Half duplex, measured: the speaker's sound at the microphone falls from
 -32 dBFS to the -63 floor about 0.2 s after the relay's estimate of the
 end of playback, inside the 0.35 s tail.

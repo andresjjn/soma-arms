@@ -260,3 +260,19 @@ def test_the_envelope_plays_chunks_back_to_back_on_the_speaker_clock():
     assert e.level(10.5) == -120.0                            # nothing left
     e.clear()
     assert e.level(10.05) == -120.0
+
+
+def test_the_gate_says_once_when_the_talk_ended():
+    # 2026-11-10: without this the transcription waited for silence that the
+    # closed gate never sent, and "despierta" woke SOMA seconds late.
+    g = vr.VoiceGate()
+    voice = vr.to_int16(np.full(320, 3000.0))
+    quiet = bytes(640)
+    for i in range(5):
+        g.frame(voice, i * 0.02)
+    ends = []
+    for i in range(5, 5 + 100):                        # two seconds of quiet
+        g.frame(quiet, i * 0.02)
+        ends.append(g.ended)
+    assert sum(ends) == 1
+    assert ends.index(True) == pytest.approx(vr.VoiceGate.HOLD_S * 50, abs=2)

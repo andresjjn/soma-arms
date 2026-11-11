@@ -324,16 +324,27 @@ class VoiceGate:
         self.before = deque(maxlen=int(self.PREROLL_S * 50))
         self.open_until = 0.0
         self.run = 0
+        self.is_open = False
+        self.ended = False          # set on the frame where the gate closes
 
     def frame(self, pcm: bytes, now: float) -> list[bytes]:
+        self.ended = False
         self.run = self.run + 1 if dbfs(pcm) > VOICE_DBFS else 0
         if self.run >= VOICE_RUN:
             out = list(self.before) if now >= self.open_until else []
             self.before.clear()
             self.open_until = now + self.HOLD_S
+            self.is_open = True
             return out + [pcm]
         if now < self.open_until:
             return [pcm]
+        if self.is_open:
+            # The talk ended: the caller tells the server the audio stopped,
+            # so it finishes the transcription now instead of waiting for
+            # silence that will never arrive (2026-11-10: "despierta" woke
+            # SOMA late because the gate cut the audio after the phrase).
+            self.is_open = False
+            self.ended = True
         self.before.append(pcm)
         return []
 
@@ -501,6 +512,8 @@ class Relay:
                     now, pcm = await mic.get()
                     for out in gate.frame(pcm, now):
                         await session.send_realtime_input(audio=types.Blob(data=out, mime_type=f'audio/pcm;rate={RATE}'))
+                    if gate.ended:
+                        await session.send_realtime_input(audio_stream_end=True)
             feeder = asyncio.create_task(feed())
             try:
                 heard = ''
@@ -509,11 +522,16 @@ class Relay:
                     async for msg in session.receive():
                         got = True
                         sc = msg.server_content
-                        if sc and sc.input_transcription and sc.input_transcription.text:
+                        if not sc:
+                            continue
+                        # The partial transcription arrives while the phrase is
+                        # still being said: waking on it saves the wait for the end.
+                        partial = sc.interim_input_transcription.text if sc.interim_input_transcription else ''
+                        if sc.input_transcription and sc.input_transcription.text:
                             heard = (heard + sc.input_transcription.text)[-200:]
-                            if says(heard, WAKE_WORDS):
-                                print(f'  [asleep] heard: {heard.strip()}', flush=True)
-                                return
+                        if says(heard, WAKE_WORDS) or (partial and says(partial, WAKE_WORDS)):
+                            print(f'  [asleep] heard: {(partial or heard).strip()}', flush=True)
+                            return
                     if not got:
                         raise ConnectionError('the transcription session closed')
             finally:
