@@ -9,8 +9,8 @@ speaker, a Gemini Live session in between. Spanish first.
     voice_relay.py --voice Kore          one of Gemini's prebuilt voices
 
 The board streams 20 ms microphone frames and plays what this sends
-(firmware/eyes/eyes/frames.h). The key comes from the macOS Keychain
-(service soma-voice-gemini), never from a file. Every turn is logged with
+(firmware/eyes/eyes/frames.h). The key comes from the environment,
+GEMINI_API_KEY, never from the repository. Every turn is logged with
 its latency and tokens to firmware/eyes/rec/voice_log.csv (ignored by git:
 it holds transcripts of the room).
 
@@ -27,7 +27,6 @@ import math
 import os
 import random
 import struct
-import subprocess
 import sys
 import threading
 import time
@@ -404,12 +403,13 @@ class SpeakerQueue:
 
 # ---- the session ----
 
-def keychain_key() -> str:
-    r = subprocess.run(['security', 'find-generic-password', '-a', os.environ.get('USER', ''),
-                        '-s', 'soma-voice-gemini', '-w'], capture_output=True, text=True)
-    if r.returncode or not r.stdout.strip():
-        raise SystemExit('no key in the Keychain: security add-generic-password -a "$USER" -s soma-voice-gemini -w')
-    return r.stdout.strip()
+def gemini_key() -> str:
+    key = os.environ.get('GEMINI_API_KEY', '').strip()
+    if not key:
+        raise SystemExit('no GEMINI_API_KEY in the environment (Jetson: set -a; . ~/.config/soma/voice.env; '
+                         'set +a; Mac: export GEMINI_API_KEY="$(security find-generic-password '
+                         '-s soma-voice-gemini -w)")')
+    return key
 
 
 class GoToSleep(Exception):
@@ -469,7 +469,7 @@ class Relay:
         self.command(f'vol {vol}')                 # every session sets it: no volume left over from a test
         for line in ('idle off', 'mood neutral', 'sleep'):
             self.command(line)
-        client = genai.Client(api_key=keychain_key())
+        client = genai.Client(api_key=gemini_key())
         loop = asyncio.get_running_loop()
         mic: asyncio.Queue = asyncio.Queue()
         stop = threading.Event()
