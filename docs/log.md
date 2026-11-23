@@ -1061,3 +1061,39 @@ shut, "despierta", the eyes opening, a short conversation in neutral Latin
 American Spanish, and asleep again. 32 s, vertical, uncut:
 docs/media/video/voice_wake_2026-11-10.mp4 (720x1280, location metadata
 stripped). The arms do not move in it; the voice has no way to them.
+
+## 2026-11-22, the voice moves to the Jetson, Gemini's tools, new eyes (nothing moved)
+
+- The relay runs on the Jetson: repo pulled to 32bcc9d, a venv for the
+  voice (~/venvs/soma-voice), `jetson` added to `dialout`, the key in
+  ~/.config/soma/voice.env (mode 600) and read only from GEMINI_API_KEY.
+  `selftest` from the Jetson: tone -18.1 dBFS at the board's microphone
+  against -89.3 quiet, +71.1 dB (the Mac read +56.4 on 2026-11-10; the
+  difference is the floor, cause not isolated). Latencies 1.2 to 2.1 s, as
+  on the Mac.
+- SOMA did not sleep on "por favor, duerme", "Soma duerme" or "Dórmete":
+  Gemini said goodbye each time, the fixed word list did not match. Gemini
+  now has two whitelisted tools, `dormir` and `expresar` (the six moods);
+  the old no-tools test became a whitelist test that still bans every way
+  to the arms. First live try: twice the turn went mute after `expresar`,
+  because a SILENT answer to a call made before any audio gives the model
+  nothing to resume; WHEN_IDLE in that case, measured against the API
+  (gemini-3.8-live speaks about 0.7 s after the call). A mood turn costs
+  about 0.8 s more than a plain one.
+- SOMA went deaf mid-conversation once, with no error. Likely cause, not
+  proven: one lost speaker ack kept a frame "in flight" forever, which the
+  relay reads as SOMA speaking and mutes the microphone. Acks now expire
+  after 1 s, with a warning, and a second warning names a silent microphone.
+- Tokens: the Live API bills the whole session context every turn, and the
+  context is almost all microphone audio, mostly silence (about 25 tokens a
+  second awake). A 4 minute talk processed about 59,000 tokens; the new
+  identity prompt is 393. Next saving: gate the silence while awake too.
+- Eyes: Andres rejected a camera-diaphragm closure and brought a design
+  made with Gemini (spec and reference images in docs/eye_references). The
+  board's renderer draws the nine reference states pixel for pixel (8 px
+  off in sad, a rounding in the reference). Flashed from the Jetson with
+  esptool after a full 16 MB read-back of the old firmware (950fd50, kept
+  on the Jetson and the Mac). Andres's verdict on the panel: it works, and
+  very well. Redraws measured about 32 fps during blinks and mood blends.
+- Found on the Jetson: the soma_driver container ran with
+  `allow_real:=true` (gate 1 open), not changed here.
