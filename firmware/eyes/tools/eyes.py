@@ -15,7 +15,9 @@ import glob
 import sys
 import time
 
-TOUR = ('mood happy', 'mood sad', 'mood angry', 'mood surprised', 'mood sleepy', 'blink',
+# The board boots asleep (2026-11-10), so the tour opens the eyes first;
+# without it, --tour ran behind shut lids (2026-11-22).
+TOUR = ('idle off', 'wake', 'mood happy', 'mood sad', 'mood angry', 'mood surprised', 'mood sleepy', 'blink',
         'look -0.8 0', 'look 0.8 0', 'look 0 -0.7', 'look 0 0.6', 'mood neutral', 'look 0 0')
 
 # A short take with a story: it wakes up, looks around, finds the camera,
@@ -47,7 +49,7 @@ def main(argv=None) -> int:
         return 2
     if args.story:
         return story(port)
-    commands = list(TOUR) if args.tour else args.commands
+    commands = args.commands + list(TOUR) if args.tour else args.commands
     if not commands:
         commands = ['ping']
     with serial.Serial(port, 115200, timeout=0.5) as s:
