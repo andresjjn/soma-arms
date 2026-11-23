@@ -331,3 +331,10 @@ def test_the_gate_says_once_when_the_talk_ended():
         ends.append(g.ended)
     assert sum(ends) == 1
     assert ends.index(True) == pytest.approx(vr.VoiceGate.HOLD_S * 50, abs=2)
+
+
+def test_a_mood_set_before_speaking_still_lets_soma_answer():
+    # 2026-11-22: a SILENT answer to a call made before any audio left SOMA
+    # mute for the whole turn; Andres had to ask "¿estás ahí?".
+    assert vr.answer_scheduling(spoke=False) == 'WHEN_IDLE'
+    assert vr.answer_scheduling(spoke=True) == 'SILENT'

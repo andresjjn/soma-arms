@@ -130,6 +130,16 @@ def tool_command(name, args) -> tuple[str, str] | None:
     return None
 
 
+def answer_scheduling(spoke: bool) -> str:
+    """How Gemini takes an expresar answer. Measured on 2026-11-22: when the
+    call comes before any audio of the turn (gemini-3.8-live always does
+    this, 3.1 flash live did it with a real voice), SILENT leaves SOMA mute,
+    because nothing makes it generate again; WHEN_IDLE makes it answer about
+    0.7 s after the call, without mentioning the tool. When SOMA is already
+    talking, SILENT keeps it from starting a second turn about the tool."""
+    return 'SILENT' if spoke else 'WHEN_IDLE'
+
+
 def live_tools(types) -> list:
     """TOOLS as google-genai objects, for LiveConnectConfig(tools=...)."""
     return [types.Tool(function_declarations=[types.FunctionDeclaration(**d) for d in TOOLS])]
@@ -683,11 +693,11 @@ class Relay:
             else:
                 self.command(action[1])
                 response = {'ok': True}
-            # SILENT: Gemini takes the answer without a new turn about it. A
-            # blocking call (dormir) ignores scheduling and simply continues.
+            # A blocking call (dormir) ignores scheduling and simply continues.
+            when = None if action == SLEEP else answer_scheduling('first' in self.turn)
             responses.append(types.FunctionResponse(
                 id=fc.id, name=fc.name, response=response,
-                scheduling=None if action == SLEEP else types.FunctionResponseScheduling.SILENT))
+                scheduling=when and getattr(types.FunctionResponseScheduling, when)))
         if responses:
             await session.send_tool_response(function_responses=responses)
 
