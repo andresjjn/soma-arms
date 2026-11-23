@@ -338,3 +338,17 @@ def test_a_mood_set_before_speaking_still_lets_soma_answer():
     # mute for the whole turn; Andres had to ask "¿estás ahí?".
     assert vr.answer_scheduling(spoke=False) == 'WHEN_IDLE'
     assert vr.answer_scheduling(spoke=True) == 'SILENT'
+
+
+def test_a_lost_ack_does_not_mute_soma_forever():
+    # 2026-11-22: SOMA stopped hearing mid-conversation with nothing on screen.
+    # One ack lost on the wire kept a frame "in flight", so the relay believed
+    # SOMA was still speaking and sent the microphone as silence for good.
+    q = vr.SpeakerQueue()
+    q.ack(0, 1 << 19, 0.0)
+    q.sent(10.0)
+    assert q.speaking(10.5) and not q.expire(10.5)    # a late ack is still fine
+    assert q.expire(10.0 + vr.ACK_LOST_S + 0.1)
+    assert q.lost == 1 and q.inflight == 0
+    assert not q.speaking(12.0)                       # the microphone opens again
+    assert q.may_send(vr.MAX_PAYLOAD, 12.0)

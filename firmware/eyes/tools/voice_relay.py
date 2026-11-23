@@ -45,6 +45,10 @@ KEEPALIVE_S = 1.0               # the board leaves the stream after 3 s of quiet
 VOICE_DBFS = -40.0              # speech frames: voice RMS about -30, quiet room median -59
 VOICE_RUN = 3                   # ... at least this many in a row (60 ms): single clicks reach -29
 TAIL_S = 0.35                   # after the speaker empties, still half duplex this long
+# An ack takes milliseconds. One lost on the wire used to leave a frame
+# "in flight" forever, and with it the microphone muted: on 2026-11-22 SOMA
+# stopped hearing in the middle of a conversation, with nothing on screen.
+ACK_LOST_S = 1.0
 DEFAULT_MODEL = 'gemini-3.1-flash-live-preview'
 TRANSCRIBE_MODEL = 'gemini-3.5-transcribe-live'   # asleep: transcribes, never answers
 WAKE_PROMPT = ('(Te acaban de despertar diciendo "despierta". Abre los ojos y saluda '
@@ -473,6 +477,20 @@ class SpeakerQueue:
         self.capacity = 1 << 19
         self.at = 0.0
         self.inflight = 0
+        self.sent_at = 0.0
+        self.lost = 0                               # acks given up on, for the log
+
+    def sent(self, now: float) -> None:
+        self.inflight += 1
+        self.sent_at = now
+
+    def expire(self, now: float) -> bool:
+        """Give up on acks that never came; True when it just did."""
+        if self.inflight and now - max(self.at, self.sent_at) > ACK_LOST_S:
+            self.lost += self.inflight
+            self.inflight = 0
+            return True
+        return False
 
     def ack(self, queued: int, capacity: int, now: float) -> None:
         self.queued, self.capacity, self.at = queued, capacity, now
@@ -524,6 +542,7 @@ class Relay:
         self.tokens = 0
         self.sleep_asked = False
         self.sleep_grace = 0                        # silent turns a dormir call may wait for its goodbye
+        self.mic_at = time.monotonic()              # the board's last microphone frame
 
     def send(self, kind: str, payload: bytes = b'') -> None:
         with self.write_lock:
@@ -541,6 +560,7 @@ class Relay:
             now = time.monotonic()
             for kind, payload in frames:
                 if kind == 'M':
+                    self.mic_at = now
                     loop.call_soon_threadsafe(mic.put_nowait, (now, payload))
                 elif kind == 'K' and len(payload) == 8:
                     self.speaker.ack(*struct.unpack('<II', payload), now)
@@ -750,10 +770,12 @@ class Relay:
     async def speaker_feed(self) -> None:
         while True:
             now = time.monotonic()
+            if self.speaker.expire(now):
+                print(f'  [warn] speaker acks lost ({self.speaker.lost} so far): listening again', flush=True)
             if self.pending and self.speaker.may_send(MAX_PAYLOAD, now):
                 chunk = bytes(self.pending[:MAX_PAYLOAD])
                 del self.pending[:MAX_PAYLOAD]
-                self.speaker.inflight += 1
+                self.speaker.sent(now)
                 self.envelope.add(chunk, now)
                 self.send('P', chunk)
                 continue
@@ -769,9 +791,16 @@ class Relay:
             await asyncio.sleep(0.05)
 
     async def keepalive(self) -> None:
+        quiet = False
         while True:
             await asyncio.sleep(KEEPALIVE_S)
             self.send('N')
+            # The board sends 50 microphone frames a second: their absence is
+            # the other way SOMA can go deaf without an error (2026-11-22).
+            gap = time.monotonic() - self.mic_at
+            if gap > 2.0 and not quiet:
+                print(f'  [warn] no microphone frames from the board for {gap:.1f} s', flush=True)
+            quiet = gap > 2.0
 
     def log_turn(self) -> None:
         t = self.turn
