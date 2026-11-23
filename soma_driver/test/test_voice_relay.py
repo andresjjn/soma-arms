@@ -1,6 +1,6 @@
 """The voice relay's pure parts (docs/voice_plan.md, phase 1): the board's
-frames, the 24 to 16 kHz resampler and the half duplex estimate. No serial
-port, no network, no Gemini."""
+frames, the 24 to 16 kHz resampler, the half duplex estimate and the tool
+whitelist. No serial port, no network, no Gemini."""
 import struct
 import sys
 from pathlib import Path
@@ -89,10 +89,61 @@ def test_the_window_bounds_what_is_in_flight():
     assert not q.may_send(vr.MAX_PAYLOAD, 0.0)
 
 
-def test_the_relay_offers_no_way_to_the_arms():
-    source = (Path(vr.__file__)).read_text()
-    for word in ('/soma/arm', 'allow_real', 'soma/command', 'rclpy', 'tools=', 'FunctionDeclaration'):
+REPO = Path(__file__).resolve().parents[2]
+
+
+def _board_moods():
+    """The moods the eye firmware accepts, read from its own sources: the
+    error text of `mood` in protocol.h and the name table in style.h."""
+    import re
+    protocol = (REPO / 'firmware' / 'eyes' / 'eyes' / 'protocol.h').read_text()
+    advertised = re.search(r'"mood ([a-z|]+)"', protocol).group(1).split('|')
+    style = (REPO / 'firmware' / 'eyes' / 'eyes' / 'style.h').read_text()
+    table = re.findall(r'"([a-z]+)"', re.search(r'names\[MOODS\] = \{([^}]*)\}', style).group(1))
+    assert advertised == table
+    return advertised
+
+
+def test_the_voice_has_a_whitelist_of_tools_and_none_reaches_the_arms():
+    """Until 2026-11-22 this test forbade any tool at all ('tools=' and
+    'FunctionDeclaration' could not appear in the source). Layer 2 gives
+    Gemini two tools, the eyes' mood and sleep, so the rule became a
+    whitelist: exactly these two, checked on the declarations themselves,
+    and still no word of the arm interfaces anywhere in the relay."""
+    source = Path(vr.__file__).read_text()
+    for word in ('/soma/arm', 'allow_real', 'soma/command', 'rclpy'):
         assert word not in source
+    assert {t['name'] for t in vr.TOOLS} == {'expresar', 'dormir'}
+    assert len(vr.TOOLS) == 2
+    expresar = next(t for t in vr.TOOLS if t['name'] == 'expresar')
+    assert expresar['parameters']['properties']['emocion']['enum'] == _board_moods()
+    assert set(expresar['parameters']['properties']) == {'emocion'}
+    assert expresar['behavior'] == 'NON_BLOCKING'
+    dormir = next(t for t in vr.TOOLS if t['name'] == 'dormir')
+    assert 'parameters' not in dormir
+
+
+def test_expresar_sends_every_board_mood_and_nothing_else():
+    for mood in _board_moods():
+        assert vr.tool_command('expresar', {'emocion': mood}) == ('board', f'mood {mood}')
+    for args in ({'emocion': 'furious'}, {'emocion': 'Happy'}, {'emocion': 'happy; sleep'},
+                 {'emocion': 3}, {}, None, {'emocion': 'happy', 'brazo': 'right'}):
+        assert vr.tool_command('expresar', args) is None
+
+
+def test_dormir_asks_for_sleep_and_unknown_tools_are_refused():
+    assert vr.tool_command('dormir', {}) == vr.SLEEP
+    assert vr.tool_command('dormir', None) == vr.SLEEP
+    assert vr.tool_command('dormir', {'ya': True}) is None
+    for name in ('mover_brazo', 'arm', '', None, 'Expresar'):
+        assert vr.tool_command(name, {'emocion': 'happy'}) is None
+
+
+def test_the_tools_build_as_live_api_declarations():
+    types = pytest.importorskip('google.genai.types')
+    declared = vr.live_tools(types)[0].function_declarations
+    assert [d.name for d in declared] == [t['name'] for t in vr.TOOLS]
+    assert declared[0].behavior == types.Behavior.NON_BLOCKING
 
 
 def test_a_click_is_not_a_word_but_a_syllable_is():
@@ -214,6 +265,10 @@ def test_wake_and_sleep_words_survive_accents_and_punctuation():
     assert vr.says('Bueno, ya, duérmete.', vr.SLEEP_WORDS)
     assert vr.says('vete a dormir', vr.SLEEP_WORDS)
     assert not vr.says('no me puedo dormir', vr.SLEEP_WORDS)
+    # 2026-11-22: heard and answered with a goodbye, but SOMA stayed awake
+    assert vr.says('Dórmete.', vr.SLEEP_WORDS)
+    assert vr.says('Soma, duerme', vr.SLEEP_WORDS)
+    assert not vr.says('mi gato duerme mucho', vr.SLEEP_WORDS)   # a bare "duerme" is the tool's job
 
 
 def test_asleep_a_quiet_room_sends_nothing_and_a_voice_keeps_its_first_syllable():

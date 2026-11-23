@@ -149,6 +149,42 @@ end of playback, inside the 0.35 s tail.
 
 Video of the first take: `docs/media/video/voice_wake_2026-11-10.mp4`.
 
+## Phase 2, layer 2: Gemini's two tools (2026-11-22, code and tests; not yet tried live)
+
+Gemini gets two function tools and nothing else, a whitelist declared in
+`TOOLS` in the relay:
+
+- `expresar(emocion)`: the eyes' mood, one of the six the firmware accepts
+  (the test reads them from `eyes/protocol.h` and `eyes/style.h`).
+  Declared `NON_BLOCKING` and answered with scheduling `SILENT`, so SOMA
+  neither waits for it nor talks about it. A mood lasts until Gemini
+  changes it, and every wake and every sleep resets it to `neutral`, so a
+  mood never survives into the next conversation.
+- `dormir()`: the person asks SOMA to sleep or says goodbye. It sets the
+  same flag as the sleep words: the goodbye plays, the speaker drains, the
+  eyes close. It is blocking, so Gemini says the goodbye around the call;
+  if a turn ends with no audio after it, the relay waits one more turn for
+  the goodbye instead of closing the eyes in silence.
+
+Why: on 2026-11-22 "por favor, duerme", "Soma duerme" and "Dórmete" each
+got a goodbye from Gemini, and the relay, matching words, never slept. The
+model already understood; now it can act on it. The sleep words stay as a
+net (`dormete` and `soma duerme` added; a bare `duerme` is left out because
+"el gato duerme" would end a conversation).
+
+Every call is checked by `tool_command()`: an unknown tool, an unknown mood
+or an extra argument is refused, never reaches the board, and still gets
+an error answer so a blocking call cannot hang the session. No tool
+reaches the arms; the test that once forbade any tool now pins the
+whitelist and still forbids every arm interface in the relay's source.
+
+The system prompt now tells SOMA who it is (the project, Andres, the
+version ladder, what works and what does not) and when to use each tool.
+
+Not verified without a live session: that `gemini-3.1-flash-live-preview`
+accepts `NON_BLOCKING` and `SILENT` (the installed google-genai 2.30
+sends both), and how often it calls each tool.
+
 ## Phases, each with its gate
 
 | Phase | Work | Gate |

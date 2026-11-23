@@ -15,8 +15,9 @@ its latency and tokens to firmware/eyes/rec/voice_log.csv (ignored by git:
 it holds transcripts of the room).
 
 Phase 1 is half duplex: while SOMA speaks, the microphone sends silence, so
-the speaker does not talk to itself (barge-in is phase 2). The relay
-exposes no tool: the voice never reaches the arms.
+the speaker does not talk to itself (barge-in is phase 2). Gemini gets two
+tools and nothing else (TOOLS, layer 2): `expresar` sets the eyes' mood and
+`dormir` ends the conversation. Neither reaches the arms.
 """
 import argparse
 import asyncio
@@ -54,11 +55,84 @@ DEFAULT_VOL = 75               # Andres, 2026-11-10: 85 felt like it could hurt 
 DEFAULT_VOICE = 'Capella'      # chosen by Andres, 2026-11-10
 LANGUAGE = 'es-US'             # Google's Latin American Spanish; the prompt asks for a neutral one
 LOG = Path(__file__).resolve().parents[1] / 'rec' / 'voice_log.csv'
-SYSTEM = ('Eres SOMA, un robot con dos brazos de aluminio colgados de una caja central, '
-          'unos ojos redondos en dos pantallas y una cámara. Hablas español latinoamericano neutro, '
-          'sin modismos ni acento de ningún país en particular, con frases cortas '
-          'y naturales, como en una conversación. No puedes mover los brazos por voz todavía: '
-          'si te lo piden, dilo con honestidad. Si te piden que te duermas, despídete en una frase corta.')
+# Who SOMA is, drafted from README.md and docs/plan.md (2026-11-22). Short on
+# purpose: it is sent at the start of every conversation.
+SYSTEM = (
+    'Eres SOMA, sigla en inglés de Skilled Operator via Mimicry and Autonomy. Eres un robot: '
+    'dos brazos de aluminio de seis grados de libertad colgados de una caja central sobre una '
+    'columna, dos ojos redondos en dos pantallas pequeñas, un micrófono, un parlante y una '
+    'cámara de profundidad. Te construye Andrés, un técnico electrónico que está aprendiendo '
+    'robótica de punta a punta.\n'
+    'Tu proyecto avanza por versiones y termina en la 1.0. Ya cumpliste la 0.1, tu modelo '
+    'calibrado, y la 0.2, el controlador real de tus brazos. Sigue la 0.3: tocar con la pinza '
+    'un punto que alguien señala en la imagen de la cámara. Luego la 0.4, tomar y dejar piezas '
+    'sin ayuda de la nube; la 0.5, un supervisor que mira con la cámara y verifica tu trabajo; '
+    'y la 1.0, atender una celda de trabajo durante seis o siete horas seguidas, como un operario.\n'
+    'Hoy funcionan tus ojos, tu voz y tus brazos en el banco de pruebas, siempre bajo el '
+    'control de Andrés. Tu voz nunca mueve los brazos: no puedes moverlos al hablar, y si te '
+    'lo piden, dilo con honestidad. Si no sabes algo de ti, dilo; no lo inventes.\n'
+    'Hablas español latinoamericano neutro, sin modismos ni acento de ningún país en '
+    'particular, con frases cortas y naturales, como en una conversación.\n'
+    'Tienes dos herramientas. expresar cambia la expresión de tus ojos y se queda hasta que la '
+    'cambies: úsala poco, solo cuando tu emoción cambia de verdad, no en cada frase, y nunca '
+    'hables de ella. dormir cierra tus ojos y termina la conversación: llámala cuando la persona '
+    'te pida que duermas o se despida, y despídete en una frase corta.')
+
+# ---- layer 2: the only things Gemini can ask for ----
+#
+# A strict whitelist. Gemini sees exactly these declarations, and
+# tool_command() turns a call into an action only when the name, the
+# argument names and the values all match; anything else is refused and
+# never reaches the board. No tool reaches the arms, now or later: when v0.5
+# arrives, a primitive goes behind the two arming gates (docs/voice_plan.md).
+
+MOODS = ('neutral', 'happy', 'sad', 'angry', 'surprised', 'sleepy')   # firmware/eyes/eyes/protocol.h
+TOOLS = (
+    {
+        'name': 'expresar',
+        'description': ('Cambia la expresión de tus ojos. La expresión se queda hasta que la '
+                        'cambies. Úsala solo cuando tu emoción cambia de verdad.'),
+        'parameters': {
+            'type': 'OBJECT',
+            'properties': {'emocion': {'type': 'STRING', 'enum': list(MOODS),
+                                       'description': 'la expresión de los ojos'}},
+            'required': ['emocion'],
+        },
+        # SOMA neither waits for the answer nor talks about it: the reply goes
+        # back with scheduling SILENT (Relay.answer_tools).
+        'behavior': 'NON_BLOCKING',
+    },
+    {
+        'name': 'dormir',
+        'description': ('Cierra tus ojos y termina la conversación. Llámala cuando la persona '
+                        'te pida que duermas o se despida.'),
+        # Blocking: Gemini says its goodbye around the call, and the relay
+        # sleeps only once that goodbye has played (Relay.downlink).
+        'behavior': 'BLOCKING',
+    },
+)
+SLEEP = ('sleep', '')
+
+
+def tool_command(name, args) -> tuple[str, str] | None:
+    """One function call to what it may do: ('board', 'mood happy') for a
+    board command, SLEEP to end the conversation after the goodbye, None
+    for anything outside the whitelist (unknown tool, unknown mood, missing
+    or extra arguments)."""
+    args = dict(args or {})
+    if name == 'expresar':
+        mood = args.get('emocion')
+        if set(args) == {'emocion'} and isinstance(mood, str) and mood in MOODS:
+            return ('board', f'mood {mood}')
+        return None
+    if name == 'dormir':
+        return SLEEP if not args else None
+    return None
+
+
+def live_tools(types) -> list:
+    """TOOLS as google-genai objects, for LiveConnectConfig(tools=...)."""
+    return [types.Tool(function_declarations=[types.FunctionDeclaration(**d) for d in TOOLS])]
 
 
 # ---- pure parts, tested in soma_driver/test/test_voice_relay.py ----
@@ -295,7 +369,13 @@ class EyeDirector:
 
 
 WAKE_WORDS = ('despierta', 'despiertate')
-SLEEP_WORDS = ('duermete', 'a dormir')
+# The net under the dormir tool, which is the main way to sleep (2026-11-22:
+# "por favor, duerme", "Soma duerme" and "Dórmete" got a goodbye from Gemini
+# but no sleep). 'dormete' is how "dórmete" transcribes, and nobody says it
+# for anything else. A bare 'duerme' is left out on purpose: "el gato duerme"
+# or "¿SOMA duerme de noche?" would end the conversation, and the tool already
+# understands the imperative; 'soma duerme' keeps the case that was heard.
+SLEEP_WORDS = ('duermete', 'dormete', 'a dormir', 'soma duerme')
 
 
 def plain(text: str) -> str:
@@ -433,6 +513,7 @@ class Relay:
         self.turn = {}
         self.tokens = 0
         self.sleep_asked = False
+        self.sleep_grace = 0                        # silent turns a dormir call may wait for its goodbye
 
     def send(self, kind: str, payload: bytes = b'') -> None:
         with self.write_lock:
@@ -487,7 +568,7 @@ class Relay:
         finally:
             keepalive.cancel()
             stop.set()
-            for line in ('sleep', 'pupil 1', 'look 0 0', 'stream off'):
+            for line in ('mood neutral', 'sleep', 'pupil 1', 'look 0 0', 'stream off'):
                 self.command(line)
             time.sleep(0.2)
             self.ser.close()
@@ -538,24 +619,29 @@ class Relay:
                 feeder.cancel()
 
     async def converse(self, client, mic: asyncio.Queue, types) -> None:
+        # A mood lasts until Gemini changes it, and never past the
+        # conversation: every wake and every sleep starts from neutral.
+        self.command('mood neutral')
         self.command('wake')
         self._empty(mic)
         self.voice = VoiceTracker()
         self.director = EyeDirector()
         self.sleep_asked = False
+        self.sleep_grace = 0
         config = types.LiveConnectConfig(
-            response_modalities=['AUDIO'], system_instruction=SYSTEM,
+            response_modalities=['AUDIO'], system_instruction=SYSTEM, tools=live_tools(types),
             input_audio_transcription={}, output_audio_transcription={},
             speech_config=types.SpeechConfig(language_code=LANGUAGE, voice_config=types.VoiceConfig(
                 prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=self.voice_name))))
         print(f'awake: {self.model}, voice {self.voice_name}. Talk to SOMA '
-              '("duérmete" or Ctrl-C ends).', flush=True)
+              '("duérmete", a goodbye or Ctrl-C ends).', flush=True)
         try:
             async with client.aio.live.connect(model=self.model, config=config) as session:
                 await session.send_client_content(
                     turns=types.Content(role='user', parts=[types.Part(text=WAKE_PROMPT)]), turn_complete=True)
                 tasks = [asyncio.create_task(c) for c in (
-                    self.uplink(session, mic, types), self.downlink(session), self.speaker_feed(), self.eyes())]
+                    self.uplink(session, mic, types), self.downlink(session, types), self.speaker_feed(),
+                    self.eyes())]
                 try:
                     done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
                 finally:
@@ -568,6 +654,7 @@ class Relay:
             self.pending.clear()
             self.envelope.clear()
             self.send('X')
+            self.command('mood neutral')
             self.command('sleep')
             print('asleep again.', flush=True)
 
@@ -580,7 +667,31 @@ class Relay:
                 self.voice.frame(dbfs(pcm), now)
             await session.send_realtime_input(audio=types.Blob(data=pcm, mime_type=f'audio/pcm;rate={RATE}'))
 
-    async def downlink(self, session) -> None:
+    async def answer_tools(self, session, calls, types) -> None:
+        """Every call gets an answer, so a blocking one never hangs the
+        session; only whitelisted ones do anything."""
+        responses = []
+        for fc in calls:
+            action = tool_command(fc.name, fc.args)
+            print(f'  [tool] {fc.name} {dict(fc.args or {})}{"" if action else " REFUSED"}', flush=True)
+            if action is None:
+                response = {'error': 'herramienta o argumento fuera de la lista permitida'}
+            elif action == SLEEP:
+                self.sleep_asked = True       # the goodbye plays, then SOMA sleeps
+                self.sleep_grace = 1
+                response = {'ok': True}
+            else:
+                self.command(action[1])
+                response = {'ok': True}
+            # SILENT: Gemini takes the answer without a new turn about it. A
+            # blocking call (dormir) ignores scheduling and simply continues.
+            responses.append(types.FunctionResponse(
+                id=fc.id, name=fc.name, response=response,
+                scheduling=None if action == SLEEP else types.FunctionResponseScheduling.SILENT))
+        if responses:
+            await session.send_tool_response(function_responses=responses)
+
+    async def downlink(self, session, types) -> None:
         while True:
             got = False
             async for msg in session.receive():
@@ -589,6 +700,9 @@ class Relay:
                     raise GoToSleep('the server is closing the session')
                 if msg.usage_metadata and msg.usage_metadata.total_token_count:
                     self.turn['tokens'] = msg.usage_metadata.total_token_count
+                # Tool calls come without server_content: before the check below.
+                if msg.tool_call and msg.tool_call.function_calls:
+                    await self.answer_tools(session, msg.tool_call.function_calls, types)
                 sc = msg.server_content
                 if not sc:
                     continue
@@ -609,7 +723,13 @@ class Relay:
                     self.envelope.clear()
                     self.send('X')
                 if sc.turn_complete:
+                    spoke = 'first' in self.turn
                     self.log_turn()
+                    if self.sleep_asked and not spoke and self.sleep_grace > 0:
+                        # dormir arrived but no goodbye played in this turn:
+                        # give Gemini one more turn to say it, not a silent exit.
+                        self.sleep_grace -= 1
+                        continue
                     if self.sleep_asked:
                         while self.pending or self.speaker.speaking(time.monotonic()):
                             await asyncio.sleep(0.05)
