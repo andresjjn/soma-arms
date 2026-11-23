@@ -15,12 +15,20 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parents[1]
 JSON = HERE / 'style.json'
 HEADER = HERE / 'eyes' / 'style_default.h'
-TOP = ('iris_r', 'pupil_r', 'gaze_reach', 'glint_dx', 'glint_dy', 'glint_r', 'lid_shadow', 'lid_edge', 'lid_seams')
-COLORS = ('sclera', 'sclera_edge', 'iris_in', 'iris_out', 'pupil', 'lid', 'glint')
-COLOR_FIELDS = {'lid_edge': 'lid_edge_color', 'lid_seam': 'lid_seam_color'}
+TOP = ('iris_r', 'pupil_r', 'gaze_reach', 'glint_dx', 'glint_dy', 'glint_r', 'sclera_r', 'lid_shadow',
+       'ring_limbal', 'ring_outer', 'ring_mid', 'ring_inner_pad', 'lid_tip', 'lid_rim', 'joint_x', 'joint_slope',
+       'joint_w', 'bevel_x', 'bevel_w', 'seam_y', 'seam_curve')
+# JSON color name -> Style field (two names clash with the widths of the same name)
+COLORS = {'sclera': 'sclera', 'sclera_shadow': 'sclera_shadow', 'sclera_rim': 'sclera_rim',
+          'iris_inner': 'iris_inner', 'iris_mid1': 'iris_mid1', 'iris_mid2': 'iris_mid2',
+          'iris_outer': 'iris_outer', 'iris_limbal': 'iris_limbal', 'iris_shadow': 'iris_shadow',
+          'pupil': 'pupil', 'glint': 'glint', 'glint_shadow': 'glint_shadow', 'lid': 'lid',
+          'lid_tip': 'lid_tip_color', 'lid_rim': 'lid_rim_color', 'lid_seam': 'lid_seam',
+          'lid_seam_hi': 'lid_seam_hi'}
 MOODS = ('neutral', 'happy', 'sad', 'angry', 'surprised', 'sleepy')
-TIMING = ('blink_close', 'blink_open', 'saccade_min', 'saccade_max', 'blink_every_min',
-          'blink_every_max', 'look_holds')
+MOOD_FIELDS = ('up', 'tilt', 'arch', 'low', 'curve', 'pupil')
+TIMING = ('blink_close', 'blink_hold', 'blink_open', 'sleep_close', 'sleep_open', 'mood_transition',
+          'saccade_min', 'saccade_max', 'blink_every_min', 'blink_every_max', 'look_holds')
 
 
 def rgb(hexcolor: str) -> str:
@@ -36,12 +44,11 @@ def render(style: dict) -> str:
              '#pragma once', '#include "style.h"', '', 'namespace eyes {', '',
              'inline Style default_style() {', '  Style s{};']
     lines += [f'  s.{k} = {float(style[k])!r}f;' for k in TOP]
-    lines += [f'  s.{k} = Rgb{rgb(style["colors"][k])};' for k in COLORS]
-    lines += [f'  s.{field} = Rgb{rgb(style["colors"][k])};' for k, field in COLOR_FIELDS.items()]
+    lines += [f'  s.{field} = Rgb{rgb(style["colors"][k])};' for k, field in COLORS.items()]
     for i, m in enumerate(MOODS):
         d = style['moods'][m]
-        lines.append(f'  s.moods[{i}] = {{{float(d["up"])!r}f, {float(d["tilt"])!r}f, '
-                     f'{float(d.get("arch", 0))!r}f, {float(d["low"])!r}f, {float(d["curve"])!r}f}};  // {m}')
+        values = ', '.join(f'{float(d[k])!r}f' for k in MOOD_FIELDS)
+        lines.append(f'  s.moods[{i}] = {{{values}}};  // {m}')
     lines += [f'  s.{k} = {float(style["timing_ms"][k])!r}f;' for k in TIMING]
     lines += ['  return s;', '}', '', '}  // namespace eyes', '']
     return '\n'.join(lines)

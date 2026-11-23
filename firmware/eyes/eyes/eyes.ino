@@ -31,6 +31,7 @@ constexpr int PIN_RST[2] = {48, 8};
 constexpr int PIN_BL[2] = {46, 39};
 constexpr int PIXEL_CLOCK_HZ = 80 * 1000 * 1000;
 constexpr int STRIPE = 24;                       // lines per DMA transfer
+// +1: the eye whose nose side is the picture's right (eye_model.h across()).
 constexpr float MIRROR[2] = {+1.0f, -1.0f};
 
 static esp_lcd_panel_handle_t panel[2];
@@ -40,7 +41,7 @@ static SemaphoreHandle_t free_bufs;              // counts stripe buffers not in
 
 static eyes::Style style;
 static eyes::FastStyle fast;                     // tables built from `style`
-static eyes::FastFrame frame;
+static eyes::FastFrame frame;                    // the lid rows per column, rebuilt for each eye it draws
 static bool style_dirty = true;
 static uint32_t frames_drawn = 0, frames_skipped = 0, stats_since = 0;
 static eyes::EyeState state;
@@ -48,10 +49,11 @@ static Preferences prefs;
 static float target_gx = 0, target_gy = 0;
 static float target_pupil = 1.0f;              // eased like the gaze: the voice moves it many times a second
 static bool idle_on = true;
-static uint32_t idle_pause_until = 0, next_saccade = 0, next_blink = 0, blink_start = 0;
+static uint32_t idle_pause_until = 0, next_saccade = 0, next_blink = 0, blink_start = 0, mood_start = 0;
 static bool blinking = false;
-// Asleep: the lids held shut. SOMA boots asleep and falls asleep when a
-// stream ends (even by timeout); `wake` opens the eyes over about a second.
+// Asleep: the lids held shut on the seam. SOMA boots asleep and falls asleep
+// when a stream ends (even by timeout); `sleep` shuts the eyes in
+// sleep_close ms, `wake` opens them in sleep_open ms (eye_model.h sleep_step).
 static float closed = 1.0f, target_closed = 1.0f;
 
 static bool IRAM_ATTR on_stripe_sent(esp_lcd_panel_io_handle_t, esp_lcd_panel_io_event_data_t*, void*) {
@@ -107,7 +109,8 @@ static void draw_eye(int i, eyes::Box b) {
 }
 
 static bool same_state(const eyes::EyeState& a, const eyes::EyeState& b) {
-  return a.gx == b.gx && a.gy == b.gy && a.pupil == b.pupil && a.blink == b.blink && a.mood == b.mood;
+  return a.gx == b.gx && a.gy == b.gy && a.pupil == b.pupil && a.blink == b.blink && a.mood == b.mood &&
+         a.blend == b.blend;
 }
 
 // Idle life: small saccades and blinks of their own; a command pauses it.
@@ -128,18 +131,15 @@ static void animate(uint32_t now, float dt) {
   state.gx += (target_gx - state.gx) * k;
   state.gy += (target_gy - state.gy) * k;
   state.pupil += (target_pupil - state.pupil) * fminf(1.0f, dt * 12.0f);
-  float b = 0;                                   // the blink's own lid, this frame
+  float b = 0;                                   // the blink's own closure, this frame
   if (blinking) {
-    float t = now - blink_start, c = style.blink_close, o = style.blink_open;
-    if (t < c) b = t / c;                        // quick down, slower up, like a real one
-    else if (t < c + o) b = 1.0f - (t - c) / o;
-    else blinking = false;
+    b = eyes::blink_closure(style, float(now - blink_start));   // t^2 down, a hold, a cubic ease up
+    if (b < 0) { b = 0; blinking = false; }
   }
-  // Waking is slower than falling asleep, like a person's.
-  float rate = target_closed < closed ? 2.5f : 4.0f;
-  closed += (target_closed - closed) * fminf(1.0f, dt * rate);
-  if (fabsf(target_closed - closed) < 0.002f) closed = target_closed;
-  state.blink = fmaxf(b, closed);               // asleep holds the lids, a blink can only close more
+  closed = eyes::sleep_step(style, closed, target_closed, dt * 1000.0f);
+  state.blink = fmaxf(b, closed);               // c = max(blink, closed): a blink can only close more
+  // A mood change blends lids and pupil over mood_transition ms.
+  if (state.blend < 1.0f) state.blend = eyes::mood_blend(style, float(now - mood_start));
 }
 
 // A still picture from the host, for previewing designs on the real panels:
@@ -192,7 +192,14 @@ static void handle_line(char* line) {
     case eyes::Cmd::Ping:    Serial.println("pong soma-eyes 0.1"); return;
     case eyes::Cmd::Look:    target_gx = p.a; target_gy = p.b; idle_pause_until = now + uint32_t(style.look_holds); break;
     case eyes::Cmd::Blink:   blinking = true; blink_start = now; break;
-    case eyes::Cmd::SetMood: state.mood = p.mood; break;
+    case eyes::Cmd::SetMood:
+      if (p.mood != state.mood) {               // blend from what is on screen, even mid blend
+        state.from = eyes::shape(style, state);
+        state.mood = p.mood;
+        state.blend = 0;
+        mood_start = now;
+      }
+      break;
     case eyes::Cmd::Pupil:   target_pupil = p.a; break;
     case eyes::Cmd::Bright:  set_brightness(p.a); break;
     case eyes::Cmd::Idle:    idle_on = p.on; break;
@@ -201,7 +208,7 @@ static void handle_line(char* line) {
       style_dirty = true;
       break;
     case eyes::Cmd::Style: {
-      static char json[1400];
+      static char json[2400];
       eyes::dump_json(style, json, sizeof(json));
       Serial.println(json);
       return;
@@ -315,8 +322,8 @@ void loop() {
   if (style_dirty) { eyes::prepare_style(fast, style); style_dirty = false; first = true; }
   if (!first && same_state(state, drawn)) { frames_skipped++; delay(5); return; }
   // Only the gaze moved: redraw the box around the iris, old and new.
-  bool gaze_only = !first && state.mood == drawn.mood && state.blink == drawn.blink &&
-                   state.pupil == drawn.pupil;
+  bool gaze_only = !first && state.mood == drawn.mood && state.blend == drawn.blend &&
+                   state.blink == drawn.blink && state.pupil == drawn.pupil;
   eyes::Box box = gaze_only ? eyes::gaze_box(style, drawn, state) : eyes::Box{0, 0, eyes::SIZE, eyes::SIZE};
   draw_eye(0, box);
   draw_eye(1, box);

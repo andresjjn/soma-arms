@@ -1,10 +1,13 @@
 // The fast renderer must draw the same eye as the reference model.
-// For many states (moods, gazes, blinks, pupils, both mirrors), every
-// pixel of render_rows() is compared with pixel(): no channel may differ
-// by more than a few levels of RGB565 rounding, except on a sliver of
-// boundary pixels (a 1 px edge rounded the other way).
+// For many states (moods, gazes, closures, pupils, mood blends, other
+// designs, both mirrors), every pixel of render_rows() is compared with
+// pixel(): no channel may differ by more than a few levels of RGB565
+// rounding, except on a sliver of boundary pixels (the board computes the
+// lids in float, pixel() in double: an edge within float rounding of a
+// row can land on the other side).
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <vector>
 #include "../eyes/fast_render.h"
 #include "../eyes/style_default.h"
@@ -16,32 +19,67 @@ static Rgb from565(uint16_t swapped) {
   return {uint8_t((v >> 8) & 0xF8), uint8_t((v >> 3) & 0xFC), uint8_t((v << 3) & 0xF8)};
 }
 
+// Pixels of render_rows() beyond tolerance of pixel() for one state, and
+// how many differ at all.
+static int compare(FastStyle& f, FastFrame& fr, const EyeState& s, float mirror, std::vector<uint16_t>& buf,
+                   int* any) {
+  prepare_frame(f, fr, s, mirror);
+  render_rows(f, fr, 0, SIZE, buf.data());
+  int bad = 0;
+  for (int y = 0; y < SIZE; y++)
+    for (int x = 0; x < SIZE; x++) {
+      Rgb want = pixel(f.st, s, x, y, mirror), got = from565(buf[y * SIZE + x]);
+      Rgb want565 = from565(rgb565_swapped(want));
+      if (want565.r != got.r || want565.g != got.g || want565.b != got.b) (*any)++;
+      if (std::abs(want565.r - got.r) > 12 || std::abs(want565.g - got.g) > 12 ||
+          std::abs(want565.b - got.b) > 12) bad++;
+    }
+  return bad;
+}
+
 int main() {
   static FastStyle f;
   prepare_style(f, default_style());
   FastFrame fr;
   std::vector<uint16_t> buf(SIZE * SIZE);
-  int states = 0, worst_bad = 0;
+  int states = 0, worst_bad = 0, any = 0;
+  auto check = [&](FastStyle& g, const EyeState& s, float mirror) {
+    int bad = compare(g, fr, s, mirror, buf, &any);
+    states++;
+    if (bad > worst_bad) worst_bad = bad;
+  };
+  // Spec v2 (2026-11-22): every mood, gazes, closures from open to shut,
+  // pupils past both clamps, both eyes.
   for (int m = 0; m < MOODS; m++)
     for (float gx : {-1.0f, -0.3f, 0.0f, 0.7f})
       for (float gy : {-0.8f, 0.0f, 0.5f})
-        for (float blink : {0.0f, 0.4f})
-          for (float pupil : {0.6f, 1.0f, 1.4f})
+        for (float blink : {0.0f, 0.4f, 0.85f, 1.0f})
+          for (float pupil : {0.6f, 1.4f})
             for (float mirror : {1.0f, -1.0f}) {
               EyeState s; s.mood = Mood(m); s.gx = gx; s.gy = gy; s.blink = blink; s.pupil = pupil;
-              prepare_frame(f, fr, s, mirror);
-              render_rows(f, fr, 0, SIZE, buf.data());
-              int bad = 0;
-              for (int y = 0; y < SIZE; y++)
-                for (int x = 0; x < SIZE; x++) {
-                  Rgb want = pixel(f.st, s, x, y, mirror), got = from565(buf[y * SIZE + x]);
-                  Rgb want565 = from565(rgb565_swapped(want));
-                  if (std::abs(want565.r - got.r) > 12 || std::abs(want565.g - got.g) > 12 ||
-                      std::abs(want565.b - got.b) > 12) bad++;
-                }
-              states++;
-              if (bad > worst_bad) worst_bad = bad;
+              check(f, s, mirror);
             }
+  // Mood transitions mid blend, and designs off the default: flat joints,
+  // joints slanting the other way, wide rims, a seam that smiles.
+  for (int a = 0; a < MOODS; a++)
+    for (int b = 0; b < MOODS; b++)
+      for (float blend : {0.3f, 0.7f}) {
+        EyeState s; s.mood = Mood(b); s.from = f.st.moods[a]; s.blend = blend; s.blink = 0.2f;
+        check(f, s, a % 2 ? 1.0f : -1.0f);
+      }
+  for (const char* kv : {"joint_slope=0", "joint_slope=-0.5", "lid_rim=9", "seam_curve=-20", "lid_shadow=0"}) {
+    Style st = default_style();
+    char key[32]; std::snprintf(key, sizeof key, "%s", kv);
+    char* eq = std::strchr(key, '=');
+    *eq = 0;
+    if (!set_param(st, key, eq + 1)) { std::printf("bad test design %s\n", kv); return 1; }
+    static FastStyle g; prepare_style(g, st);
+    for (int m = 0; m < MOODS; m++)
+      for (float blink : {0.0f, 0.6f, 1.0f}) {
+        EyeState s; s.mood = Mood(m); s.blink = blink; s.gx = 0.3f; s.gy = -0.6f;
+        check(g, s, m % 2 ? 1.0f : -1.0f);
+      }
+  }
   // A window renders exactly what the full frame has in that box, and a
   // gaze-only change differs from the old frame only inside gaze_box().
   int window_bad = 0, outside_bad = 0;
@@ -101,6 +139,7 @@ int main() {
   std::printf("windows: %d px differ inside, %d px changed outside the gaze box\n", window_bad, outside_bad);
   if (window_bad || outside_bad) return 1;
   double worst_pct = 100.0 * worst_bad / (SIZE * SIZE);
-  std::printf("fast vs reference: %d states, worst %d px (%.2f %%) beyond tolerance\n", states, worst_bad, worst_pct);
+  std::printf("fast vs reference: %d states, worst %d px (%.2f %%) beyond tolerance, %d px differ at all\n", states,
+              worst_bad, worst_pct, any);
   return worst_pct < 0.5 ? 0 : 1;
 }

@@ -1,15 +1,20 @@
 // SOMA's eyes: the fast path. Pure C++, no hardware.
 //
-// eye_model.h's pixel() is the reference: clear, and slow on the board
-// (two square roots and several float color mixes per pixel, 115,200
-// pixels a frame for two eyes). This draws the same eye with the work
-// moved out of the pixel loop:
-//   - colors of the iris gradient and the sclera shading are tables,
-//     rebuilt only when the design changes (prepare_style);
-//   - the lids depend on the column only: 240 evaluations a frame, not
-//     57,600 (prepare_frame);
-//   - no square root per pixel: distances stay squared, and the few that
-//     need a radius look it up.
+// eye_model.h's pixel() is the reference: clear, and too slow on the board
+// (it works out the lids for every pixel, in double, 115,200 pixels a frame
+// for two eyes). This draws the same eye with the work moved out of the
+// pixel loop:
+//   - colors are RGB565 once per design (prepare_style);
+//   - the lids depend on the column only: per frame and column, with
+//     pixel()'s own expressions, every boundary down the column becomes an
+//     integer row (lid edge, tip, metal rim, joint, bevel, the shadow
+//     band), each checked against the same test pixel() makes, so no
+//     boundary rounds the other way (prepare_frame). In float, not
+//     pixel()'s double: the ESP32-S3 has a single precision FPU only, and
+//     double here would cost several ms a frame (eye_model.h lids() keeps
+//     the two in step);
+//   - per pixel that leaves integer compares for the lids and two squared
+//     distances for the glint and the iris, with no square root.
 // firmware/eyes/test checks it against pixel() on many states.
 #pragma once
 #include <cmath>
@@ -18,73 +23,130 @@
 
 namespace eyes {
 
-constexpr int R2 = int(R * R);                   // 14400
-
 struct FastStyle {
   Style st;
-  uint8_t root[R2 + 1];                          // floor(sqrt(i)), for i up to R^2
-  Rgb sclera_by_r[SIZE / 2 + 1];                 // sclera color at radius r
-  Rgb iris_by_d[SIZE / 2 + 1];                   // iris color at distance d from the iris center
-  uint16_t sclera565[SIZE / 2 + 1], iris565[SIZE / 2 + 1];
-  uint16_t lid565, pupil565, glint565, edge565, seam565;
-  int seams;
-  float seam_c[8], seam_s[8];                    // per seam, upper lid; the lower one is mirrored
+  uint16_t sclera, sclera_shadow, sclera_rim, iris_inner, iris_mid1, iris_mid2, iris_outer, iris_limbal,
+      iris_shadow, pupil, glint, glint_shadow, lid, tip, rim, seam, seam_hi;
 };
 
 inline void prepare_style(FastStyle& f, const Style& st) {
   f.st = st;
-  for (int i = 0; i <= R2; i++) f.root[i] = uint8_t(std::sqrt(float(i)));
-  for (int r = 0; r <= SIZE / 2; r++) {
-    // radius of the pixel center that floor-roots to r, as pixel() sees it
-    f.sclera_by_r[r] = mix(st.sclera, st.sclera_edge, (r + 0.5f) / R - 0.55f);
-    f.sclera565[r] = rgb565_swapped(f.sclera_by_r[r]);
-  }
-  f.lid565 = rgb565_swapped(st.lid);
-  f.edge565 = rgb565_swapped(st.lid_edge_color);
-  f.seam565 = rgb565_swapped(st.lid_seam_color);
-  f.seams = int(st.lid_seams) > 8 ? 8 : int(st.lid_seams);
-  for (int k = 0; k < f.seams; k++) {             // the same angles as shutter()
-    float a = -1.5707964f + (k - (f.seams - 1) * 0.5f) * 0.6f;
-    f.seam_c[k] = std::cos(a);
-    f.seam_s[k] = std::sin(a);
-  }
-  f.pupil565 = rgb565_swapped(st.pupil);
-  f.glint565 = rgb565_swapped(st.glint);
+  f.sclera = rgb565_swapped(st.sclera);
+  f.sclera_shadow = rgb565_swapped(st.sclera_shadow);
+  f.sclera_rim = rgb565_swapped(st.sclera_rim);
+  f.iris_inner = rgb565_swapped(st.iris_inner);
+  f.iris_mid1 = rgb565_swapped(st.iris_mid1);
+  f.iris_mid2 = rgb565_swapped(st.iris_mid2);
+  f.iris_outer = rgb565_swapped(st.iris_outer);
+  f.iris_limbal = rgb565_swapped(st.iris_limbal);
+  f.iris_shadow = rgb565_swapped(st.iris_shadow);
+  f.pupil = rgb565_swapped(st.pupil);
+  f.glint = rgb565_swapped(st.glint);
+  f.glint_shadow = rgb565_swapped(st.glint_shadow);
+  f.lid = rgb565_swapped(st.lid);
+  f.tip = rgb565_swapped(st.lid_tip_color);
+  f.rim = rgb565_swapped(st.lid_rim_color);
+  f.seam = rgb565_swapped(st.lid_seam);
+  f.seam_hi = rgb565_swapped(st.lid_seam_hi);
 }
 
+// One lid in one column, as rows dy (y - 120) measured from the lid's edge
+// inward: depth k = |dy - edge row| in whole rows. A lid row at depth k is
+// tip below tip_end, rim below rim_end, a joint for k in [j0, j1], a bevel
+// for k in [b0, b1] (empty when the first exceeds the second), else body.
+struct LidRows { int edge, tip_end, rim_end, j0, j1, b0, b1; };
+
 struct FastFrame {
-  float upper[SIZE];       // the upper lid's reach per column, px (pixel()'s l.upper)
-  float lower[SIZE];       // and the lower one's
-  int lid_top[SIZE];       // first open row of each column
-  int lid_bottom[SIZE];    // first lid row at the bottom of each column
-  float cx, cy;            // iris center, px from the top left
-  float pr2, ir2, pr;      // pupil and iris radii, squared
-  float gcx, gcy, gr2;     // glint center and radius squared
+  LidRows up[SIZE], low[SIZE];   // per column: the upper lid (rows going up), the lower (going down)
+  int shade_end[SIZE];           // per column: rows dy <= this are in the shadow band
+  float cx, cy;                  // iris center, px from the eye center
+  float pr2, inner2, ir2;        // pupil, inner ring and iris radii, squared
+  float limbal2, outer2, mid2;   // ring radii, squared
+  float gcx, gcy, gr2;           // glint center and radius squared
 };
+
+// The rows of one lid in a column. depth(k) is the lid's depth d in px at
+// k rows in from its first row: pixel()'s own expression, in float.
+template <class Depth>
+inline LidRows lid_rows(const Style& st, float ax, int edge, Depth depth) {
+  LidRows r{edge, 0, 0, 0, -1, 0, -1};
+  const int far = 2 * SIZE;                      // deeper than any lid on the panel
+  auto first = [&](auto pred, int k) {           // first k >= 0 where pred holds, from a guess
+    if (k < 0) k = 0;
+    if (k > far) k = far;
+    while (k > 0 && pred(k - 1)) k--;
+    while (k < far && !pred(k)) k++;
+    return k;
+  };
+  // d grows by exactly 1 per row: guesses from the edge's fractional depth.
+  float d0 = depth(0);
+  r.tip_end = first([&](int k) { return !(depth(k) < st.lid_tip); }, int(std::ceil(st.lid_tip - d0)));
+  r.rim_end = first([&](int k) { return !(depth(k) < st.lid_tip + st.lid_rim); },
+                    int(std::ceil(st.lid_tip + st.lid_rim - d0)));
+  // A joint and a bevel are a band of d: |ax - (x0 + slope * d)| <= w.
+  auto band = [&](float x0, float w, int* a, int* b) {
+    auto in = [&](int k) { return std::fabs(ax - (x0 + st.joint_slope * depth(k))) <= w; };
+    if (st.joint_slope == 0) {                   // straight down: the whole column or nothing
+      if (in(0)) { *a = 0; *b = far; }
+      return;
+    }
+    float mid = (ax - x0) / st.joint_slope - d0, half = w / std::fabs(st.joint_slope);
+    if (!(mid + half >= -1 && mid - half <= far + 1)) return;   // off the lid (or not a number)
+    int lo = int(std::floor(mid - half)), hi = int(std::ceil(mid + half));
+    if (hi > far) hi = far;
+    int k = lo < 0 ? 0 : lo;
+    while (k <= hi && !in(k)) k++;               // within a row or two of the guess
+    if (k > hi) return;
+    while (k > 0 && in(k - 1)) k--;
+    int e = k;
+    while (e < far && in(e + 1)) e++;
+    *a = k; *b = e;
+  };
+  band(st.joint_x, st.joint_w, &r.j0, &r.j1);
+  band(st.bevel_x, st.bevel_w, &r.b0, &r.b1);
+  return r;
+}
 
 inline void prepare_frame(FastStyle& f, FastFrame& fr, const EyeState& s, float mirror) {
   const Style& st = f.st;
+  MoodLids m = shape(st, s);
   for (int x = 0; x < SIZE; x++) {
-    Lids l = lids(st, s, x + 0.5f - R, mirror);
-    fr.upper[x] = l.upper;
-    fr.lower[x] = l.lower;
-    // pixel(): lid where dy < -R + upper, i.e. y + 0.5 < upper
-    fr.lid_top[x] = int(std::ceil(l.upper - 0.5f));
-    fr.lid_bottom[x] = int(std::floor(SIZE - l.lower - 0.5f)) + 1;
+    float dx = x - R, ax = std::fabs(dx);
+    LidsOf<float> l = lids<float>(st, m, s.blink, across(dx, mirror));
+    // pixel(): lower lid where dy >= low; upper lid where dy <= up.
+    int lo = int(std::ceil(l.low));
+    while (lo - 1 >= l.low) lo--;
+    while (lo < l.low) lo++;
+    int hi = int(std::floor(l.up));
+    while (hi + 1 <= l.up) hi++;
+    while (hi > l.up) hi--;
+    fr.low[x] = lid_rows(st, ax, lo, [&](int k) { return float(lo + k) - l.low; });
+    fr.up[x] = lid_rows(st, ax, hi, [&](int k) { return l.up - float(hi - k); });
+    int sh = int(std::floor(l.up + st.lid_shadow));   // pixel(): dy - up <= lid_shadow
+    while (sh + 1 - l.up <= st.lid_shadow) sh++;
+    while (sh - l.up > st.lid_shadow) sh--;
+    fr.shade_end[x] = sh;
   }
-  fr.cx = R + s.gx * st.gaze_reach;
-  fr.cy = R + s.gy * st.gaze_reach;
-  fr.pr = st.pupil_r * s.pupil;
-  fr.pr2 = fr.pr * fr.pr;
+  fr.cx = s.gx * st.gaze_reach;
+  fr.cy = s.gy * st.gaze_reach;
+  float pr = pupil_radius(st, m, s.pupil), inner = pr + st.ring_inner_pad;
+  fr.pr2 = pr * pr;
+  fr.inner2 = inner * inner;
   fr.ir2 = st.iris_r * st.iris_r;
-  for (int d = 0; d <= SIZE / 2; d++) {          // the iris gradient for this pupil size
-    float t = (d + 0.5f - fr.pr) / (st.iris_r - fr.pr);
-    f.iris_by_d[d] = mix(st.iris_in, st.iris_out, t);
-    f.iris565[d] = rgb565_swapped(f.iris_by_d[d]);
-  }
+  fr.limbal2 = st.ring_limbal * st.ring_limbal;
+  fr.outer2 = st.ring_outer * st.ring_outer;
+  fr.mid2 = st.ring_mid * st.ring_mid;
   fr.gcx = fr.cx + st.glint_dx;
   fr.gcy = fr.cy + st.glint_dy;
   fr.gr2 = st.glint_r * st.glint_r;
+}
+
+inline uint16_t lid565(const FastStyle& f, const LidRows& r, int k) {
+  if (k < r.tip_end) return f.tip;
+  if (k < r.rim_end) return f.rim;
+  if (k >= r.j0 && k <= r.j1) return f.seam;
+  if (k >= r.b0 && k <= r.b1) return f.seam_hi;
+  return f.lid;
 }
 
 // Rows y0 .. y0 + rows - 1, columns x0 .. x1 - 1, into out (row major,
@@ -92,45 +154,31 @@ inline void prepare_frame(FastStyle& f, FastFrame& fr, const EyeState& s, float 
 // redraw just the box around the iris.
 inline void render_rows(const FastStyle& f, const FastFrame& fr, int y0, int rows, uint16_t* out,
                         int x0 = 0, int x1 = SIZE) {
-  const Style& st = f.st;
+  const int R2 = int(R * R);
+  const float sclera2 = f.st.sclera_r * f.st.sclera_r;
   for (int y = y0; y < y0 + rows; y++) {
-    float py = y + 0.5f, dy = py - R, iy = py - fr.cy, gy = py - fr.gcy;
-    float dy2 = dy * dy, iy2 = iy * iy, gy2 = gy * gy;
+    int dy = y - int(R);
+    float iy = dy - fr.cy, gy = dy - fr.gcy;
+    float iy2 = iy * iy, gy2 = gy * gy;
     uint16_t* row = out + (y - y0) * (x1 - x0) - x0;
     for (int x = x0; x < x1; x++) {
-      float px = x + 0.5f, dx = px - R;
-      float r2 = dx * dx + dy2;
-      if (r2 > R * R) { row[x] = 0; continue; }
-      if (y < fr.lid_top[x] || y >= fr.lid_bottom[x]) {
-        bool up = y < fr.lid_top[x];
-        float depth = up ? fr.upper[x] - py : dy - (R - fr.lower[x]);
-        uint16_t c = f.lid565;
-        if (depth < st.lid_edge) c = f.edge565;
-        else
-          for (int k = 0; k < f.seams; k++) {
-            // the lower lid's seams are the upper ones mirrored top to bottom
-            float sc = f.seam_c[k], ss = up ? f.seam_s[k] : -f.seam_s[k];
-            if (dx * sc + dy * ss > 0 && std::fabs(dx * ss - dy * sc) < 0.9f) { c = f.seam565; break; }
-          }
-        row[x] = c;
+      int dx = x - int(R), r2 = dx * dx + dy * dy;
+      if (r2 > R2) { row[x] = 0; continue; }
+      const LidRows& lo = fr.low[x];
+      if (dy >= lo.edge) { row[x] = lid565(f, lo, dy - lo.edge); continue; }
+      const LidRows& up = fr.up[x];
+      if (dy <= up.edge) { row[x] = lid565(f, up, up.edge - dy); continue; }
+      bool shade = dy <= fr.shade_end[x];
+      float gx = dx - fr.gcx;
+      if (gx * gx + gy2 <= fr.gr2) { row[x] = shade ? f.glint_shadow : f.glint; continue; }
+      float ix = dx - fr.cx, i2 = ix * ix + iy2;
+      if (i2 <= fr.ir2) {
+        row[x] = i2 <= fr.pr2 ? f.pupil : shade ? f.iris_shadow : i2 >= fr.limbal2 ? f.iris_limbal
+               : i2 >= fr.outer2 ? f.iris_outer : i2 >= fr.mid2 ? f.iris_mid2
+               : i2 <= fr.inner2 ? f.iris_inner : f.iris_mid1;
         continue;
       }
-      float ix = px - fr.cx, d2 = ix * ix + iy2;
-      float gx = px - fr.gcx;
-      bool glint = gx * gx + gy2 < fr.gr2;
-      float lid_edge = py - fr.upper[x];         // pixel(): dy - (-R + upper)
-      bool shadow = st.lid_shadow > 0 && lid_edge < st.lid_shadow;
-      if (!shadow) {
-        if (glint) row[x] = f.glint565;
-        else if (d2 < fr.pr2) row[x] = f.pupil565;
-        else if (d2 < fr.ir2) row[x] = f.iris565[f.root[int(d2)]];
-        else row[x] = f.sclera565[f.root[int(r2)]];
-        continue;
-      }
-      // the few rows under the upper lid: mix toward the lid color
-      Rgb c = glint ? st.glint : d2 < fr.pr2 ? st.pupil
-            : d2 < fr.ir2 ? f.iris_by_d[f.root[int(d2)]] : f.sclera_by_r[f.root[int(r2)]];
-      row[x] = rgb565_swapped(mix(c, st.lid, 0.5f * (1.0f - lid_edge / st.lid_shadow)));
+      row[x] = float(r2) < sclera2 ? (shade ? f.sclera_shadow : f.sclera) : f.sclera_rim;
     }
   }
 }

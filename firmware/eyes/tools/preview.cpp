@@ -1,9 +1,9 @@
 // Host preview of SOMA's eyes: the very eye_model.h the board runs, drawn
 // to a contact sheet (a PPM image). Each row is a mood; the columns are the
-// gaze (center, left, right, up, down) and a half blink. Each cell shows
-// both eyes, mirrored as on the board.
+// gaze (center, left, right, up, down), a half blink and shut lids. Each
+// cell shows both eyes, mirrored as on the board.
 //
-//   preview OUT.ppm [KEY=VALUE ...]     KEY as in `set` (iris_r=58, colors.iris_in=#ff8800)
+//   preview OUT.ppm [KEY=VALUE ...]     KEY as in `set` (iris_r=58, colors.iris_mid1=#ff8800)
 //
 // Built and run by tools/preview.py, which also turns the PPM into a PNG.
 #include <cstdio>
@@ -25,8 +25,8 @@ int main(int argc, char** argv) {
     if (!set_param(st, buf, eq + 1)) { std::fprintf(stderr, "unknown key or bad value: %s\n", argv[i]); return 2; }
   }
   struct Col { float gx, gy, blink; };
-  const Col cols[] = {{0, 0, 0}, {-1, 0, 0}, {1, 0, 0}, {0, -0.8f, 0}, {0, 0.8f, 0}, {0, 0, 0.5f}};
-  const int NC = 6, GAP = 12, CELL_W = 2 * SIZE + GAP, W = NC * CELL_W + GAP, H = MOODS * (SIZE + GAP) + GAP;
+  const Col cols[] = {{0, 0, 0}, {-1, 0, 0}, {1, 0, 0}, {0, -0.8f, 0}, {0, 0.8f, 0}, {0, 0, 0.5f}, {0, 0, 1}};
+  const int NC = 7, GAP = 12, CELL_W = 2 * SIZE + GAP, W = NC * CELL_W + GAP, H = MOODS * (SIZE + GAP) + GAP;
   std::vector<unsigned char> img(size_t(W) * H * 3, 40);
   for (int m = 0; m < MOODS; m++)
     for (int c = 0; c < NC; c++)

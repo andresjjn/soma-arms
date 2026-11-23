@@ -3,10 +3,10 @@
 
 Compiles tools/preview.cpp (which includes eyes/eye_model.h, the very file
 the firmware draws with) and writes a contact sheet: one row per mood,
-columns for the gaze and a half blink, both eyes in each cell.
+columns for the gaze, a half blink and shut lids, both eyes in each cell.
 
     python3 firmware/eyes/tools/preview.py                       # the design in style.json
-    python3 firmware/eyes/tools/preview.py iris_r=54 colors.iris_in=#ff8800
+    python3 firmware/eyes/tools/preview.py iris_r=54 colors.iris_mid1=#ff8800
     python3 firmware/eyes/tools/preview.py --out /tmp/eyes.png
 
 Overrides use the same keys as the board's `set`. Regenerates the default

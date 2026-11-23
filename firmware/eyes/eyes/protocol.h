@@ -2,13 +2,14 @@
 //
 //   ping               -> pong soma-eyes 0.1
 //   look X Y           -> ok        gaze, each -1..1 (X + toward the picture's right)
-//   blink              -> ok
-//   mood NAME          -> ok        neutral | happy | sad | angry | surprised | sleepy
-//   pupil S            -> ok        0.5..1.5
+//   blink              -> ok        one blink: 75 ms down, 35 ms shut, 110 ms up
+//   mood NAME          -> ok        neutral | happy | sad | angry | surprised | sleepy,
+//                                   lids and pupil blending into it over mood_transition
+//   pupil S            -> ok        0.5..1.5, times the mood's own pupil
 //   bright N           -> ok        backlight, 0..100
 //   idle on|off        -> ok        wandering gaze and blinks of their own
 //   set KEY VALUE      -> ok        one design field live (style.h): iris_r 58,
-//                                   colors.iris_in #ff8800, happy.low 80, ...
+//                                   colors.iris_mid1 #ff8800, happy.low 80, ...
 //   style              -> {...}     the whole design as JSON, for style.json
 //   save | reset       -> ok        keep the live design across reboots | back to default
 //   sleep | wake       -> ok        close | open the eyes slowly; they boot closed and

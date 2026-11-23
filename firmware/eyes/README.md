@@ -11,15 +11,26 @@ path: the eyes cannot arm or command anything.
 - Both panels share one SPI bus (clock, data and D/C); a chip select each.
 - The eye is math, not sprites (`eyes/eye_model.h`): gaze, pupil, blink
   and mood decide every pixel, so the gaze moves continuously.
+- The design is spec v2 (2026-11-22, made with Gemini, chosen by Andres;
+  the visual truth is `docs/eye_references/`, which the default design
+  reproduces pixel for pixel but for 8 px, see below): a flat sclera with
+  a rim, an iris in five discrete rings, a glint that is the same on both
+  eyes, and metal shutter lids (tip, rim, two slanted joints) that close
+  onto one seam. Moods carry a pupil scale and blend over 220 ms; a blink
+  closes in 75 ms (t^2), holds 35 ms and opens in 110 ms (cubic ease-out);
+  `sleep` shuts in 950 ms, `wake` opens in 800 ms.
 - Drawn in stripes with two DMA buffers: one stripe goes out over SPI
   while the CPU computes the next.
-- Fast path (`eyes/fast_render.h`): color tables rebuilt only when the
-  design changes, lids per column, no square root per pixel; checked
-  against the reference `eye_model.h` on 864 states (0 px off). A still
-  eye is not redrawn; a gaze-only change redraws just the box around the
-  iris. Measured on the board 2026-11-09: about 50 fps while the gaze
-  moves, about 34 fps for full redraws (blinks, moods); about 5 to 8
-  before (the reference model per pixel, every frame). `stats` reports it.
+- Fast path (`eyes/fast_render.h`): colors converted once per design;
+  every lid boundary (edge, tip, rim, joint, bevel, shadow) worked out per
+  column as an integer row, so a pixel costs integer compares and two
+  squared distances, no square root; checked against the reference
+  `eye_model.h` on 1314 states (at worst 12 px of a frame off: the board
+  computes the lids in float, the reference in double). A still eye is
+  not redrawn; a gaze-only change redraws just the box around the iris.
+  Measured on the board 2026-11-09 with the previous design: about 50 fps
+  while the gaze moves, about 34 fps for full redraws (blinks, moods).
+  `stats` reports it.
 - Idle life of its own: small saccades and blinks; a command pauses it.
 - Commands are lines over the USB serial port (`eyes/protocol.h`). From the
   Mac: `.venv/bin/python firmware/eyes/tools/eyes.py "mood happy" blink`,
@@ -30,11 +41,11 @@ path: the eyes cannot arm or command anything.
 | `ping` | answers `pong soma-eyes 0.1` |
 | `look X Y` | gaze, each -1..1 (X toward the picture's right) |
 | `blink` | one blink |
-| `mood NAME` | neutral, happy, sad, angry, surprised, sleepy |
-| `pupil S` | pupil scale 0.5..1.5 |
+| `mood NAME` | neutral, happy, sad, angry, surprised, sleepy; the lids and the pupil blend into it |
+| `pupil S` | pupil scale 0.5..1.5, times the mood's own (the product clamped to 0.5..1.5) |
 | `bright N` | backlight 0..100 |
 | `idle on/off` | wandering gaze and blinks of their own |
-| `set KEY VALUE` | one design field, live: `set iris_r 58`, `set colors.iris_in #ff8800`, `set happy.low 80` |
+| `set KEY VALUE` | one design field, live: `set iris_r 58`, `set colors.iris_mid1 #ff8800`, `set happy.low 80`, `set sad.pupil 1.1`, `set timing_ms.mood_transition 300` |
 | `style` | the whole live design as JSON, in `style.json`'s shape |
 | `img E` + data | a still picture on eye E (0 or 1): 115,200 bytes of RGB565, high byte first, in 4 KB blocks the board acknowledges with `k` (the USB driver drops bytes otherwise) |
 | `live` | back to the animated eyes after `img` (so do `mood` and `look`) |
@@ -56,7 +67,8 @@ numbers in C++.
 
 1. Preview on the Mac, with the board's own eye model compiled for the
    host: `python3 firmware/eyes/tools/preview.py [KEY=VALUE ...]` writes
-   `firmware/eyes/preview.png` (rows: moods; columns: gaze and a half blink).
+   `firmware/eyes/preview.png` (rows: moods; columns: gaze, a half blink and
+   shut lids).
 2. Tune it live on the board: `set KEY VALUE`, then `save`.
 3. Bring it home: `style` prints the JSON; paste it into `style.json`, run
    `python3 firmware/eyes/tools/gen_style.py`, commit. A test fails if the
