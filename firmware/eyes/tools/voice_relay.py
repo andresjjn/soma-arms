@@ -441,6 +441,17 @@ class VoiceGate:
         self.before.append(pcm)
         return []
 
+    def reset(self) -> bool:
+        """Close and clear the gate (e.g. when SOMA starts speaking). Returns
+        True if the gate had been open and needs audio_stream_end."""
+        was_open = self.is_open
+        self.before.clear()
+        self.open_until = 0.0
+        self.run = 0
+        self.is_open = False
+        self.ended = False
+        return was_open
+
 
 def drain(ser, quiet_s: float = 0.15, limit_s: float = 1.5) -> int:
     """Read until the board has been quiet for quiet_s: a stream that ended
@@ -689,13 +700,21 @@ class Relay:
             print('asleep again.', flush=True)
 
     async def uplink(self, session, mic: asyncio.Queue, types) -> None:
+        """Stream microphone audio only while someone talks (VoiceGate).
+        Gating silence while awake avoids billing ~25 tokens/s of quiet room
+        context on every turn (2026-11-22)."""
+        gate = VoiceGate()
         while True:
             now, pcm = await mic.get()
             if self.speaker.speaking(now):
-                pcm = bytes(len(pcm))               # half duplex: SOMA does not hear itself
-            else:
-                self.voice.frame(dbfs(pcm), now)
-            await session.send_realtime_input(audio=types.Blob(data=pcm, mime_type=f'audio/pcm;rate={RATE}'))
+                if gate.reset():
+                    await session.send_realtime_input(audio_stream_end=True)
+                continue
+            self.voice.frame(dbfs(pcm), now)
+            for out in gate.frame(pcm, now):
+                await session.send_realtime_input(audio=types.Blob(data=out, mime_type=f'audio/pcm;rate={RATE}'))
+            if gate.ended:
+                await session.send_realtime_input(audio_stream_end=True)
 
     async def answer_tools(self, session, calls, types) -> None:
         """Every call gets an answer, so a blocking one never hangs the

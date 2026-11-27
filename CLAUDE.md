@@ -186,7 +186,7 @@ you if you forgot.
 ## The tests are the specification
 
 24 tests came over from the bench driver, and the suite has grown since
-(815 passing plus 12 skipped as of 2026-11-27 on a machine without ROS
+(816 passing plus 12 skipped as of 2026-11-27 on a machine without ROS
 or the mujoco wheel; the skipped ones need `rclpy`, which the ROS
 job of CI has, or xacro or mujoco, which the unit job installs). They encode every hardware contract. If a
 change breaks one, the change is wrong until proven otherwise. Never edit a

@@ -352,3 +352,18 @@ def test_a_lost_ack_does_not_mute_soma_forever():
     assert q.lost == 1 and q.inflight == 0
     assert not q.speaking(12.0)                       # the microphone opens again
     assert q.may_send(vr.MAX_PAYLOAD, 12.0)
+
+
+def test_awake_gate_resets_cleanly_when_soma_starts_speaking():
+    g = vr.VoiceGate()
+    voice = vr.to_int16(np.full(320, 3000.0))
+    quiet = bytes(640)
+    for i in range(4):
+        g.frame(voice, i * 0.02)
+    assert g.is_open
+    # SOMA starts speaking: gate closes and signals audio_stream_end once.
+    assert g.reset() is True
+    assert not g.is_open
+    assert g.reset() is False
+    # Quiet room afterwards sends nothing.
+    assert g.frame(quiet, 1.0) == []
