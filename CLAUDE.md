@@ -123,6 +123,7 @@ soma_driver/          PCA9685 driver
   soma_driver/homography.py        normalized DLT pixel-to-deck homography and lane-to-IK bridge, pure
   soma_driver/touch_test.py        the v0.3 lane touch test, pure: safety-checked planning and CSV log
   soma_driver/touch_test_cli.py    ros2 run soma_driver soma_touch_test --arm A
+  soma_driver/tending.py           v0.4 pick-and-place and interleaved tending cycles, 50 Hz-verified, pure
   soma_driver/limp.py              which arm may hang with its signal cut (limp_arm), pure
   soma_driver/ina3221.py           power monitor, read-only, no gates needed
   test/                            the safety test suite
@@ -185,7 +186,7 @@ you if you forgot.
 ## The tests are the specification
 
 24 tests came over from the bench driver, and the suite has grown since
-(810 passing plus 12 skipped as of 2026-11-27 on a machine without ROS
+(815 passing plus 12 skipped as of 2026-11-27 on a machine without ROS
 or the mujoco wheel; the skipped ones need `rclpy`, which the ROS
 job of CI has, or xacro or mujoco, which the unit job installs). They encode every hardware contract. If a
 change breaks one, the change is wrong until proven otherwise. Never edit a
