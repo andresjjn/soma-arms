@@ -179,3 +179,39 @@ running hardware sessions on the Jetson bench.
 - **Alternative cost:** Leaving continuous mic streaming wastes tokens in
   quiet intervals; hardware VAD on the ESP32 would require reflashing and
   would not share the host half-duplex `SpeakerQueue` clock.
+
+---
+
+## Step 7: Gemini Robotics ER 2 supervisor core (v0.5 foundation)
+
+**Files:** `soma_driver/soma_driver/er2_supervisor.py`,
+`soma_driver/test/test_er2_supervisor.py`
+
+### What changed
+- Implemented `er2_supervisor.py` as a pure, ROS-free core with a
+  protocol boundary (`Er2Backend` / `GeminiEr2Client` with lazy
+  `google-genai` import and configurable `SOMA_ER2_MODEL`).
+- Enforced a strict tool whitelist (`TOOLS` + `execute_tool_call`):
+  exposes only `pick_and_place`, `run_tending_cycle`, and `go_home`,
+  each validated at `50 Hz` by `tending.py` before returning steps.
+- Added `locate_part()` (combining ER 2 `[y, x]` pointing with
+  `homography.py` and `solve_with_tilt`) and `verify_cycle_end()`
+  (`success`, `part_id`, `reason` JSON parsing).
+- Implemented `SupervisorSession.run_cycle()` with public counters
+  (`verified`, `unverified`, `failed`, `recovered`), automatic dropped-part
+  recovery inside reachable lanes, clean rejection of out-of-lane drops,
+  graceful fallback to geometry-only counting when the ER 2 API fails or
+  rate-limits, and CSV latency/token/cost logging (`write_usage_csv`).
+
+### Technical decision and trade-offs
+- **Why keep `er2_supervisor.py` inside `soma_driver` for now instead of
+  creating `soma_agent`:** `CLAUDE.md` reserves the `soma_agent` ROS
+  package for the `v0.5` milestone after `v0.3` and `v0.4` close on the
+  bench. Keeping the pure supervisor logic in `soma_driver` lets us test
+  tool contracts, recovery, and fallback offline today without adding an
+  unscheduled ROS package.
+- **Why inject `Er2Backend` via a `Protocol`:** Isolates `google-genai`
+  behind a thin interface so the entire verification, drop-recovery, and
+  rate-limit fallback flow runs deterministically in `pytest` without API
+  billing or network access, and makes swapping model IDs trivial when
+  preview models retire or pricing changes on `2027-01-01`.
