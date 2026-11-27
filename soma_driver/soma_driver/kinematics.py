@@ -24,6 +24,7 @@ from pathlib import Path
 import yaml
 
 from .servo_map import SERVO_MAP
+from .trajectory import JointMotion
 
 JOINTS = ('yaw', 'shoulder', 'elbow', 'wrist_pitch')
 SIDES = ('left', 'right')
@@ -37,6 +38,17 @@ VERIFIED = {
     'elbow': '2026-10-12, negative = forward, on the metal',
     'wrist_pitch': '2026-10-12, negative = forward, on the metal',
 }
+
+# Safety invariants grounded in bench measurements:
+# - ARM_MASS_KG: 0.7 kg estimate (docs/plan.md), calibrated so a straight
+#   horizontal arm yields ~11.4 kg.cm on the base (primitives.py).
+# - MAX_BASE_TORQUE_KGCM: 9.5 kg.cm leaves margin under MG996R ~10 kg.cm stall.
+# - MIN_CLEARANCE_Z_M: 5 mm above the base plate surface.
+# - ELBOW_CURL_FLOOR_RAD: -1.30 rad (ELBOW_REACH_CLEAN, 2026-10-26).
+ARM_MASS_KG = 0.7
+MAX_BASE_TORQUE_KGCM = 9.5
+MIN_CLEARANCE_Z_M = 0.005
+ELBOW_CURL_FLOOR_RAD = -1.30
 
 
 def default_dimensions_path() -> Path:
@@ -105,6 +117,91 @@ def fk(q: tuple[float, float, float, float], dims: dict[str, float]
     return pts, phi
 
 
+def estimate_base_torque_kgcm(q: tuple[float, float, float, float],
+                              dims: dict[str, float],
+                              arm_mass_kg: float = ARM_MASS_KG) -> float:
+    """Static gravity torque (kg.cm) on the base yaw axis for pose `q`."""
+    pts, _ = fk(q, dims)
+    # Distribute arm mass over upper arm (S->E), forearm (E->W), tool (W->T).
+    segs = [(pts[i], pts[i + 1], math.hypot(
+        pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]))
+        for i in range(1, 4)]
+    total_len = sum(length for _, _, length in segs)
+    if total_len <= 0.0:
+        return 0.0
+    x_disc = pts[0][0]
+    torque_kgm = 0.0
+    for p0, p1, length in segs:
+        mass_i = arm_mass_kg * (length / total_len)
+        x_mid = 0.5 * (p0[0] + p1[0])
+        torque_kgm += mass_i * abs(x_mid - x_disc)
+    return torque_kgm * 100.0
+
+
+def pose_safety_fault(q: tuple[float, float, float, float],
+                      side: str,
+                      dims: dict[str, float],
+                      min_z_m: float = MIN_CLEARANCE_Z_M,
+                      max_torque_kgcm: float = MAX_BASE_TORQUE_KGCM,
+                      min_elbow_rad: float = ELBOW_CURL_FLOOR_RAD) -> str | None:
+    """Return a human-readable safety fault for `q`, or None if safe."""
+    if len(q) != 4 or not all(math.isfinite(v) for v in q):
+        return 'non-finite joint angle'
+    for joint, val in zip(JOINTS, q):
+        spec = SERVO_MAP[f'{side}_arm_{joint}_joint']
+        if not (spec.lower - 1e-9 <= val <= spec.upper + 1e-9):
+            return f'{joint} ({val:.3f} rad) outside soft limits [{spec.lower:.3f}, {spec.upper:.3f}]'
+    if q[2] < min_elbow_rad - 1e-9:
+        return f'elbow ({q[2]:.3f} rad) curls past measured body clearance ({min_elbow_rad:.2f} rad)'
+    pts, _ = fk(q, dims)
+    labels = ('shoulder', 'elbow', 'wrist', 'fingertip')
+    for label, (_, z) in zip(labels, pts[1:]):
+        if z < min_z_m - 1e-9:
+            return f'{label} height {z * 1000:.1f} mm below clearance floor ({min_z_m * 1000:.1f} mm)'
+    torque = estimate_base_torque_kgcm(q, dims)
+    if torque > max_torque_kgcm:
+        return f'estimated base torque {torque:.2f} kg.cm exceeds {max_torque_kgcm:.2f} kg.cm limit'
+    return None
+
+
+def check_trajectory_safety(q_start: tuple[float, float, float, float],
+                            q_end: tuple[float, float, float, float],
+                            side: str,
+                            dims: dict[str, float],
+                            min_z_m: float = MIN_CLEARANCE_Z_M,
+                            max_torque_kgcm: float = MAX_BASE_TORQUE_KGCM,
+                            min_elbow_rad: float = ELBOW_CURL_FLOOR_RAD,
+                            rate_hz: float = 50.0) -> str | None:
+    """Verify every 50 Hz minimum-jerk ramp tick from q_start to q_end."""
+    dt = 1.0 / rate_hz
+    motions = []
+    for joint, start, end in zip(JOINTS, q_start, q_end):
+        spec = SERVO_MAP[f'{side}_arm_{joint}_joint']
+        m = JointMotion(spec.clamp(start), spec.max_rate)
+        m.set_target(spec.clamp(end))
+        motions.append(m)
+
+    # Worst-case settle time + 0.5 s safety margin in ticks.
+    max_ticks = 0
+    for joint, start, end in zip(JOINTS, q_start, q_end):
+        spec = SERVO_MAP[f'{side}_arm_{joint}_joint']
+        t_s = 1.875 * abs(end - start) / spec.max_rate
+        max_ticks = max(max_ticks, int(math.ceil((t_s + 0.5) * rate_hz)))
+    max_ticks = max(max_ticks, 10)
+
+    for tick in range(1, max_ticks + 1):
+        q_tick = tuple(m.step(dt) for m in motions)
+        fault = pose_safety_fault(
+            q_tick, side, dims,
+            min_z_m=min_z_m,
+            max_torque_kgcm=max_torque_kgcm,
+            min_elbow_rad=min_elbow_rad,
+        )
+        if fault is not None:
+            return f'tick {tick} ({tick * dt:.2f} s): {fault}'
+    return None
+
+
 def ik(target: tuple[float, float], phi_tool: float, q1: float,
        dims: dict[str, float]) -> list[tuple[float, float, float, float]]:
     """Both elbow branches reaching `target` with the tool at `phi_tool`.
@@ -113,6 +210,8 @@ def ik(target: tuple[float, float], phi_tool: float, q1: float,
     and elbow solve the 2R problem to the wrist pitch axis and the wrist
     closes the tool angle. Unchecked against limits; empty if out of reach.
     """
+    if not (all(math.isfinite(v) for v in target) and math.isfinite(phi_tool) and math.isfinite(q1)):
+        raise ValueError('ik inputs must be finite')
     clav, a, b, tool = link_lengths(dims)
     wx = target[0] + tool * math.sin(phi_tool)
     wz = target[1] + tool * math.cos(phi_tool)
@@ -171,17 +270,45 @@ def solve_pose(target: tuple[float, float], side: str,
                finger: float = 0.0,
                signs: dict[str, int] = SIGNS,
                margin: float = 0.1,
-               yaw_step_deg: float = 0.5) -> dict[str, float] | None:
-    """Solve planar IK and return full 6-joint targets for `side`, or None."""
+               yaw_step_deg: float = 0.5,
+               min_z_m: float = MIN_CLEARANCE_Z_M,
+               max_torque_kgcm: float = MAX_BASE_TORQUE_KGCM,
+               min_elbow_rad: float = ELBOW_CURL_FLOOR_RAD) -> dict[str, float] | None:
+    """Solve planar IK with safety checks and return 6-joint targets, or None."""
     if side not in SIDES:
         raise ValueError(f'unknown side {side!r}: expected one of {SIDES}')
+    if not (all(math.isfinite(v) for v in target)
+            and math.isfinite(phi_tool)
+            and math.isfinite(wrist_roll)
+            and math.isfinite(finger)):
+        raise ValueError('solve_pose inputs must be finite')
     if dims is None:
         dims = load_dimensions()
-    q = solve(target, phi_tool, side, dims, signs=signs,
-              margin=margin, yaw_step_deg=yaw_step_deg)
-    if q is None:
+
+    lim = limits(side, signs, margin)
+    best, best_cost = None, None
+    lo, up = lim['yaw']
+    steps = max(1, int(round((up - lo) / math.radians(yaw_step_deg))))
+    for i in range(steps + 1):
+        q1 = lo + (up - lo) * i / steps
+        for q_model in ik(target, phi_tool, q1, dims):
+            if not _inside(q_model, lim):
+                continue
+            q_cmd = tuple(v * signs[j] for j, v in zip(JOINTS, q_model))
+            if pose_safety_fault(
+                q_cmd, side, dims,
+                min_z_m=min_z_m,
+                max_torque_kgcm=max_torque_kgcm,
+                min_elbow_rad=min_elbow_rad,
+            ) is not None:
+                continue
+            cost = sum(abs(v) for v in q_model)
+            if best is None or cost < best_cost:
+                best, best_cost = q_cmd, cost
+
+    if best is None:
         return None
-    pose = {f'{side}_arm_{joint}_joint': float(val) for joint, val in zip(JOINTS, q)}
+    pose = {f'{side}_arm_{joint}_joint': float(val) for joint, val in zip(JOINTS, best)}
     pose[f'{side}_arm_wrist_roll_joint'] = SERVO_MAP[f'{side}_arm_wrist_roll_joint'].clamp(wrist_roll)
     pose[f'{side}_arm_finger_l_joint'] = SERVO_MAP[f'{side}_arm_finger_l_joint'].clamp(finger)
     return pose

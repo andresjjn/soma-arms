@@ -36,23 +36,38 @@ def test_parse_cli_defaults_and_custom_points():
     assert custom.tilt == 5.0
 
 
-def test_parse_points_rejects_malformed_input():
+def test_parse_cli_and_points_reject_unsafe_or_malformed_inputs():
     with pytest.raises(ValueError, match='x,z in mm'):
         parse_points(['10'])
+    with pytest.raises(ValueError, match='finite'):
+        parse_points(['nan,30'])
+    with pytest.raises(SystemExit):
+        parse_cli(['--dwell', '0'])
+    with pytest.raises(SystemExit):
+        parse_cli(['--dwell', '-1.5'])
+    with pytest.raises(SystemExit):
+        parse_cli(['--tilt', 'nan'])
 
 
-def test_plan_trials_rejects_unreachable_points_before_motion(dims):
+def test_plan_trials_rejects_unreachable_and_unsafe_points_before_motion(dims):
     trials = plan_trials('left', list(DEFAULT_POINTS_MM), dims=dims)
     assert len(trials) == 3
 
-    with pytest.raises(ValueError, match='unreachable'):
+    with pytest.raises(ValueError, match='required'):
+        plan_trials('left', [], dims=dims)
+    with pytest.raises(ValueError, match='safety floor'):
+        plan_trials('left', [(0.0, 5.0)], dims=dims)
+    with pytest.raises(ValueError, match='non-finite'):
+        plan_trials('left', [(float('nan'), 30.0)], dims=dims)
+    with pytest.raises(ValueError, match='unreachable or unsafe'):
         plan_trials('right', [(500.0, 30.0)], dims=dims)
 
 
-def test_run_trials_records_errors_and_returns_home(dims):
+def test_run_trials_records_errors_rejects_nan_and_returns_home(dims):
     trials = plan_trials('left', [(-30.0, 30.0), (0.0, 30.0)], dims=dims)
     published = []
-    answers = iter(['', '-28.0 31.5', '', '0.5 29.0'])
+    # Includes an invalid 'nan 30' input that must re-prompt safely.
+    answers = iter(['', 'nan 30', '-28.0 31.5', '', '0.5 29.0'])
     logs = []
 
     results = run_trials(
@@ -66,7 +81,7 @@ def test_run_trials_records_errors_and_returns_home(dims):
     assert published[-1] == arm_home('left')
 
 
-def test_run_trials_unwinds_home_on_abort_or_keyboard_interrupt(dims):
+def test_run_trials_unwinds_home_on_abort_and_interrupt_during_publish(dims):
     trials = plan_trials('left', [(-30.0, 30.0), (0.0, 30.0)], dims=dims)
     published = []
     answers = iter(['', 'q'])
@@ -76,16 +91,18 @@ def test_run_trials_unwinds_home_on_abort_or_keyboard_interrupt(dims):
     assert results == []
     assert published[-1] == arm_home('left')
 
+    # Interrupt inside publish() on the very first move must still unwind home.
     published2 = []
 
-    def raise_interrupt(_prompt):
-        if len(published2) >= 1:
+    def flaky_publish(pose):
+        published2.append(pose)
+        if len(published2) == 1:
             raise KeyboardInterrupt
-        return ''
 
     with pytest.raises(KeyboardInterrupt):
-        run_trials(trials, 'left', published2.append, lambda _: None,
-                   raise_interrupt, lambda _: None, dwell=0.1)
+        run_trials(trials, 'left', flaky_publish, lambda _: None,
+                   lambda _: '', lambda _: None, dwell=0.1)
+    assert len(published2) == 2
     assert published2[-1] == arm_home('left')
 
 
