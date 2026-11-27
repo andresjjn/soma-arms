@@ -36,132 +36,22 @@ import math
 import sys
 from pathlib import Path
 
-import yaml
-
 REPO = Path(__file__).resolve().parents[1]
-DIMENSIONS = REPO / 'soma_description' / 'config' / 'dimensions.yaml'
 sys.path.insert(0, str(REPO / 'soma_driver'))
-from soma_driver.servo_map import SERVO_MAP  # noqa: E402
-
-JOINTS = ('yaw', 'shoulder', 'elbow', 'wrist_pitch')
-SIDES = ('left', 'right')
-# Sign hypotheses in the model frame: +1 means the command sign is the
-# URDF sign (positive = backward). Only yaw is verified on the metal.
-SIGNS = {'yaw': 1, 'shoulder': 1, 'elbow': 1, 'wrist_pitch': 1}
-VERIFIED = {'yaw': '2026-10-01, negative = forward, on the metal'}
-
-
-def load_dimensions(path: Path = DIMENSIONS) -> dict[str, float]:
-    """Every arm and bench dimension as {name: meters}."""
-    doc = yaml.safe_load(Path(path).read_text())
-    dims = {}
-    for section in ('arm', 'bench'):
-        for name, entry in doc[section]['dimensions'].items():
-            dims[name] = float(entry['value'])
-    # The tool is the one direct reading, closed (2026-10-27): the parts add
-    # to 149.1 mm, the caliper across the whole tool reads 150.0.
-    dims['tool_len'] = dims['tool_closed_len']
-    return dims
-
-
-def link_lengths(dims: dict[str, float]) -> tuple[float, float, float, float]:
-    return (dims['clavicle_len'], dims['upper_len'], dims['fore_len'], dims['tool_len'])
-
-
-def lane_y(side: str, dims: dict[str, float]) -> float:
-    """Lateral position of the closed fingertip's lane, meters (measured)."""
-    y = dims['tip_lane_y']
-    return y if side == 'left' else -y
-
-
-def limits(side: str, signs: dict[str, int] = SIGNS, margin: float = 0.1
-           ) -> dict[str, tuple[float, float]]:
-    """Joint limits in the MODEL frame, `margin` radians inside the band."""
-    out = {}
-    for joint in JOINTS:
-        spec = SERVO_MAP[f'{side}_arm_{joint}_joint']
-        lo, up = spec.lower, spec.upper
-        if signs[joint] < 0:
-            lo, up = -up, -lo
-        out[joint] = (lo + margin, up - margin)
-    return out
-
-
-def fk(q: tuple[float, float, float, float], dims: dict[str, float]
-       ) -> tuple[list[tuple[float, float]], float]:
-    """Joint points D, S, E, W and the fingertip T, plus the tool angle."""
-    pts = [(0.0, dims['mount_h'])]
-    phi = 0.0
-    for i, (angle, length) in enumerate(zip(q, link_lengths(dims))):
-        phi += angle
-        # The clavicle alone leaves the disc at its mounting angle (a DH
-        # theta offset); the shoulder's zero takes it back out.
-        seg = phi + dims['clavicle_angle'] if i == 0 else phi
-        x, z = pts[-1]
-        pts.append((x - length * math.sin(seg), z - length * math.cos(seg)))
-    return pts, phi
-
-
-def wrap(angle: float) -> float:
-    return math.atan2(math.sin(angle), math.cos(angle))
-
-
-def ik(target: tuple[float, float], phi_tool: float, q1: float,
-       dims: dict[str, float]) -> list[tuple[float, float, float, float]]:
-    """Both elbow branches reaching `target` with the tool at `phi_tool`.
-
-    The yaw is given (the chain has one redundant joint); the shoulder
-    and elbow solve the 2R problem to the wrist pitch axis and the wrist
-    closes the tool angle. Unchecked against limits; empty if out of reach.
-    """
-    clav, a, b, tool = link_lengths(dims)
-    wx = target[0] + tool * math.sin(phi_tool)
-    wz = target[1] + tool * math.cos(phi_tool)
-    sx = -clav * math.sin(q1 + dims['clavicle_angle'])
-    sz = dims['mount_h'] - clav * math.cos(q1 + dims['clavicle_angle'])
-    dx, dz = wx - sx, wz - sz
-    c3 = (dx * dx + dz * dz - a * a - b * b) / (2 * a * b)
-    if abs(c3) > 1.0:
-        return []
-    s3 = math.sqrt(max(0.0, 1.0 - c3 * c3))
-    out = []
-    for q3 in (math.atan2(s3, c3), math.atan2(-s3, c3)):
-        k1, k2 = a + b * math.cos(q3), b * math.sin(q3)
-        phi2 = math.atan2(-dx, -dz) - math.atan2(k2, k1)
-        q2 = wrap(phi2 - q1)
-        q4 = wrap(phi_tool - (q1 + q2 + q3))
-        out.append((q1, q2, q3, q4))
-    return out
-
-
-def _inside(q, lim) -> bool:
-    return all(lim[j][0] <= v <= lim[j][1] for j, v in zip(JOINTS, q))
-
-
-def solve(target: tuple[float, float], phi_tool: float, side: str,
-          dims: dict[str, float], signs: dict[str, int] = SIGNS,
-          margin: float = 0.1, yaw_step_deg: float = 0.5
-          ) -> tuple[float, float, float, float] | None:
-    """A valid configuration in the COMMAND frame, or None.
-
-    Scans the yaw through its band and keeps, among every branch inside
-    the limits, the one closest to the hanging pose (smallest total bend).
-    """
-    lim = limits(side, signs, margin)
-    best, best_cost = None, None
-    lo, up = lim['yaw']
-    steps = max(1, int(round((up - lo) / math.radians(yaw_step_deg))))
-    for i in range(steps + 1):
-        q1 = lo + (up - lo) * i / steps
-        for q in ik(target, phi_tool, q1, dims):
-            if not _inside(q, lim):
-                continue
-            cost = sum(abs(v) for v in q)
-            if best is None or cost < best_cost:
-                best, best_cost = q, cost
-    if best is None:
-        return None
-    return tuple(v * signs[j] for j, v in zip(JOINTS, best))
+from soma_driver.kinematics import (  # noqa: E402
+    JOINTS,
+    SIDES,
+    SIGNS,
+    VERIFIED,
+    fk,
+    ik,
+    lane_y,
+    limits,
+    link_lengths,
+    load_dimensions,
+    solve,
+    wrap,
+)
 
 
 def reach_runs(z_tip: float, side: str, dims: dict[str, float],
